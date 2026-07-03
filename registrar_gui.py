@@ -17,7 +17,9 @@ Ejecuta:  pythonw registrar_gui.py   (o doble clic en el lanzador)
 
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import webbrowser
 import datetime as dt
 import tkinter as tk
@@ -94,7 +96,17 @@ class App:
                         "Actualizaciones",
                         f"Ya tienes la última versión (v{core.VERSION}).")
                 return
-            version, url = res
+            version, url = res[:2]
+            installer_url = res[2] if len(res) > 2 else ""
+            if os.name == "nt" and installer_url:
+                if messagebox.askyesno(
+                        "Actualización disponible",
+                        f"Hay una versión nueva de FichaCSIRC ({version}).\n"
+                        f"Tú tienes la {core.VERSION}.\n\n"
+                        "¿Descargar e instalar ahora?\n"
+                        "FichaCSIRC se cerrará al iniciar el instalador."):
+                    self._descargar_e_instalar(version, installer_url, url)
+                return
             if messagebox.askyesno(
                     "Actualización disponible",
                     f"Hay una versión nueva de FichaCSIRC ({version}).\n"
@@ -106,6 +118,40 @@ class App:
                     pass
 
         en_hilo(self.root, lambda: core.buscar_actualizacion(forzar=forzar), al_terminar)
+
+    def _descargar_e_instalar(self, version, installer_url, pagina_url):
+        """Descarga el instalador Windows y lo lanza fuera de la app."""
+        nombre = f"FichaCSIRC-Instalador-{version}.exe"
+        destino = os.path.join(tempfile.gettempdir(), nombre)
+        self.status.config(text=f"Descargando actualización {version}...")
+
+        def trabajo():
+            return core.descargar_archivo(installer_url, destino)
+
+        def al_terminar(ruta, err):
+            if err:
+                if messagebox.askyesno(
+                        "No se pudo descargar",
+                        f"No se pudo descargar el instalador:\n{err}\n\n"
+                        "¿Abrir la página de descarga?"):
+                    try:
+                        webbrowser.open(pagina_url)
+                    except Exception:
+                        pass
+                self.status.config(text="No se pudo descargar la actualización.")
+                return
+            self.status.config(text="Instalador descargado. Iniciando actualización...")
+            try:
+                subprocess.Popen([ruta], close_fds=True)
+            except Exception as e:
+                messagebox.showerror(
+                    "No se pudo iniciar",
+                    f"El instalador se descargó en:\n{ruta}\n\n"
+                    f"Pero no se pudo iniciar:\n{e}")
+                return
+            self.root.after(700, self._cerrar)
+
+        self._en_hilo(trabajo, al_terminar)
 
     # ---------- utilidades ----------
     def _lunes_actual(self):

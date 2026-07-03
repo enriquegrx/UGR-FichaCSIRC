@@ -94,7 +94,7 @@ La variable de entorno `FICHACSIRC_CONFIG` permite usar otra ruta de config (la 
 - Los listados siguen la **paginación por offset** (antes, más de 200 proyectos/tareas se cortaban en silencio), y los GET reintentan una vez ante errores transitorios de red.
 - Editar un apunte usa `PATCH /api/v3/time_entries/{id}`.
 - Las **actividades permitidas se cachean por work package** (se configuran por proyecto; no se comparten entre tareas de proyectos distintos).
-- La comprobación de actualizaciones se hace **una vez al día** (respeta el límite de la API de GitHub). El `config.json` se lee tolerando BOM (por si se edita con el Bloc de notas).
+- La comprobación de actualizaciones se hace como mucho cada **4 horas** (respeta el límite de la API de GitHub). En Windows, si existe instalador en la release, la app puede descargarlo y lanzarlo tras confirmación. El `config.json` se lee tolerando BOM (por si se edita con el Bloc de notas).
 
 ## 8. Empaquetado y distribución
 

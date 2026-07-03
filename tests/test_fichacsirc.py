@@ -235,16 +235,18 @@ class TestApi(unittest.TestCase):
 
     def tearDown_update(self):
         core.guardar_config_valor("ultimo_chequeo_update", "")
+        core.guardar_config_valor("ultimo_chequeo_update_ts", "")
 
     def test_buscar_actualizacion(self):
         self.addCleanup(self.tearDown_update)
         resp = mock.Mock(status_code=200)
         resp.json.return_value = {"tag_name": "v99.9",
-                                  "html_url": "https://github.com/x/y/releases"}
+                                  "html_url": "https://github.com/x/y/releases",
+                                  "assets": []}
         with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
              mock.patch.object(core.requests, "get", return_value=resp):
             self.assertEqual(core.buscar_actualizacion(forzar=True),
-                             ("99.9", "https://github.com/x/y/releases"))
+                             ("99.9", "https://github.com/x/y/releases", ""))
         # misma version -> no hay actualizacion
         resp.json.return_value = {"tag_name": f"v{core.VERSION}"}
         with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
@@ -256,14 +258,49 @@ class TestApi(unittest.TestCase):
             self.assertIsNone(core.buscar_actualizacion())
             m_get.assert_not_called()
 
-    def test_buscar_actualizacion_una_vez_al_dia(self):
+    def test_buscar_actualizacion_instalador_windows(self):
+        self.addCleanup(self.tearDown_update)
+        resp = mock.Mock(status_code=200)
+        resp.json.return_value = {
+            "tag_name": "v99.9",
+            "html_url": "https://github.com/x/y/releases",
+            "assets": [
+                {"name": "otro.zip", "browser_download_url": "https://x/otro.zip"},
+                {"name": "FichaCSIRC-Instalador.exe",
+                 "browser_download_url": "https://x/FichaCSIRC-Instalador.exe"},
+            ],
+        }
+        with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
+             mock.patch.object(core.os, "name", "nt"), \
+             mock.patch.object(core.requests, "get", return_value=resp):
+            self.assertEqual(
+                core.buscar_actualizacion(forzar=True),
+                ("99.9", "https://github.com/x/y/releases",
+                 "https://x/FichaCSIRC-Instalador.exe"))
+
+    def test_buscar_actualizacion_cada_pocas_horas(self):
         self.addCleanup(self.tearDown_update)
         import datetime as _dt
-        core.guardar_config_valor("ultimo_chequeo_update", _dt.date.today().isoformat())
+        core.guardar_config_valor(
+            "ultimo_chequeo_update_ts",
+            _dt.datetime.now().isoformat(timespec="seconds"))
         with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
              mock.patch.object(core.requests, "get") as m_get:
-            self.assertIsNone(core.buscar_actualizacion())  # ya chequeado hoy
+            self.assertIsNone(core.buscar_actualizacion())  # chequeo reciente
             m_get.assert_not_called()
+
+    def test_descargar_archivo(self):
+        resp = mock.Mock()
+        resp.raise_for_status.return_value = None
+        resp.iter_content.return_value = [b"abc", b"", b"def"]
+        destino = os.path.join(_TMP, "descarga-test.bin")
+        with mock.patch.object(core.requests, "get", return_value=resp) as m_get:
+            self.assertEqual(core.descargar_archivo("https://x/file.exe", destino),
+                             destino)
+        m_get.assert_called_once_with("https://x/file.exe", stream=True, timeout=60)
+        resp.close.assert_called_once()
+        with open(destino, "rb") as f:
+            self.assertEqual(f.read(), b"abcdef")
 
     def test_get_reintenta_error_de_red(self):
         ok = mock.Mock(status_code=200)

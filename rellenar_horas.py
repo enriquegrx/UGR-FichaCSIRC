@@ -45,22 +45,23 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.1.2"
+VERSION = "2.1.3"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
+UPDATE_CHECK_INTERVAL_HOURS = 4
+WINDOWS_INSTALLER_ASSET = "FichaCSIRC-Instalador.exe"
 
 
 def buscar_actualizacion(forzar=False):
-    """Devuelve (version, url) si hay una release mas nueva en GitHub, o None.
+    """Devuelve (version, pagina, instalador) si hay release nueva, o None.
 
-    Comprueba como mucho una vez al dia (para no gastar el limite de la API de
+    Comprueba como mucho cada pocas horas (para no gastar el limite de la API de
     GitHub, sobre todo si varios usuarios salen por la misma IP). Con
     forzar=True salta esa restriccion (util para un boton "comprobar ahora")."""
     if not GITHUB_REPO:
         return None
-    hoy = dt.date.today().isoformat()
-    if not forzar and config_valor("ultimo_chequeo_update") == hoy:
+    if not forzar and _chequeo_update_reciente():
         return None
     try:
         r = requests.get(
@@ -72,20 +73,71 @@ def buscar_actualizacion(forzar=False):
     except Exception:
         return None  # sin conexion: no marcamos el dia, se reintenta luego
     try:
-        guardar_config_valor("ultimo_chequeo_update", hoy)
+        guardar_config_valor("ultimo_chequeo_update_ts",
+                             dt.datetime.now().isoformat(timespec="seconds"))
     except Exception:
         pass
 
-    def _v(s):
-        try:
-            return tuple(int(x) for x in str(s).lstrip("v").split("."))
-        except ValueError:
-            return ()
-
     tag = str(data.get("tag_name", ""))
-    if _v(tag) and _v(tag) > _v(VERSION):
-        return tag.lstrip("v"), data.get("html_url", "")
+    if _version_tuple(tag) and _version_tuple(tag) > _version_tuple(VERSION):
+        return tag.lstrip("v"), data.get("html_url", ""), _asset_instalador(data)
     return None
+
+
+def _version_tuple(s):
+    try:
+        return tuple(int(x) for x in str(s).lstrip("v").split("."))
+    except ValueError:
+        return ()
+
+
+def _chequeo_update_reciente():
+    ultimo = config_valor("ultimo_chequeo_update_ts")
+    if not ultimo:
+        return False
+    try:
+        anterior = dt.datetime.fromisoformat(ultimo)
+    except ValueError:
+        return False
+    intervalo = dt.timedelta(hours=UPDATE_CHECK_INTERVAL_HOURS)
+    return dt.datetime.now() - anterior < intervalo
+
+
+def _asset_instalador(data):
+    """URL del instalador Windows en la release, si aplica."""
+    if os.name != "nt":
+        return ""
+    for asset in data.get("assets", []):
+        if asset.get("name") == WINDOWS_INSTALLER_ASSET:
+            return asset.get("browser_download_url", "")
+    return ""
+
+
+def descargar_archivo(url, destino):
+    """Descarga un archivo a destino de forma atomica."""
+    if not url:
+        raise ValueError("No hay URL de descarga")
+    tmp = destino + ".tmp"
+    try:
+        r = requests.get(url, stream=True, timeout=60)
+        try:
+            r.raise_for_status()
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_content(chunk_size=128 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            os.replace(tmp, destino)
+            return destino
+        finally:
+            close = getattr(r, "close", None)
+            if close:
+                close()
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _configurar_log():
