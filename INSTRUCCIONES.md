@@ -8,23 +8,38 @@ eliges la tarea, pones las horas y listo.
 
 ## 1. Instalación (solo la primera vez)
 
-1. Descarga el instalador **`FichaCSIRC-Instalador.exe`** desde:
+1. **Descarga** el instalador **`FichaCSIRC-Instalador.exe`** desde:
    **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
-   (en el apartado *Assets*). La propia aplicación te avisará cuando haya una
-   versión nueva.
+   (en el apartado *Assets*, es el archivo más grande). La propia aplicación te
+   avisará cuando haya una versión nueva.
 
-2. Ejecútalo y sigue el asistente. Instala las **dos** aplicaciones (registro y
-   configurador), crea sus accesos directos en el menú Inicio y no necesita
-   permisos de administrador. Al terminar puedes abrir directamente el
-   configurador.
+2. **Haz doble clic** en el instalador descargado.
 
-   > 💡 ¿Prefieres no instalar? En la misma página de descargas están también
-   > `FichaCSIRC.exe` y `FichaCSIRC-Configurar.exe` sueltos (versión portable).
+   - Si Windows muestra un aviso azul de **SmartScreen** ("Windows protegió su
+     equipo"), pulsa **Más información → Ejecutar de todas formas**. Solo pasa
+     la primera vez; es normal en aplicaciones internas sin firma comercial.
 
-3. Si al ejecutar el instalador (o los `.exe`) Windows muestra un aviso azul de
-   **SmartScreen** ("Windows protegió su equipo"), pulsa **Más información →
-   Ejecutar de todas formas**. Solo pasa la primera vez; es normal en
-   aplicaciones internas sin firma comercial.
+3. **Sigue el asistente** (Siguiente → Siguiente → Instalar). Sin complicaciones:
+
+   - **No pide permisos de administrador**: se instala solo para tu usuario.
+   - Deja marcada la casilla **"Crear un acceso directo en el escritorio"** si
+     quieres el icono en el escritorio (viene marcada).
+   - Al terminar, si dejas marcado **"Configurar FichaCSIRC ahora"** se abrirá el
+     asistente de configuración. Para completarlo necesitarás tu **API key**:
+     tenla a mano (sección 2) o cierra el asistente y ábrelo luego.
+
+4. Al instalar quedan **dos programas** (los tienes en el menú Inicio y, si lo
+   dejaste marcado, el de registro también en el escritorio):
+
+   - **FichaCSIRC (Registrar horas)** — la que usarás cada día.
+   - **FichaCSIRC - Configurar** — el asistente de configuración (una vez).
+
+   > 💡 ¿Prefieres no instalar nada? En la misma página de descargas están
+   > también `FichaCSIRC.exe` y `FichaCSIRC-Configurar.exe` sueltos (versión
+   > portable): se ejecutan con doble clic, sin instalar.
+
+   > 🗑️ Para desinstalar: *Configuración de Windows → Aplicaciones → FichaCSIRC
+   > → Desinstalar* (tu configuración y tus horas no se tocan).
 
 ## 2. Consigue tu clave de acceso (API key) de OpenProject
 
