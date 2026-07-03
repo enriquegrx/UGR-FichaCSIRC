@@ -54,3 +54,11 @@ Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: deskt
 [Run]
 ; Al terminar, ofrecer abrir el configurador (imprescindible la primera vez)
 Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function InitializeSetup(): Boolean;
+begin
+  { Si lo lanza el actualizador, da tiempo a que FichaCSIRC se cierre. }
+  Sleep(2000);
+  Result := True;
+end;
