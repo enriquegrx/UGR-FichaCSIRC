@@ -8,20 +8,23 @@ eliges la tarea, pones las horas y listo.
 
 ## 1. Instalación (solo la primera vez)
 
-1. Copia estos dos archivos a tu ordenador (por ejemplo, a una carpeta
-   `FichaCSIRC` en tus Documentos):
-   - **`FichaCSIRC-Configurar.exe`** — el asistente de configuración.
-   - **`FichaCSIRC.exe`** — la aplicación de registro (la del día a día).
+1. Descarga el instalador **`FichaCSIRC-Instalador.exe`** desde:
+   **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
+   (en el apartado *Assets*). La propia aplicación te avisará cuando haya una
+   versión nueva.
 
-   > 📁 Descarga siempre la última versión desde:
-   > **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
-   > (los dos `.exe` están en el apartado *Assets*). La propia aplicación te
-   > avisará cuando haya una versión nueva.
+2. Ejecútalo y sigue el asistente. Instala las **dos** aplicaciones (registro y
+   configurador), crea sus accesos directos en el menú Inicio y no necesita
+   permisos de administrador. Al terminar puedes abrir directamente el
+   configurador.
 
-2. Si al ejecutarlos Windows muestra un aviso azul de **SmartScreen**
-   ("Windows protegió su equipo"), pulsa **Más información → Ejecutar de todas
-   formas**. Solo pasa la primera vez; es normal en aplicaciones internas sin
-   firma comercial.
+   > 💡 ¿Prefieres no instalar? En la misma página de descargas están también
+   > `FichaCSIRC.exe` y `FichaCSIRC-Configurar.exe` sueltos (versión portable).
+
+3. Si al ejecutar el instalador (o los `.exe`) Windows muestra un aviso azul de
+   **SmartScreen** ("Windows protegió su equipo"), pulsa **Más información →
+   Ejecutar de todas formas**. Solo pasa la primera vez; es normal en
+   aplicaciones internas sin firma comercial.
 
 ## 2. Consigue tu clave de acceso (API key) de OpenProject
 

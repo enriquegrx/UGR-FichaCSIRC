@@ -96,12 +96,13 @@ La variable de entorno `FICHACSIRC_CONFIG` permite usar otra ruta de config (la 
 
 ## 8. Empaquetado y distribución
 
-**Automático (recomendado):** el repositorio tiene GitHub Actions configurado. Al subir una etiqueta de versión (`git tag v2.1 && git push origin v2.1`) se ejecutan los tests, se construyen los `.exe` y se publican en [Releases](https://github.com/enriquegrx/UGR-FichaCSIRC/releases). Los compañeros descargan siempre la última desde `.../releases/latest` (ver `INSTRUCCIONES.md`), y la app avisa al arrancar si hay versión nueva. Recuerda actualizar `VERSION` en `rellenar_horas.py` (y `version_info.txt`) antes de etiquetar.
+**Automático (recomendado):** el repositorio tiene GitHub Actions configurado. Al subir una etiqueta de versión (`git tag v2.1 && git push origin v2.1`) se ejecutan los tests, se construyen los `.exe`, se genera el **instalador único** (Inno Setup) y todo se publica en [Releases](https://github.com/enriquegrx/UGR-FichaCSIRC/releases). Los compañeros descargan siempre la última desde `.../releases/latest` (ver `INSTRUCCIONES.md`), y la app avisa al arrancar si hay versión nueva. Recuerda actualizar `VERSION` en `rellenar_horas.py` (y `version_info.txt`) antes de etiquetar.
 
-**Manual:** ejecuta `build_exe.bat` **en Windows**. Genera un único `.exe` por app (con metadatos de versión):
+**Manual:** ejecuta `build_exe.bat` **en Windows** (genera los `.exe`), y opcionalmente `build_instalador.bat` (necesita [Inno Setup 6](https://jrsoftware.org/isdl.php)) para el instalador:
 
-- `dist\FichaCSIRC.exe` (app de registro)
-- `dist\FichaCSIRC-Configurar.exe` (asistente)
+- `dist\FichaCSIRC-Instalador.exe` (instalador único: instala ambas apps + accesos directos, sin admin)
+- `dist\FichaCSIRC.exe` (app de registro, versión portable)
+- `dist\FichaCSIRC-Configurar.exe` (asistente, versión portable)
 
 La configuración del `.exe` se guarda en `%APPDATA%\FichaCSIRC`. Nota: un `.exe` sin firmar puede mostrar el aviso de SmartScreen ("Más información → Ejecutar de todas formas"); es normal.
 

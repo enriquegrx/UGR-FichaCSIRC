@@ -16,6 +16,8 @@ definición completa y el historial de decisiones.
 - `configurar_gui.py` — asistente gráfico (wizard); importa `configurar`.
 - Lanzadores `.bat` (detectan Python, evitan el alias de la Microsoft Store).
 - `build_exe.bat` — empaqueta con PyInstaller (`--onefile`); CI en `.github/workflows`.
+- `instalador.iss` + `build_instalador.bat` — instalador único (Inno Setup); la CI
+  lo genera y publica junto a los `.exe` en cada Release.
 
 ## Reglas / cuidado
 - **Nunca** subir `config.json` (contiene la API key). Usar `config.example.json`.

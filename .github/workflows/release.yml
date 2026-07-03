@@ -44,10 +44,20 @@ jobs:
           --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
           configurar_gui.py
 
-      - name: Publicar release con los .exe
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Construir instalador único
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}".TrimStart('v')
+          iscc /DMyAppVersion=$v instalador.iss
+
+      - name: Publicar release con el instalador y los .exe
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/FichaCSIRC-Instalador.exe
             dist/FichaCSIRC.exe
             dist/FichaCSIRC-Configurar.exe
           generate_release_notes: true
