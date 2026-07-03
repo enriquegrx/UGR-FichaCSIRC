@@ -70,7 +70,7 @@ class TestGuiSmoke(unittest.TestCase):
                 app._toggle_semana()
                 app._click_dia(app.dia_vars[1][0])
                 self.assertNotEqual(app.ent_horas.get(), "")
-                self.assertEqual(app.dia_vars[1][2].cget("bg"), "#e7f1fb")
+                self.assertEqual(app.dia_vars[1][2].cget("bg"), "#e8f3ff")
             except Exception as e:
                 resultado["err"] = e
             root.quit()

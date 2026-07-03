@@ -12,7 +12,22 @@ import os
 import sys
 import threading
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
+
+
+COLOR_APP_BG = "#f4f6f8"
+COLOR_PANEL = "#ffffff"
+COLOR_PANEL_ALT = "#eef2f6"
+COLOR_BORDER = "#d7dce2"
+COLOR_TEXT = "#1f2933"
+COLOR_MUTED = "#64707d"
+COLOR_PRIMARY = "#0b66c3"
+COLOR_PRIMARY_DARK = "#084f96"
+COLOR_SUCCESS = "#248a46"
+COLOR_WARNING = "#b7791f"
+COLOR_DANGER = "#b42318"
+COLOR_SELECTED = "#e8f3ff"
 
 
 def recurso(carpeta, nombre):
@@ -32,9 +47,9 @@ def aplicar_estilo(root):
     """Tema base estable para Tk/ttk en las plataformas soportadas."""
     style = ttk.Style(root)
     if sys.platform == "darwin":
-        # El tema aqua puede dejar widgets ttk sin pintar en algunos builds
-        # empaquetados con PyInstaller/Tk. Clam es menos nativo, pero estable.
-        preferidos = ("clam", "aqua")
+        # Aqua solo es fiable si el build usa un Tk moderno. build_macos.sh ya
+        # rechaza Tk < 8.6 para evitar la ventana en blanco vista con Tk 8.5.
+        preferidos = ("aqua", "clam") if tk.TkVersion >= 8.6 else ("clam",)
     elif os.name == "nt":
         preferidos = ("vista", "xpnative", "clam")
     else:
@@ -47,7 +62,46 @@ def aplicar_estilo(root):
                 break
             except tk.TclError:
                 pass
+
+    root.configure(bg=COLOR_APP_BG)
     root.option_add("*Font", "TkDefaultFont")
+    root.option_add("*Background", COLOR_APP_BG)
+
+    try:
+        tkfont.nametofont("TkDefaultFont").configure(size=10)
+        tkfont.nametofont("TkTextFont").configure(size=10)
+        tkfont.nametofont("TkHeadingFont").configure(size=10, weight="bold")
+    except tk.TclError:
+        pass
+
+    style.configure(".", font=("TkDefaultFont", 10))
+    style.configure("TFrame", background=COLOR_APP_BG)
+    style.configure("Header.TFrame", background=COLOR_PANEL)
+    style.configure("Panel.TFrame", background=COLOR_PANEL, relief="flat")
+    style.configure("Subtle.TFrame", background=COLOR_PANEL_ALT)
+    style.configure("TLabel", background=COLOR_APP_BG, foreground=COLOR_TEXT)
+    style.configure("Header.TLabel", background=COLOR_PANEL, foreground=COLOR_TEXT)
+    style.configure("Title.TLabel", background=COLOR_PANEL, foreground=COLOR_TEXT,
+                    font=("TkDefaultFont", 18, "bold"))
+    style.configure("Subtitle.TLabel", background=COLOR_PANEL, foreground=COLOR_MUTED,
+                    font=("TkDefaultFont", 11))
+    style.configure("Section.TLabel", background=COLOR_PANEL, foreground=COLOR_TEXT,
+                    font=("TkDefaultFont", 11, "bold"))
+    style.configure("Muted.TLabel", background=COLOR_APP_BG, foreground=COLOR_MUTED)
+    style.configure("Status.TLabel", background=COLOR_PANEL_ALT, foreground=COLOR_MUTED,
+                    padding=(8, 5))
+    style.configure("TButton", padding=(12, 7))
+    style.configure("Primary.TButton", padding=(14, 8), foreground="white",
+                    background=COLOR_PRIMARY)
+    style.map("Primary.TButton",
+              background=[("active", COLOR_PRIMARY_DARK), ("pressed", COLOR_PRIMARY_DARK)])
+    style.configure("Danger.TButton", padding=(12, 7), foreground=COLOR_DANGER)
+    style.configure("Treeview", rowheight=28, background=COLOR_PANEL,
+                    fieldbackground=COLOR_PANEL, borderwidth=0)
+    style.configure("Treeview.Heading", padding=(8, 6),
+                    font=("TkDefaultFont", 10, "bold"))
+    style.map("Treeview", background=[("selected", COLOR_SELECTED)],
+              foreground=[("selected", COLOR_TEXT)])
     return style
 
 

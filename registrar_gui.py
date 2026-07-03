@@ -16,6 +16,7 @@ Ejecuta:  pythonw registrar_gui.py   (o doble clic en el lanzador)
 """
 
 import os
+import re
 import sys
 import webbrowser
 import datetime as dt
@@ -39,19 +40,23 @@ except Exception as e:
 
 import dialogos
 import recordatorio
-from fichaui import Tooltip, aplicar_estilo, en_hilo, recurso, carpeta_app
+from fichaui import (
+    COLOR_APP_BG, COLOR_BORDER, COLOR_DANGER, COLOR_MUTED, COLOR_PANEL,
+    COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING, Tooltip, aplicar_estilo,
+    en_hilo, recurso, carpeta_app,
+)
 
 
 class App:
     def __init__(self, root):
         self.root = root
         root.title(f"FichaCSIRC {core.VERSION} - Registro de horas")
-        root.geometry("780x680")
-        root.minsize(700, 620)
+        root.geometry("980x720")
+        root.minsize(900, 660)
         geo = core.config_valor("ventana")
         if isinstance(geo, str) and "x" in geo:
             try:
-                root.geometry(geo)
+                root.geometry(self._geometria_visible(geo))
             except Exception:
                 pass
         root.protocol("WM_DELETE_WINDOW", self._cerrar)
@@ -73,7 +78,7 @@ class App:
         self._refresco_seq = 0  # para descartar refrescos que llegan tarde
         self._msg_pendiente = ""  # mensaje a mostrar tras el proximo refresco
         self._ultimo_borrado = None  # datos del ultimo apunte eliminado (deshacer)
-        self._card_bg = root.cget("bg")
+        self._card_bg = COLOR_PANEL
         self._construir()
         self._cargar_actividades()
         self._poblar_tareas()
@@ -121,6 +126,30 @@ class App:
         except Exception:
             return ""
 
+    def _plataforma(self):
+        if sys.platform == "darwin":
+            return "macOS"
+        if os.name == "nt":
+            return "Windows"
+        return sys.platform
+
+    def _geometria_visible(self, geo):
+        """Limita la geometria guardada para que no se esconda el pie."""
+        m = re.match(r"^(\d+)x(\d+)([+-]\d+)?([+-]\d+)?$", geo)
+        if not m:
+            return geo
+        w, h = int(m.group(1)), int(m.group(2))
+        x = int(m.group(3) or 0)
+        y = int(m.group(4) or 0)
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        max_w = max(900, int(sw * 0.95))
+        max_h = max(660, int(sh * 0.88))
+        w = max(900, min(w, max_w))
+        h = max(660, min(h, max_h))
+        x = max(0, min(x, max(0, sw - w)))
+        y = max(0, min(y, max(0, sh - h - 48)))
+        return f"{w}x{h}+{x}+{y}"
+
     def _cerrar(self):
         """Guarda tamano de ventana y ultima actividad antes de salir."""
         try:
@@ -139,47 +168,48 @@ class App:
         self._menu()
 
         # Cabecera: logo UGR (si existe) + nombre de la app
-        header = ttk.Frame(self.root, padding=(10, 8))
+        header = ttk.Frame(self.root, padding=(16, 12), style="Header.TFrame")
         header.pack(fill="x")
         logo_path = self._recurso("logo_ugr.png")
         if os.path.exists(logo_path):
             try:
                 self._logo_img = tk.PhotoImage(file=logo_path)
-                ttk.Label(header, image=self._logo_img).pack(side="left", padx=(0, 12))
+                ttk.Label(header, image=self._logo_img,
+                          style="Header.TLabel").pack(side="left", padx=(0, 18))
             except Exception:
                 self._logo_img = None
-        ttk.Label(header, text="FichaCSIRC",
-                  font=("Segoe UI", 17, "bold")).pack(side="left")
+        ttk.Label(header, text="FichaCSIRC", style="Title.TLabel").pack(side="left")
         ttk.Label(header, text="Registro de horas - OpenProject",
-                  foreground="#666").pack(side="left", padx=12)
-        self.lbl_user = ttk.Label(header, text="", foreground="#444",
-                                  font=("Segoe UI", 10))
+                  style="Subtitle.TLabel").pack(side="left", padx=16)
+        self.lbl_user = ttk.Label(header, text="", style="Header.TLabel",
+                                  font=("TkDefaultFont", 10, "bold"))
         self.lbl_user.pack(side="right", padx=(0, 4))
-        ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=8)
+        ttk.Separator(self.root, orient="horizontal").pack(fill="x")
 
         # Barra superior: navegacion semanal
-        top = ttk.Frame(self.root, padding=8)
-        top.pack(fill="x")
-        ttk.Button(top, text="< Semana", command=self._semana_ant).pack(side="left")
-        self.lbl_semana = ttk.Label(top, text="", font=("Segoe UI", 10, "bold"))
-        self.lbl_semana.pack(side="left", expand=True)
-        ttk.Button(top, text="Semana >", command=self._semana_sig).pack(side="left")
+        top = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
+        top.pack(fill="x", padx=12, pady=(12, 8))
+        ttk.Button(top, text="← Semana", command=self._semana_ant).pack(side="left")
+        self.lbl_semana = ttk.Label(top, text="", style="Section.TLabel")
+        self.lbl_semana.pack(side="left", expand=True, padx=12)
+        ttk.Button(top, text="Semana →", command=self._semana_sig).pack(side="left")
         ttk.Button(top, text="Hoy", command=self._ir_hoy).pack(side="left", padx=(8, 0))
-        b_exp = ttk.Button(top, text="Exportar CSV...", command=self._exportar)
+        b_exp = ttk.Button(top, text="Exportar CSV…", command=self._exportar)
         b_exp.pack(side="right", padx=(8, 0))
         Tooltip(b_exp, "Exporta tus apuntes a CSV por rango de fechas")
-        b_mes = ttk.Button(top, text="Resumen mes", command=self._resumen_mes)
+        b_mes = ttk.Button(top, text="Resumen", command=self._resumen_mes)
         b_mes.pack(side="right", padx=(8, 0))
         Tooltip(b_mes, "Horas del mes: registradas, objetivo y días incompletos")
 
         # Dias (tarjetas con estado)
         self.var_semana = tk.BooleanVar(value=False)
-        diaf = ttk.LabelFrame(self.root, text="Días (clic para marcar uno o varios)", padding=8)
-        diaf.pack(fill="x", padx=8)
-        self.dias_frame = ttk.Frame(diaf)
-        self.dias_frame.pack(fill="x")
-        fila2 = ttk.Frame(diaf)
-        fila2.pack(fill="x", pady=(6, 0))
+        diaf = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
+        diaf.pack(fill="x", padx=12, pady=(0, 8))
+        ttk.Label(diaf, text="Días", style="Section.TLabel").pack(anchor="w")
+        self.dias_frame = ttk.Frame(diaf, style="Panel.TFrame")
+        self.dias_frame.pack(fill="x", pady=(8, 0))
+        fila2 = ttk.Frame(diaf, style="Panel.TFrame")
+        fila2.pack(fill="x", pady=(10, 0))
         ttk.Checkbutton(fila2, text="Toda la semana", variable=self.var_semana,
                         command=self._toggle_semana).pack(side="left")
         b_pla = ttk.Button(fila2, text="Plantillas...", command=self._plantillas)
@@ -196,54 +226,64 @@ class App:
                        "(botón derecho en un día: marcarlo como festivo/vacaciones)")
 
         # Lista de apuntes
-        midf = ttk.LabelFrame(self.root, text="Apuntes de los días marcados", padding=8)
-        midf.pack(fill="both", expand=True, padx=8, pady=6)
+        midf = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
+        midf.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        mid_head = ttk.Frame(midf, style="Panel.TFrame")
+        mid_head.pack(fill="x", pady=(0, 8))
+        ttk.Label(mid_head, text="Apuntes de los días marcados",
+                  style="Section.TLabel").pack(side="left")
+        b_del = ttk.Button(mid_head, text="Eliminar seleccionado",
+                           style="Danger.TButton", command=self._eliminar)
+        b_del.pack(side="right")
+        Tooltip(b_del, "También con la tecla Supr. Doble clic en un apunte lo edita.")
         cols = ("dia", "horas", "tarea", "actividad", "comentario")
-        self.tree = ttk.Treeview(midf, columns=cols, show="headings", height=8)
-        for c, txt, w in [("dia", "Día", 90), ("horas", "Horas", 55),
-                          ("tarea", "Tarea", 240), ("actividad", "Actividad", 110),
-                          ("comentario", "Comentario", 150)]:
+        self.tree = ttk.Treeview(midf, columns=cols, show="headings", height=6)
+        for c, txt, w in [("dia", "Día", 95), ("horas", "Horas", 70),
+                          ("tarea", "Tarea", 360), ("actividad", "Actividad", 190),
+                          ("comentario", "Comentario", 260)]:
             self.tree.heading(c, text=txt)
             self.tree.column(c, width=w, anchor="w")
         self.tree.pack(side="left", fill="both", expand=True)
         sb = ttk.Scrollbar(midf, orient="vertical", command=self.tree.yview)
         sb.pack(side="right", fill="y")
         self.tree.configure(yscrollcommand=sb.set)
+        self.tree.tag_configure("odd", background="#f8fafc")
+        self.tree.tag_configure("even", background=COLOR_PANEL)
         self.tree.bind("<Double-1>", self._editar)
-        b_del = ttk.Button(self.root, text="Eliminar apunte seleccionado",
-                           command=self._eliminar)
-        b_del.pack(anchor="e", padx=8)
-        Tooltip(b_del, "También con la tecla Supr. Doble clic en un apunte lo edita.")
 
         # Formulario anadir
-        form = ttk.LabelFrame(self.root, text="Añadir apunte", padding=8)
-        form.pack(fill="x", padx=8, pady=6)
+        form = ttk.Frame(self.root, padding=(14, 10), style="Panel.TFrame")
+        # La accion diaria principal debe quedar visible incluso en ventanas no maximizadas.
+        form.pack(fill="x", padx=12, pady=(0, 8), before=midf)
+        ttk.Label(form, text="Añadir apunte", style="Section.TLabel").grid(
+            row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
 
-        ttk.Label(form, text="Tarea:").grid(row=0, column=0, sticky="w")
+        ttk.Label(form, text="Tarea:", background=COLOR_PANEL).grid(row=1, column=0, sticky="w")
         self.cbo_tarea = ttk.Combobox(form, width=46)
-        self.cbo_tarea.grid(row=0, column=1, columnspan=2, sticky="we", padx=4, pady=2)
+        self.cbo_tarea.grid(row=1, column=1, columnspan=2, sticky="we", padx=(8, 8), pady=4)
         self.cbo_tarea.bind("<KeyRelease>", self._filtrar_tareas)
         Tooltip(self.cbo_tarea, "Escribe para filtrar tus tareas favoritas")
         b_buscar = ttk.Button(form, text="Buscar...", command=self._buscar_tarea)
-        b_buscar.grid(row=0, column=3, padx=4)
+        b_buscar.grid(row=1, column=3, padx=(0, 0), pady=4, sticky="ew")
         Tooltip(b_buscar, "Busca tareas por proyecto (Ctrl/Mayús para elegir varias)")
 
-        ttk.Label(form, text="Horas:").grid(row=1, column=0, sticky="w")
+        ttk.Label(form, text="Horas:", background=COLOR_PANEL).grid(row=2, column=0, sticky="w")
         self.ent_horas = ttk.Entry(form, width=8)
-        self.ent_horas.grid(row=1, column=1, sticky="w", padx=4, pady=2)
+        self.ent_horas.grid(row=2, column=1, sticky="w", padx=(8, 8), pady=4)
 
-        ttk.Label(form, text="Actividad:").grid(row=1, column=2, sticky="e")
+        ttk.Label(form, text="Actividad:", background=COLOR_PANEL).grid(row=2, column=2, sticky="e")
         self.cbo_act = ttk.Combobox(form, state="readonly", width=22)
-        self.cbo_act.grid(row=1, column=3, sticky="w", padx=4)
+        self.cbo_act.grid(row=2, column=3, sticky="ew", pady=4)
 
-        ttk.Label(form, text="Comentario:").grid(row=2, column=0, sticky="w")
+        ttk.Label(form, text="Comentario:", background=COLOR_PANEL).grid(row=3, column=0, sticky="w")
         self.ent_com = ttk.Entry(form, width=50)
-        self.ent_com.grid(row=2, column=1, columnspan=2, sticky="we", padx=4, pady=2)
+        self.ent_com.grid(row=3, column=1, columnspan=2, sticky="we", padx=(8, 8), pady=4)
 
         self.btn_anadir = ttk.Button(form, text="Añadir a días marcados",
-                                     command=self._anadir)
-        self.btn_anadir.grid(row=2, column=3, padx=4)
+                                     style="Primary.TButton", command=self._anadir)
+        self.btn_anadir.grid(row=3, column=3, pady=4, sticky="ew")
         form.columnconfigure(1, weight=1)
+        form.columnconfigure(3, weight=0)
 
         # Atajos: Enter anade, Supr elimina, F5 recarga, Ctrl+Z deshace el borrado
         self.ent_horas.bind("<Return>", lambda _e: self._anadir())
@@ -253,23 +293,36 @@ class App:
         self.root.bind("<Control-z>", lambda _e: self._deshacer_borrado())
 
         # Barra de estado (+ boton Deshacer que aparece tras eliminar)
-        barra = ttk.Frame(self.root)
+        barra = ttk.Frame(self.root, style="Subtle.TFrame")
         barra.pack(fill="x", side="bottom")
         self.btn_deshacer = ttk.Button(barra, text="Deshacer",
                                        command=self._deshacer_borrado)
         Tooltip(self.btn_deshacer, "Restaura el último apunte eliminado (Ctrl+Z)")
-        # Pie: version, fecha de build y repositorio
-        pie_txt = f"v{core.VERSION} · build {self._fecha_build()}"
-        pie = ttk.Label(barra, text=pie_txt, foreground="#888", padding=(6, 4))
+        # Pie: conexion, version, fecha de build y repositorio
+        pie_txt = f"{self._plataforma()} · v{core.VERSION} · build {self._fecha_build()}"
+        pie = ttk.Label(barra, text=pie_txt, style="Status.TLabel")
         pie.pack(side="right")
         if core.GITHUB_REPO:
-            pie.configure(text=f"{pie_txt} · github.com/{core.GITHUB_REPO}",
-                          foreground="#0067c0", cursor="hand2")
+            pie.configure(text=f"{pie_txt} · GitHub",
+                          foreground="#0b66c3", cursor="hand2")
             pie.bind("<Button-1>", lambda _e: webbrowser.open(
                 f"https://github.com/{core.GITHUB_REPO}"))
             Tooltip(pie, "Abrir el repositorio en GitHub")
-        self.status = ttk.Label(barra, text="", relief="sunken", anchor="w", padding=4)
+        self.lbl_conn = ttk.Label(barra, text="● Comprobando conexión",
+                                  style="Status.TLabel", foreground=COLOR_MUTED)
+        self.lbl_conn.pack(side="right")
+        Tooltip(self.lbl_conn, "Estado de la última consulta a ProyectosTic")
+        self.status = ttk.Label(barra, text="", style="Status.TLabel", anchor="w")
         self.status.pack(side="left", fill="x", expand=True)
+
+    def _poner_conexion(self, estado, texto):
+        colores = {
+            "ok": COLOR_SUCCESS,
+            "warn": COLOR_WARNING,
+            "error": COLOR_DANGER,
+            "checking": COLOR_MUTED,
+        }
+        self.lbl_conn.config(text=texto, foreground=colores.get(estado, COLOR_MUTED))
 
     def _menu(self):
         barra = tk.Menu(self.root)
@@ -428,6 +481,7 @@ class App:
         self.dia_vars = []
         self._cache_dia = {}
         self.status.config(text="Cargando semana...")
+        self._poner_conexion("checking", "● Comprobando conexión")
         self._refresco_seq += 1
         seq = self._refresco_seq
         dias = self._dias_semana()
@@ -465,43 +519,45 @@ class App:
             es_hoy = (d == hoy)
             var = tk.BooleanVar(value=es_hoy)
 
-            card = tk.Frame(self.dias_frame, highlightthickness=2, cursor="hand2")
-            card.grid(row=0, column=i, padx=3, pady=2, sticky="nsew")
-            fnt = ("Segoe UI", 9, "bold") if es_hoy else ("Segoe UI", 9)
+            card = tk.Frame(self.dias_frame, bg=COLOR_PANEL, highlightthickness=1,
+                            highlightbackground=COLOR_BORDER, cursor="hand2")
+            card.grid(row=0, column=i, padx=5, pady=2, sticky="nsew")
+            fnt = ("TkDefaultFont", 10, "bold") if es_hoy else ("TkDefaultFont", 10)
             titulo = f"{core.DIAS_ES[i]} {d.strftime('%d/%m')}" + ("  · hoy" if es_hoy else "")
-            lbl1 = tk.Label(card, text=titulo, font=fnt, anchor="w")
-            lbl1.pack(fill="x", padx=8, pady=(5, 2))
-            cv = tk.Canvas(card, height=8, highlightthickness=0)
-            cv.pack(fill="x", padx=8)
+            lbl1 = tk.Label(card, text=titulo, font=fnt, anchor="w",
+                            bg=COLOR_PANEL, fg="#111827")
+            lbl1.pack(fill="x", padx=12, pady=(10, 5))
+            cv = tk.Canvas(card, height=6, highlightthickness=0, bg=COLOR_PANEL)
+            cv.pack(fill="x", padx=12)
             if nolab:
-                frac, color = 1.0, "#8fa8bf"
+                frac, color = 1.0, COLOR_MUTED
                 texto2 = core.motivo_no_laborable(d.isoformat()).capitalize()
                 if reg:
                     texto2 = f"{core._fmt(reg)} · {texto2}"
             elif apuntes is None:
-                frac, color, texto2 = 0.0, "#b00020", "sin conexión"
+                frac, color, texto2 = 0.0, COLOR_DANGER, "sin conexión"
             elif reg > obj + 0.001:
-                frac, color = 1.0, "#c62828"
+                frac, color = 1.0, COLOR_DANGER
                 texto2 = f"{core._fmt(reg)} / {obj}h  (te pasas)"
             elif reg >= obj - 0.001 and reg > 0:
-                frac, color = 1.0, "#2e9e4f"
+                frac, color = 1.0, COLOR_SUCCESS
                 texto2 = f"{core._fmt(reg)} / {obj}h  ✔"
             elif reg > 0:
-                frac, color = (reg / obj if obj else 0.0), "#e8a000"
+                frac, color = (reg / obj if obj else 0.0), COLOR_WARNING
                 texto2 = f"{core._fmt(reg)} / {obj}h"
             else:
                 frac, color = 0.0, "#9a9a9a"
                 texto2 = f"0h / {obj}h"
-            lbl2 = tk.Label(card, text=texto2, font=("Segoe UI", 9),
-                            fg=color, anchor="w")
-            lbl2.pack(fill="x", padx=8, pady=(2, 5))
+            lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 10),
+                            fg=color, bg=COLOR_PANEL, anchor="w")
+            lbl2.pack(fill="x", padx=12, pady=(7, 10))
 
             def dibujar(_e=None, cv=cv, frac=frac, color=color):
                 cv.delete("all")
                 ancho = max(cv.winfo_width(), 1)
-                cv.create_rectangle(0, 0, ancho, 8, fill="#e3e3e3", width=0)
+                cv.create_rectangle(0, 0, ancho, 6, fill="#e5e7eb", width=0)
                 if frac > 0:
-                    cv.create_rectangle(0, 0, int(ancho * frac), 8,
+                    cv.create_rectangle(0, 0, int(ancho * frac), 6,
                                         fill=color, width=0)
             cv.bind("<Configure>", dibujar)
             for wdg in (card, lbl1, cv, lbl2):
@@ -519,8 +575,13 @@ class App:
                     "Comprueba tu red/VPN y la configuración\n"
                     "(FichaCSIRC - Configurar).")
             self.status.config(text="Sin conexión con ProyectosTic.")
+            self._poner_conexion("error", "● Sin conexión")
         else:
             self._aviso_con = False
+            if fallos:
+                self._poner_conexion("warn", "● Conexión parcial")
+            else:
+                self._poner_conexion("ok", "● Conectado")
             if nombre and not self.lbl_user.cget("text"):
                 self.lbl_user.config(text=nombre)
         if self._msg_pendiente:
@@ -535,9 +596,10 @@ class App:
         """Refleja en las tarjetas que dias estan marcados."""
         for var, _d, card in self.dia_vars:
             sel = var.get()
-            bg = "#e7f1fb" if sel else self._card_bg
-            borde = "#0067c0" if sel else "#c9c9c9"
-            card.configure(bg=bg, highlightbackground=borde, highlightcolor=borde)
+            bg = COLOR_SELECTED if sel else self._card_bg
+            borde = "#0b66c3" if sel else COLOR_BORDER
+            card.configure(bg=bg, highlightbackground=borde, highlightcolor=borde,
+                           highlightthickness=(2 if sel else 1))
             for ch in card.winfo_children():
                 try:
                     ch.configure(bg=bg)
@@ -559,16 +621,19 @@ class App:
     def _recargar_tree(self):
         for it in self.tree.get_children():
             self.tree.delete(it)
+        idx = 0
         for d in self._dias_marcados():
             apuntes = self._cache_dia.get(d.isoformat())
             if apuntes is None:
                 continue
             for a in apuntes:
+                zebra = "odd" if idx % 2 else "even"
                 self.tree.insert("", "end",
                                  values=(f"{core.DIAS_ES[d.weekday()][:3]} {d.strftime('%d/%m')}",
                                          core._fmt(a["horas"]),
                                          a["wp_titulo"], a["actividad"], a["comentario"]),
-                                 tags=(str(a["id"]), d.isoformat()))
+                                 tags=(str(a["id"]), d.isoformat(), zebra))
+                idx += 1
         self.var_semana.set(bool(self.dia_vars)
                             and all(v.get() for v, _, _ in self.dia_vars))
         self._actualizar_totales()
