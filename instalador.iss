@@ -38,7 +38,7 @@ WizardStyle=modern
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
+Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
 
 [Files]
 Source: "dist\FichaCSIRC.exe"; DestDir: "{app}"; Flags: ignoreversion
