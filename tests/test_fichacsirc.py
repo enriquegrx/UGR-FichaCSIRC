@@ -226,7 +226,8 @@ class TestApi(unittest.TestCase):
              mock.patch.object(core.requests, "get", return_value=resp):
             self.assertIsNone(core.buscar_actualizacion())
         # sin repo configurado -> desactivada (y sin llamadas de red)
-        with mock.patch.object(core.requests, "get") as m_get:
+        with mock.patch.object(core, "GITHUB_REPO", ""), \
+             mock.patch.object(core.requests, "get") as m_get:
             self.assertIsNone(core.buscar_actualizacion())
             m_get.assert_not_called()
 
