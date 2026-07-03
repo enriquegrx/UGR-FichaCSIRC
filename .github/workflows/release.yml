@@ -1,0 +1,53 @@
+name: Release
+
+# Se dispara al subir una etiqueta de version (ej. v2.1):
+#   git tag v2.1 && git push origin v2.1
+# Construye los .exe y los publica como Release de GitHub.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install requests pyinstaller
+
+      - name: Ejecutar tests
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Construir FichaCSIRC.exe
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name "FichaCSIRC" --icon "fichacsirc.ico"
+          --version-file "version_info.txt"
+          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          registrar_gui.py
+
+      - name: Construir FichaCSIRC-Configurar.exe
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico"
+          --version-file "version_info.txt"
+          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          configurar_gui.py
+
+      - name: Publicar release con los .exe
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/FichaCSIRC.exe
+            dist/FichaCSIRC-Configurar.exe
+          generate_release_notes: true

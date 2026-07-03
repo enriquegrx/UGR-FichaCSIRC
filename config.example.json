@@ -1,0 +1,13 @@
+{
+  "base_url": "https://proyectostic.ugr.es",
+  "api_key": "PON_AQUI_TU_API_KEY",
+  "jornada_invierno": 7,
+  "tiene_verano": true,
+  "jornada_verano": 5,
+  "verano_inicio": [6, 16],
+  "verano_fin": [9, 15],
+  "actividad_defecto": "soporte",
+  "favoritos": [],
+  "no_laborables": {},
+  "plantillas": []
+}

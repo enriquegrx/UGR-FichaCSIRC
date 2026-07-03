@@ -1,0 +1,33 @@
+# ---- Configuracion con credenciales: NO subir (contiene la API key) ----
+config.json
+
+# ---- Exportaciones de horas (datos personales) ----
+horas_*.csv
+
+# ---- Log de la app ----
+fichacsirc.log*
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- PyInstaller ----
+build/
+dist/
+*.spec
+
+# ---- Lanzadores generados automaticamente por el configurador ----
+# (se regeneran; descomenta si no quieres versionarlos)
+# FichaCSIRC - Registrar.bat
+# FichaCSIRC - Registrar (consola).bat
+
+# ---- Sistema ----
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ---- Config local de Claude Code ----
+.claude/
