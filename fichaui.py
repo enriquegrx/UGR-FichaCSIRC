@@ -12,6 +12,7 @@ import os
 import sys
 import threading
 import tkinter as tk
+from tkinter import ttk
 
 
 def recurso(carpeta, nombre):
@@ -25,6 +26,29 @@ def carpeta_app():
     if getattr(sys, "frozen", False):
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def aplicar_estilo(root):
+    """Tema base estable para Tk/ttk en las plataformas soportadas."""
+    style = ttk.Style(root)
+    if sys.platform == "darwin":
+        # El tema aqua puede dejar widgets ttk sin pintar en algunos builds
+        # empaquetados con PyInstaller/Tk. Clam es menos nativo, pero estable.
+        preferidos = ("clam", "aqua")
+    elif os.name == "nt":
+        preferidos = ("vista", "xpnative", "clam")
+    else:
+        preferidos = ("clam", "default")
+    disponibles = set(style.theme_names())
+    for tema in preferidos:
+        if tema in disponibles:
+            try:
+                style.theme_use(tema)
+                break
+            except tk.TclError:
+                pass
+    root.option_add("*Font", "TkDefaultFont")
+    return style
 
 
 def en_hilo(root, trabajo, al_terminar):

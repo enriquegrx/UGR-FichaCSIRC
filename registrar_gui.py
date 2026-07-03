@@ -39,7 +39,7 @@ except Exception as e:
 
 import dialogos
 import recordatorio
-from fichaui import Tooltip, en_hilo, recurso, carpeta_app
+from fichaui import Tooltip, aplicar_estilo, en_hilo, recurso, carpeta_app
 
 
 class App:
@@ -975,10 +975,7 @@ def main():
         recordatorio.main()
         return
     root = tk.Tk()
-    try:
-        ttk.Style().theme_use("vista")
-    except Exception:
-        pass
+    aplicar_estilo(root)
     App(root)
     root.mainloop()
 

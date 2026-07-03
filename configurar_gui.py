@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 import configurar as ccore  # _api_get, ACTIVIDADES, WP_CONOCIDOS, CONFIG_PATH, cargar_previa
+from fichaui import aplicar_estilo
 
 if getattr(sys, "frozen", False):
     APP_DIR = os.path.dirname(sys.executable)
@@ -400,8 +401,10 @@ class Wizard:
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar:\n{e}")
             return
-        lanzador = ("FichaCSIRC.exe" if getattr(sys, "frozen", False)
-                    else '"FichaCSIRC - Registrar.bat"')
+        if getattr(sys, "frozen", False):
+            lanzador = "FichaCSIRC.app" if sys.platform == "darwin" else "FichaCSIRC.exe"
+        else:
+            lanzador = '"python3 registrar_gui.py"' if os.name != "nt" else '"FichaCSIRC - Registrar.bat"'
         messagebox.showinfo(
             "Configuración guardada",
             f"Listo. Ya puedes registrar horas con {lanzador}.")
@@ -410,10 +413,7 @@ class Wizard:
 
 def main():
     root = tk.Tk()
-    try:
-        ttk.Style().theme_use("vista")
-    except Exception:
-        pass
+    aplicar_estilo(root)
     Wizard(root)
     root.mainloop()
 

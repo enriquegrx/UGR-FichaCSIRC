@@ -44,6 +44,7 @@ La app avisa de cuántas horas te faltan para completar el día, pero te deja ce
 | `build_macos.sh` | Genera las apps `.app` para macOS con PyInstaller (ARM o Intel segun el Mac/runner). |
 | `tests/` + `run_tests.bat` | Tests del motor (sin red; `unittest` de la stdlib). |
 | `revision_ux.md` | Prompt para una revisión de usabilidad (UX), aplicada en jul 2026. |
+| `revision_ui.md` | Prompt para una revisión de diseño visual/UI (layout, botones, tarjetas, campos). |
 
 ## 4. Requisitos
 

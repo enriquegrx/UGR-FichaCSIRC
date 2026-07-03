@@ -3,18 +3,43 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  for candidate in python3.12 /opt/homebrew/bin/python3.12 /usr/local/bin/python3.12 python3; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      PYTHON_BIN="$(command -v "$candidate")"
+      break
+    fi
+  done
+fi
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 ARCH_LABEL="${ARCH_LABEL:-$(uname -m)}"
 if [[ "$ARCH_LABEL" == "x86_64" ]]; then
   ARCH_LABEL="x64"
 fi
+VENV="build/macos/venv-${ARCH_LABEL}"
 
 ICONSET="build/macos/fichacsirc.iconset"
 ICNS="build/macos/fichacsirc.icns"
 SRC_ICON="${SRC_ICON:-fichacsirc_256.png}"
 
-echo "Instalando dependencias..."
-"$PYTHON_BIN" -m pip install --quiet --upgrade pip pyinstaller requests
+echo "Comprobando Tkinter..."
+if ! "$PYTHON_BIN" - <<'PY'
+import tkinter as tk
+print(f"Python/Tk: {tk.TkVersion}")
+if tk.TkVersion < 8.6:
+    raise SystemExit("Tk demasiado antiguo para empaquetar en macOS")
+PY
+then
+  echo "ERROR: $PYTHON_BIN no tiene Tkinter usable (>= 8.6)."
+  echo "En macOS con Homebrew instala: brew install python@3.12 python-tk@3.12"
+  echo "Tambien puedes pasar otro Python con: PYTHON_BIN=/ruta/python3.12 ./build_macos.sh"
+  exit 1
+fi
+
+echo "Preparando entorno de build..."
+"$PYTHON_BIN" -m venv "$VENV"
+PY="$VENV/bin/python"
+"$PY" -m pip install --quiet --upgrade pip pyinstaller requests
 
 echo "Preparando icono .icns..."
 rm -rf "$ICONSET"
@@ -37,13 +62,13 @@ rm -rf build/FichaCSIRC build/FichaCSIRC-Configurar
 rm -rf dist/FichaCSIRC.app dist/FichaCSIRC-Configurar.app
 
 echo "Construyendo FichaCSIRC.app..."
-"$PYTHON_BIN" -m PyInstaller --noconfirm --clean --windowed \
+"$PY" -m PyInstaller --noconfirm --clean --windowed \
   --name "FichaCSIRC" --icon "$ICNS" \
   --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
   registrar_gui.py
 
 echo "Construyendo FichaCSIRC-Configurar.app..."
-"$PYTHON_BIN" -m PyInstaller --noconfirm --clean --windowed \
+"$PY" -m PyInstaller --noconfirm --clean --windowed \
   --name "FichaCSIRC-Configurar" --icon "$ICNS" \
   --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
   configurar_gui.py
