@@ -24,6 +24,11 @@ import rellenar_horas as core
 TASK_NAME = "FichaCSIRC-Recordatorio"
 
 
+def recordatorios_soportados():
+    """El alta/baja automatica usa el Programador de tareas de Windows."""
+    return os.name == "nt"
+
+
 # ----------------------- mensaje -----------------------
 
 def mensaje_pendientes(pendientes):
@@ -51,6 +56,8 @@ def _comando_recordatorio():
 
 
 def recordatorio_activo():
+    if not recordatorios_soportados():
+        return False
     try:
         r = subprocess.run(["schtasks", "/query", "/tn", TASK_NAME],
                            capture_output=True, text=True,
@@ -62,6 +69,8 @@ def recordatorio_activo():
 
 def activar_recordatorio(hora="16:00"):
     """Crea/actualiza la tarea programada (lun-vie a la hora indicada)."""
+    if not recordatorios_soportados():
+        raise RuntimeError("El aviso diario automatico solo esta disponible en Windows.")
     cmd = ["schtasks", "/create", "/tn", TASK_NAME,
            "/tr", _comando_recordatorio(),
            "/sc", "weekly", "/d", "MON,TUE,WED,THU,FRI",
@@ -74,6 +83,8 @@ def activar_recordatorio(hora="16:00"):
 
 
 def desactivar_recordatorio():
+    if not recordatorios_soportados():
+        raise RuntimeError("El aviso diario automatico solo esta disponible en Windows.")
     r = subprocess.run(["schtasks", "/delete", "/tn", TASK_NAME, "/f"],
                        capture_output=True, text=True,
                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

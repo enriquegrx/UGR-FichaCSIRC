@@ -47,7 +47,7 @@ def _lista_a_fecha(lst):
 
 
 def escribir_lanzadores():
-    if getattr(sys, "frozen", False):
+    if getattr(sys, "frozen", False) or os.name != "nt":
         return
     py = sys.executable
     pyw = py[:-10] + "pythonw.exe" if py.lower().endswith("python.exe") else py

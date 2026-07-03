@@ -8,6 +8,8 @@ eliges la tarea, pones las horas y listo.
 
 ## 1. Instalación (solo la primera vez)
 
+### Windows
+
 1. **Descarga** el instalador **`FichaCSIRC-Instalador.exe`** desde:
    **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
    (en el apartado *Assets*, es el archivo más grande). La propia aplicación te
@@ -41,6 +43,25 @@ eliges la tarea, pones las horas y listo.
    > 🗑️ Para desinstalar: *Configuración de Windows → Aplicaciones → FichaCSIRC
    > → Desinstalar* (tu configuración y tus horas no se tocan).
 
+### macOS
+
+1. **Descarga** el ZIP de tu Mac desde:
+   **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
+
+   - Apple Silicon (M1/M2/M3/M4): `FichaCSIRC-mac-arm64.zip`
+   - Intel: `FichaCSIRC-mac-x64.zip`
+
+2. Descomprime el ZIP. Dentro verás dos aplicaciones:
+
+   - **FichaCSIRC.app** — la que usarás cada día.
+   - **FichaCSIRC-Configurar.app** — el asistente de configuración.
+
+3. Abre primero **FichaCSIRC-Configurar.app**. Si macOS avisa de que la app no
+   está firmada, haz clic derecho sobre la app → **Abrir** → **Abrir**. Solo
+   debería hacer falta la primera vez.
+
+4. Cuando termines la configuración, abre **FichaCSIRC.app** para registrar horas.
+
 ## 2. Consigue tu clave de acceso (API key) de OpenProject
 
 La aplicación necesita una clave personal para registrar horas **en tu nombre**.
@@ -61,7 +82,7 @@ Se saca de tu propio perfil de OpenProject:
 
 ## 3. Configuración inicial (2 minutos)
 
-1. Abre **`FichaCSIRC-Configurar.exe`** y sigue el asistente:
+1. Abre **`FichaCSIRC-Configurar.exe`** en Windows o **`FichaCSIRC-Configurar.app`** en macOS y sigue el asistente:
    - **Conexión**: la dirección ya viene puesta
      (`https://proyectostic.ugr.es`); pega tu **API key** y pulsa
      **Probar conexión** — debe saludarte con tu nombre.
@@ -76,7 +97,7 @@ Se saca de tu propio perfil de OpenProject:
 
 ## 4. Uso diario (medio minuto)
 
-Abre **`FichaCSIRC.exe`**:
+Abre **`FichaCSIRC.exe`** en Windows o **`FichaCSIRC.app`** en macOS:
 
 1. Cada día de la semana es una **tarjeta** con una barra de progreso
    (verde = día completo, ámbar = a medias). Haz **clic en el día** que quieras
@@ -106,6 +127,6 @@ Trucos que ahorran tiempo:
 | "Sin conexión con ProyectosTic" | Comprueba que tienes red de la UGR (o la VPN encendida). |
 | "Acceso denegado (401)" | Tu API key ya no vale: genera otra (sección 2) y vuelve a pasar el configurador. |
 | "No tienes permiso para ver las tareas de este proyecto" (403) | Es normal: solo ves los proyectos en los que participas. Elige otro proyecto. |
-| Cualquier otra cosa rara | Junto a tu configuración (`%APPDATA%\FichaCSIRC`) hay un archivo `fichacsirc.log`: adjúntalo al pedir ayuda. |
+| Cualquier otra cosa rara | Junto a tu configuración (`%APPDATA%\FichaCSIRC` en Windows, `~/Library/Application Support/FichaCSIRC` en macOS) hay un archivo `fichacsirc.log`: adjúntalo al pedir ayuda. |
 
 *¿Dudas o sugerencias? Contacta con quien te pasó la aplicación.* 🙂

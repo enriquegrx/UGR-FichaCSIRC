@@ -41,12 +41,13 @@ La app avisa de cuántas horas te faltan para completar el día, pero te deja ce
 | `FichaCSIRC - Configurar.bat` | Lanzador del asistente. Detecta/instala Python si falta. |
 | `FichaCSIRC - Registrar.bat` | Lanzador de la app de registro (sin consola). |
 | `build_exe.bat` | Genera los ejecutables `.exe` con PyInstaller (se ejecuta en Windows). |
+| `build_macos.sh` | Genera las apps `.app` para macOS con PyInstaller (ARM o Intel segun el Mac/runner). |
 | `tests/` + `run_tests.bat` | Tests del motor (sin red; `unittest` de la stdlib). |
 | `revision_ux.md` | Prompt para una revisión de usabilidad (UX), aplicada en jul 2026. |
 
 ## 4. Requisitos
 
-- **Windows**.
+- **Windows** o **macOS**.
 - **Python 3** (el lanzador lo instala con `winget` si no está).
 - Librería `requests` (el lanzador la instala sola).
 - Una **API key** de OpenProject (avatar → Mi cuenta → Tokens de acceso → API).
@@ -54,22 +55,22 @@ La app avisa de cuántas horas te faltan para completar el día, pero te deja ce
 
 ## 5. Uso
 
-1. Doble clic en **`FichaCSIRC - Configurar.bat`** → asistente gráfico:
+1. Windows: doble clic en **`FichaCSIRC - Configurar.bat`**. macOS: abre **`FichaCSIRC-Configurar.app`** si usas la version empaquetada. En ambos casos aparece el asistente grafico:
    Bienvenida → Conexión (URL + API key, con botón *Probar conexión*) → Jornada (horas normales/verano + fechas) → Tareas favoritas (elegir proyecto y marcar tareas) + actividad por defecto → Resumen → **Finalizar**.
-2. Doble clic en **`FichaCSIRC - Registrar.bat`** → ventana de registro:
+2. Windows: doble clic en **`FichaCSIRC - Registrar.bat`**. macOS: abre **`FichaCSIRC.app`**. Se muestra la ventana de registro:
    - Navega por semanas; cada día es una **tarjeta con barra de progreso** (verde completo, ámbar parcial, rojo si te pasas). Clic para marcar uno o varios, o casilla *Toda la semana*. Botón derecho: marcar un día como **no laborable** (festivo, vacaciones…).
    - Añade apuntes: tarea (favoritas o *Buscar…*, con selección múltiple y opción de guardarlas como favoritas; el desplegable filtra al escribir) + horas (pre-rellenas con lo que falta) + actividad + comentario. Enter también añade.
    - **Doble clic en un apunte lo edita** (horas, actividad, comentario); Supr lo elimina, con **Deshacer** (Ctrl+Z) si te arrepientes.
    - *Copiar día anterior*, **Copiar semana anterior** (repite la semana pasada día a día) y **Plantillas** (guarda un día típico y aplícalo de un clic).
    - **Resumen mes**: horas registradas vs. objetivo y días incompletos.
-   - **Aviso diario de fichaje** (menú *Herramientas*): opcional, te avisa los días laborables si te faltan horas (usa el Programador de tareas de Windows; solo aparece si hay algo pendiente).
+   - **Aviso diario de fichaje** (menú *Herramientas*, solo Windows): opcional, te avisa los días laborables si te faltan horas (usa el Programador de tareas de Windows; solo aparece si hay algo pendiente).
    - Exporta a CSV por rango de fechas (botón *Exportar CSV…*).
    - Avisa si un apunte va a superar la jornada del día y evita duplicados.
    - Recuerda el tamaño de la ventana y la última actividad usada.
 
 ## 6. Configuración (`config.json`)
 
-Se crea con el asistente. Como script/`.bat` se guarda junto a los archivos; como `.exe` se guarda en `%APPDATA%\FichaCSIRC`. Contiene:
+Se crea con el asistente. Como script/`.bat` se guarda junto a los archivos. Como app empaquetada se guarda en `%APPDATA%\FichaCSIRC` en Windows y en `~/Library/Application Support/FichaCSIRC` en macOS. Contiene:
 
 - `base_url`, `api_key`
 - `jornada_invierno`, `jornada_verano`, `tiene_verano`, `verano_inicio`, `verano_fin`
@@ -96,15 +97,23 @@ La variable de entorno `FICHACSIRC_CONFIG` permite usar otra ruta de config (la 
 
 ## 8. Empaquetado y distribución
 
-**Automático (recomendado):** el repositorio tiene GitHub Actions configurado. Al subir una etiqueta de versión (`git tag v2.1 && git push origin v2.1`) se ejecutan los tests, se construyen los `.exe`, se genera el **instalador único** (Inno Setup) y todo se publica en [Releases](https://github.com/enriquegrx/UGR-FichaCSIRC/releases). Los compañeros descargan siempre la última desde `.../releases/latest` (ver `INSTRUCCIONES.md`), y la app avisa al arrancar si hay versión nueva. Recuerda actualizar `VERSION` en `rellenar_horas.py` (y `version_info.txt`) antes de etiquetar.
+**Automático (recomendado):** el repositorio tiene GitHub Actions configurado. Al subir una etiqueta de versión (`git tag v2.1 && git push origin v2.1`) se ejecutan los tests, se construyen los `.exe`, se genera el **instalador único** (Inno Setup), se construyen las apps de macOS para **Apple Silicon (ARM64)** e **Intel (x64)**, y todo se publica en [Releases](https://github.com/enriquegrx/UGR-FichaCSIRC/releases). Los compañeros descargan siempre la última desde `.../releases/latest` (ver `INSTRUCCIONES.md`), y la app avisa al arrancar si hay versión nueva. Recuerda actualizar `VERSION` en `rellenar_horas.py` (y `version_info.txt`) antes de etiquetar.
 
-**Manual:** ejecuta `build_exe.bat` **en Windows** (genera los `.exe`), y opcionalmente `build_instalador.bat` (necesita [Inno Setup 6](https://jrsoftware.org/isdl.php)) para el instalador:
+**Manual Windows:** ejecuta `build_exe.bat` **en Windows** (genera los `.exe`), y opcionalmente `build_instalador.bat` (necesita [Inno Setup 6](https://jrsoftware.org/isdl.php)) para el instalador:
 
 - `dist\FichaCSIRC-Instalador.exe` (instalador único: instala ambas apps + accesos directos, sin admin)
 - `dist\FichaCSIRC.exe` (app de registro, versión portable)
 - `dist\FichaCSIRC-Configurar.exe` (asistente, versión portable)
 
 La configuración del `.exe` se guarda en `%APPDATA%\FichaCSIRC`. Nota: un `.exe` sin firmar puede mostrar el aviso de SmartScreen ("Más información → Ejecutar de todas formas"); es normal.
+
+**Manual macOS:** ejecuta `./build_macos.sh` en un Mac. Genera:
+
+- `dist/FichaCSIRC.app`
+- `dist/FichaCSIRC-Configurar.app`
+- `dist/FichaCSIRC-mac-arm64.zip` o `dist/FichaCSIRC-mac-x64.zip`, segun la arquitectura
+
+Para distribuir ambas arquitecturas por separado, compila en Apple Silicon y en Intel, o deja que lo haga GitHub Actions. Al no estar firmadas/notarizadas, macOS puede pedir abrirlas con clic derecho → *Abrir* la primera vez.
 
 ## 9. Historial de decisiones (qué se ha hecho y por qué)
 

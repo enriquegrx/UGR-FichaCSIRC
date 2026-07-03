@@ -15,7 +15,8 @@ definición completa y el historial de decisiones.
   programada de Windows (`schtasks`). La app lo lanza con `--recordatorio`.
 - `configurar_gui.py` — asistente gráfico (wizard); importa `configurar`.
 - Lanzadores `.bat` (detectan Python, evitan el alias de la Microsoft Store).
-- `build_exe.bat` — empaqueta con PyInstaller (`--onefile`); CI en `.github/workflows`.
+- `build_exe.bat` — empaqueta Windows con PyInstaller (`--onefile`); CI en `.github/workflows`.
+- `build_macos.sh` — empaqueta macOS como `.app` y ZIP; CI genera artefactos `arm64` y `x64`.
 - `instalador.iss` + `build_instalador.bat` — instalador único (Inno Setup); la CI
   lo genera y publica junto a los `.exe` en cada Release.
 
@@ -25,8 +26,10 @@ definición completa y el historial de decisiones.
 - Las actividades se resuelven vía `POST /api/v3/time_entries/form`
   (el endpoint `available_time_entry_activities` da 404 en esta instancia).
 - 403 al listar tareas de un proyecto = sin permiso (normal), tratar con aviso amable.
-- La config vive junto al script, o en `%APPDATA%\FichaCSIRC` cuando es `.exe` (frozen);
-  la variable de entorno `FICHACSIRC_CONFIG` puede apuntar a otra ruta (la usan los tests).
+- La config vive junto al script. En apps empaquetadas se guarda en `%APPDATA%\FichaCSIRC`
+  en Windows y `~/Library/Application Support/FichaCSIRC` en macOS; la variable de entorno
+  `FICHACSIRC_CONFIG` puede apuntar a otra ruta (la usan los tests).
+- El recordatorio diario automatico usa `schtasks`; solo se muestra/activa en Windows.
 
 ## Hecho recientemente
 - Revisión UX aplicada (jul 2026): quick wins + llamadas a la API en hilos en la

@@ -282,8 +282,9 @@ class App:
 
         m_herr = tk.Menu(barra, tearoff=0)
         m_herr.add_command(label="Plantillas...", command=self._plantillas)
-        m_herr.add_command(label="Aviso diario de fichaje...",
-                           command=self._config_recordatorio)
+        if recordatorio.recordatorios_soportados():
+            m_herr.add_command(label="Aviso diario de fichaje...",
+                               command=self._config_recordatorio)
         barra.add_cascade(label="Herramientas", menu=m_herr)
 
         m_ayuda = tk.Menu(barra, tearoff=0)

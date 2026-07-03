@@ -88,11 +88,13 @@ class TestJornada(unittest.TestCase):
 
 class TestMsgConfigurar(unittest.TestCase):
     def test_script(self):
-        self.assertIn("FichaCSIRC - Configurar.bat", core._msg_configurar())
+        esperado = "python3 configurar_gui.py" if sys.platform == "darwin" else "FichaCSIRC - Configurar.bat"
+        self.assertIn(esperado, core._msg_configurar())
 
     def test_frozen(self):
         with mock.patch.object(sys, "frozen", True, create=True):
-            self.assertIn("FichaCSIRC-Configurar.exe", core._msg_configurar())
+            esperado = "FichaCSIRC-Configurar.app" if sys.platform == "darwin" else "FichaCSIRC-Configurar.exe"
+            self.assertIn(esperado, core._msg_configurar())
 
 
 class TestApi(unittest.TestCase):

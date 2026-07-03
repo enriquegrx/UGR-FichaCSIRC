@@ -25,7 +25,13 @@ def _config_path():
     if ruta:
         return ruta
     if getattr(sys, "frozen", False):
-        base = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FichaCSIRC")
+        if sys.platform == "darwin":
+            base = os.path.join(os.path.expanduser("~/Library/Application Support"), "FichaCSIRC")
+        elif os.name == "nt":
+            base = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "FichaCSIRC")
+        else:
+            base = os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+                                "FichaCSIRC")
         os.makedirs(base, exist_ok=True)
         return os.path.join(base, "config.json")
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")

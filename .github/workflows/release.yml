@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  build-release:
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -61,3 +61,34 @@ jobs:
             dist/FichaCSIRC.exe
             dist/FichaCSIRC-Configurar.exe
           generate_release_notes: true
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+          - runner: macos-26-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install requests
+
+      - name: Ejecutar tests
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Construir apps macOS
+        run: ARCH_LABEL=${{ matrix.arch }} ./build_macos.sh
+
+      - name: Publicar release con apps macOS
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FichaCSIRC-mac-${{ matrix.arch }}.zip
