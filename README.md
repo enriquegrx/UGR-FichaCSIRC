@@ -29,9 +29,12 @@ La app avisa de cuántas horas te faltan para completar el día, pero te deja ce
 
 | Archivo | Qué es |
 |---|---|
-| `rellenar_horas.py` | **Motor**: toda la lógica de conexión y API (leer/crear/borrar apuntes, proyectos, tareas, actividades, jornada, exportación). También funciona como app de consola. |
+| `rellenar_horas.py` | **Motor**: toda la lógica de conexión y API (leer/crear/borrar/editar apuntes, proyectos, tareas, actividades, jornada, exportación). También funciona como app de consola. |
 | `configurar.py` | Motor de configuración de consola + utilidades de API compartidas. |
-| `registrar_gui.py` | **App gráfica de registro** (Tkinter). Reutiliza `rellenar_horas.py`. |
+| `registrar_gui.py` | **Ventana principal de registro** (Tkinter). Reutiliza `rellenar_horas.py`. |
+| `dialogos.py` | Ventanas secundarias de la app (buscar tarea, exportar, editar, resumen, plantillas). |
+| `fichaui.py` | Utilidades de interfaz compartidas (tooltips, ejecución en hilo, recursos). |
+| `recordatorio.py` | Aviso de fichaje: comprobación puntual y alta/baja de la tarea programada de Windows. |
 | `configurar_gui.py` | **Asistente gráfico** (wizard Siguiente/Atrás/Finalizar) de configuración. |
 | `config.json` | Configuración del usuario (se genera; ver sección 6). |
 | `logo_ugr.png`, `fichacsirc.ico` | Logo para la cabecera e icono de la ventana. |
@@ -59,6 +62,7 @@ La app avisa de cuántas horas te faltan para completar el día, pero te deja ce
    - **Doble clic en un apunte lo edita** (horas, actividad, comentario); Supr lo elimina, con **Deshacer** (Ctrl+Z) si te arrepientes.
    - *Copiar día anterior*, **Copiar semana anterior** (repite la semana pasada día a día) y **Plantillas** (guarda un día típico y aplícalo de un clic).
    - **Resumen mes**: horas registradas vs. objetivo y días incompletos.
+   - **Aviso diario de fichaje** (menú *Herramientas*): opcional, te avisa los días laborables si te faltan horas (usa el Programador de tareas de Windows; solo aparece si hay algo pendiente).
    - Exporta a CSV por rango de fechas (botón *Exportar CSV…*).
    - Avisa si un apunte va a superar la jornada del día y evita duplicados.
    - Recuerda el tamaño de la ventana y la última actividad usada.
@@ -87,6 +91,8 @@ La variable de entorno `FICHACSIRC_CONFIG` permite usar otra ruta de config (la 
 - La GUI hace todas las llamadas a la API en **hilos de fondo** (la ventana nunca se congela); los apuntes de la semana se **cachean** por refresco para no repetir peticiones.
 - Los listados siguen la **paginación por offset** (antes, más de 200 proyectos/tareas se cortaban en silencio), y los GET reintentan una vez ante errores transitorios de red.
 - Editar un apunte usa `PATCH /api/v3/time_entries/{id}`.
+- Las **actividades permitidas se cachean por work package** (se configuran por proyecto; no se comparten entre tareas de proyectos distintos).
+- La comprobación de actualizaciones se hace **una vez al día** (respeta el límite de la API de GitHub). El `config.json` se lee tolerando BOM (por si se edita con el Bloc de notas).
 
 ## 8. Empaquetado y distribución
 

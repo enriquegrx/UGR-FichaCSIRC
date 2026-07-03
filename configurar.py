@@ -224,7 +224,7 @@ def seleccionar_favoritos_en_vivo(base_url, api_key):
 def cargar_previa():
     if os.path.exists(CONFIG_PATH):
         try:
-            with open(CONFIG_PATH, encoding="utf-8") as f:
+            with open(CONFIG_PATH, encoding="utf-8-sig") as f:
                 return json.load(f)
         except Exception:
             return {}

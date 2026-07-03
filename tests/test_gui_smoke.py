@@ -38,6 +38,7 @@ class TestGuiSmoke(unittest.TestCase):
             mock.patch.object(core, "_actividades_disponibles",
                               lambda wp: {"soporte": "/x"}),
             mock.patch.object(core, "FAVORITOS", [{"id": 1, "nombre": "Tarea demo"}]),
+            mock.patch.object(core, "GITHUB_REPO", ""),  # sin red en el test
         ]
         for p in parches:
             p.start()

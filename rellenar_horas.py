@@ -39,15 +39,22 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.0"
+VERSION = "2.1"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
 
 
-def buscar_actualizacion():
-    """Devuelve (version, url) si hay una release mas nueva en GitHub, o None."""
+def buscar_actualizacion(forzar=False):
+    """Devuelve (version, url) si hay una release mas nueva en GitHub, o None.
+
+    Comprueba como mucho una vez al dia (para no gastar el limite de la API de
+    GitHub, sobre todo si varios usuarios salen por la misma IP). Con
+    forzar=True salta esa restriccion (util para un boton "comprobar ahora")."""
     if not GITHUB_REPO:
+        return None
+    hoy = dt.date.today().isoformat()
+    if not forzar and config_valor("ultimo_chequeo_update") == hoy:
         return None
     try:
         r = requests.get(
@@ -57,7 +64,11 @@ def buscar_actualizacion():
             return None
         data = r.json()
     except Exception:
-        return None
+        return None  # sin conexion: no marcamos el dia, se reintenta luego
+    try:
+        guardar_config_valor("ultimo_chequeo_update", hoy)
+    except Exception:
+        pass
 
     def _v(s):
         try:
@@ -101,7 +112,7 @@ def _cargar_config():
     if not os.path.exists(CONFIG_PATH):
         sys.exit("No encuentro 'config.json'. " + _msg_configurar())
     try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
+        with open(CONFIG_PATH, encoding="utf-8-sig") as f:  # tolera BOM (Bloc de notas)
             return json.load(f)
     except Exception as e:
         sys.exit(f"No se pudo leer config.json: {e}")
@@ -128,7 +139,7 @@ def config_valor(clave, defecto=None):
 def guardar_config_valor(clave, valor):
     """Actualiza una clave de config.json sin tocar el resto."""
     try:
-        with open(CONFIG_PATH, encoding="utf-8") as f:
+        with open(CONFIG_PATH, encoding="utf-8-sig") as f:
             cfg = json.load(f)
     except Exception:
         cfg = {}
@@ -255,15 +266,18 @@ def entradas_dia(fecha_iso):
     return out
 
 
-_ACT_CACHE = None
+# Caché de actividades POR work package: las actividades permitidas se
+# configuran por proyecto, asi que no se pueden compartir entre tareas.
+_ACT_CACHE = {}
 
 
 def _actividades_disponibles(wp_id):
-    """Devuelve {nombre: href} de las actividades permitidas, via el formulario
-    de time_entries (compatible con todas las versiones de OpenProject)."""
-    global _ACT_CACHE
-    if _ACT_CACHE is not None:
-        return _ACT_CACHE
+    """Devuelve {nombre: href} de las actividades permitidas para ESE work
+    package, via el formulario de time_entries (compatible con todas las
+    versiones de OpenProject). Se cachea por wp_id."""
+    key = str(wp_id)
+    if key in _ACT_CACHE:
+        return _ACT_CACHE[key]
     body = {"_links": {"workPackage": {"href": f"/api/v3/work_packages/{wp_id}"}}}
     r = requests.post(f"{BASE_URL}/api/v3/time_entries/form",
                       headers=_auth(), json=body, timeout=30)
@@ -271,13 +285,14 @@ def _actividades_disponibles(wp_id):
     data = r.json()
     vals = (data.get("_embedded", {}).get("schema", {})
                 .get("activity", {}).get("_embedded", {}).get("allowedValues", []))
-    _ACT_CACHE = {}
+    acts = {}
     for v in vals:
         nombre = v.get("name") or v.get("_links", {}).get("self", {}).get("title", "")
         href = v.get("_links", {}).get("self", {}).get("href", "")
         if nombre and href:
-            _ACT_CACHE[nombre] = href
-    return _ACT_CACHE
+            acts[nombre] = href
+    _ACT_CACHE[key] = acts
+    return acts
 
 
 def _actividad_href(wp_id, nombre):
@@ -489,6 +504,29 @@ def objetivo_de(dia):
     if es_no_laborable(dia.isoformat()):
         return 0
     return jornada_de(dia)
+
+
+def dias_pendientes_semana(referencia=None, incluir_futuros=False):
+    """Dias laborables de la semana de 'referencia' que aun no llegan a su
+    jornada. Devuelve lista de (dia, registrado, objetivo), o None si no hay
+    conexion (para no molestar con un aviso cuando la culpa es la red)."""
+    hoy = referencia or _hoy()
+    lunes = hoy - dt.timedelta(days=hoy.weekday())
+    pendientes = []
+    for i in range(5):
+        d = lunes + dt.timedelta(days=i)
+        if not incluir_futuros and d > hoy:
+            continue
+        obj = objetivo_de(d)
+        if not obj:
+            continue
+        try:
+            reg = sum(a["horas"] for a in entradas_dia(d.isoformat()))
+        except Exception:
+            return None
+        if reg < obj - 0.001:
+            pendientes.append((d, reg, obj))
+    return pendientes
 
 
 def anadir_favorito(wp):

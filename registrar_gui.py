@@ -1,20 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-registrar_gui.py - Ventana (Tkinter) para registrar horas en OpenProject.
+registrar_gui.py - Ventana principal (Tkinter) de FichaCSIRC.
 
-Reutiliza toda la logica de rellenar_horas.py (conexion, API, jornada, etc.).
+Estructura del proyecto grafico:
+  - registrar_gui.py : ventana principal (semana, formulario, alta/baja/copias).
+  - dialogos.py      : ventanas secundarias (buscar, exportar, editar, resumen,
+                       plantillas).
+  - fichaui.py       : utilidades de UI (tooltips, ejecucion en hilo, recursos).
+  - recordatorio.py  : aviso de fichaje (comprobacion suelta + tarea programada).
+  - rellenar_horas.py: motor (API, jornada, config).
+
 Ejecuta:  pythonw registrar_gui.py   (o doble clic en el lanzador)
+          registrar_gui.py --recordatorio  -> solo lanza el aviso de fichaje
 """
 
 import os
 import sys
-import csv
-import threading
 import webbrowser
 import datetime as dt
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, simpledialog
+from tkinter import ttk, messagebox, simpledialog
 
 # --- Importar el motor (rellenar_horas.py) sin ejecutar su menu ---
 try:
@@ -31,31 +37,9 @@ except Exception as e:
     messagebox.showerror("Error", f"No se pudo cargar la configuracion:\n{e}")
     sys.exit(1)
 
-
-class Tooltip:
-    """Globo de ayuda simple al pasar el raton por un widget."""
-
-    def __init__(self, widget, texto):
-        self.widget, self.texto, self.tip = widget, texto, None
-        widget.bind("<Enter>", self._mostrar)
-        widget.bind("<Leave>", self._ocultar)
-
-    def _mostrar(self, _e):
-        if self.tip:
-            return
-        x = self.widget.winfo_rootx() + 10
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
-        self.tip = tk.Toplevel(self.widget)
-        self.tip.wm_overrideredirect(True)
-        self.tip.wm_geometry(f"+{x}+{y}")
-        tk.Label(self.tip, text=self.texto, bg="#ffffe0", relief="solid",
-                 borderwidth=1, font=("Segoe UI", 9),
-                 justify="left").pack(ipadx=5, ipady=2)
-
-    def _ocultar(self, _e):
-        if self.tip:
-            self.tip.destroy()
-            self.tip = None
+import dialogos
+import recordatorio
+from fichaui import Tooltip, en_hilo, recurso, carpeta_app
 
 
 class App:
@@ -71,10 +55,7 @@ class App:
             except Exception:
                 pass
         root.protocol("WM_DELETE_WINDOW", self._cerrar)
-        if getattr(sys, "frozen", False):
-            self._carpeta = os.path.dirname(sys.executable)
-        else:
-            self._carpeta = os.path.dirname(os.path.abspath(__file__))
+        self._carpeta = carpeta_app()
         self._logo_img = None
         ico = self._recurso("fichacsirc.ico")
         if os.path.exists(ico):
@@ -84,7 +65,7 @@ class App:
                 pass
 
         self.lunes = self._lunes_actual()
-        self.dia_vars = []      # (BooleanVar, date, Label)
+        self.dia_vars = []      # (BooleanVar, date, Frame-tarjeta)
         self.tareas = {}        # texto mostrado -> id
         self._cache_dia = {}    # fecha iso -> lista de apuntes (None si fallo la lectura)
         self._horas_auto = ""   # ultimo valor autosugerido en el campo Horas
@@ -99,10 +80,14 @@ class App:
         self.refrescar()
         self._comprobar_actualizacion()
 
-    def _comprobar_actualizacion(self):
-        """Avisa (una vez, sin molestar) si hay una version nueva en GitHub."""
+    def _comprobar_actualizacion(self, forzar=False):
+        """Avisa (una vez al dia, sin molestar) si hay una version nueva."""
         def al_terminar(res, err):
             if err or not res:
+                if forzar and not err:
+                    messagebox.showinfo(
+                        "Actualizaciones",
+                        f"Ya tienes la última versión (v{core.VERSION}).")
                 return
             version, url = res
             if messagebox.askyesno(
@@ -115,7 +100,7 @@ class App:
                 except Exception:
                     pass
 
-        self._en_hilo(core.buscar_actualizacion, al_terminar)
+        en_hilo(self.root, lambda: core.buscar_actualizacion(forzar=forzar), al_terminar)
 
     # ---------- utilidades ----------
     def _lunes_actual(self):
@@ -126,9 +111,7 @@ class App:
         return [self.lunes + dt.timedelta(days=i) for i in range(5)]
 
     def _recurso(self, nombre):
-        """Ruta de un recurso (logo, icono), compatible con PyInstaller onefile."""
-        base = getattr(sys, "_MEIPASS", "") or self._carpeta
-        return os.path.join(base, nombre)
+        return recurso(self._carpeta, nombre)
 
     def _fecha_build(self):
         """Fecha de compilacion (del .exe) o de ultima modificacion (del script)."""
@@ -149,21 +132,12 @@ class App:
         self.root.destroy()
 
     def _en_hilo(self, trabajo, al_terminar):
-        """Ejecuta trabajo() en un hilo (sin tocar la UI) y llama a
-        al_terminar(resultado, error) en el hilo de la interfaz."""
-        def _run():
-            try:
-                res, err = trabajo(), None
-            except Exception as e:
-                res, err = None, e
-            try:
-                self.root.after(0, al_terminar, res, err)
-            except Exception:
-                pass  # la ventana se cerro mientras trabajaba
-        threading.Thread(target=_run, daemon=True).start()
+        en_hilo(self.root, trabajo, al_terminar)
 
     # ---------- construccion UI ----------
     def _construir(self):
+        self._menu()
+
         # Cabecera: logo UGR (si existe) + nombre de la app
         header = ttk.Frame(self.root, padding=(10, 8))
         header.pack(fill="x")
@@ -198,7 +172,7 @@ class App:
         b_mes.pack(side="right", padx=(8, 0))
         Tooltip(b_mes, "Horas del mes: registradas, objetivo y días incompletos")
 
-        # Dias (checkboxes con estado)
+        # Dias (tarjetas con estado)
         self.var_semana = tk.BooleanVar(value=False)
         diaf = ttk.LabelFrame(self.root, text="Días (clic para marcar uno o varios)", padding=8)
         diaf.pack(fill="x", padx=8)
@@ -296,6 +270,78 @@ class App:
             Tooltip(pie, "Abrir el repositorio en GitHub")
         self.status = ttk.Label(barra, text="", relief="sunken", anchor="w", padding=4)
         self.status.pack(side="left", fill="x", expand=True)
+
+    def _menu(self):
+        barra = tk.Menu(self.root)
+        m_arch = tk.Menu(barra, tearoff=0)
+        m_arch.add_command(label="Exportar a CSV...", command=self._exportar)
+        m_arch.add_command(label="Resumen del mes", command=self._resumen_mes)
+        m_arch.add_separator()
+        m_arch.add_command(label="Salir", command=self._cerrar)
+        barra.add_cascade(label="Archivo", menu=m_arch)
+
+        m_herr = tk.Menu(barra, tearoff=0)
+        m_herr.add_command(label="Plantillas...", command=self._plantillas)
+        m_herr.add_command(label="Aviso diario de fichaje...",
+                           command=self._config_recordatorio)
+        barra.add_cascade(label="Herramientas", menu=m_herr)
+
+        m_ayuda = tk.Menu(barra, tearoff=0)
+        m_ayuda.add_command(label="Comprobar actualizaciones",
+                            command=lambda: self._comprobar_actualizacion(forzar=True))
+        if core.GITHUB_REPO:
+            m_ayuda.add_command(
+                label="Ver en GitHub",
+                command=lambda: webbrowser.open(f"https://github.com/{core.GITHUB_REPO}"))
+        m_ayuda.add_separator()
+        m_ayuda.add_command(label="Acerca de FichaCSIRC", command=self._acerca_de)
+        barra.add_cascade(label="Ayuda", menu=m_ayuda)
+        self.root.config(menu=barra)
+
+    def _acerca_de(self):
+        messagebox.showinfo(
+            "Acerca de FichaCSIRC",
+            f"FichaCSIRC v{core.VERSION}\n"
+            f"Compilación: {self._fecha_build()}\n\n"
+            "Registro de horas en OpenProject (ProyectosTic, UGR).\n"
+            + (f"github.com/{core.GITHUB_REPO}" if core.GITHUB_REPO else ""))
+
+    def _config_recordatorio(self):
+        """Activa/desactiva el aviso diario de fichaje (tarea programada)."""
+        activo = recordatorio.recordatorio_activo()
+        if activo:
+            if messagebox.askyesno(
+                    "Aviso diario",
+                    "El aviso diario de fichaje está ACTIVO (lunes a viernes).\n\n"
+                    "¿Quieres desactivarlo?"):
+                try:
+                    recordatorio.desactivar_recordatorio()
+                    messagebox.showinfo("Aviso diario", "Aviso desactivado.")
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo desactivar:\n{e}")
+            return
+        hora = simpledialog.askstring(
+            "Aviso diario de fichaje",
+            "FichaCSIRC puede avisarte cada día laborable si te faltan horas\n"
+            "por fichar (solo aparece si hay algo pendiente).\n\n"
+            "¿A qué hora quieres el aviso? (HH:MM, 24h)",
+            initialvalue="16:00", parent=self.root)
+        if not hora:
+            return
+        hora = hora.strip()
+        try:
+            dt.datetime.strptime(hora, "%H:%M")
+        except ValueError:
+            messagebox.showwarning("Hora", "Escribe la hora como HH:MM (ej. 16:00).")
+            return
+        try:
+            recordatorio.activar_recordatorio(hora)
+            messagebox.showinfo(
+                "Aviso diario",
+                f"Listo. Te avisaré los días laborables a las {hora}\n"
+                "si te faltan horas por fichar.")
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo activar el aviso:\n{e}")
 
     # ---------- carga de datos auxiliares ----------
     def _cargar_actividades(self):
@@ -562,7 +608,23 @@ class App:
         else:
             self._horas_auto = ""
 
-    # ---------- acciones ----------
+    # ---------- dialogos (en dialogos.py) ----------
+    def _buscar_tarea(self):
+        dialogos.abrir_buscar_tarea(self)
+
+    def _exportar(self):
+        dialogos.abrir_exportar(self)
+
+    def _editar(self, _e=None):
+        dialogos.abrir_editar(self)
+
+    def _resumen_mes(self):
+        dialogos.abrir_resumen_mes(self)
+
+    def _plantillas(self):
+        dialogos.abrir_plantillas(self)
+
+    # ---------- acciones del dia/semana ----------
     def _menu_dia(self, evento, d):
         """Menu contextual de una tarjeta: marcar/quitar dia no laborable."""
         fecha = d.isoformat()
@@ -580,81 +642,6 @@ class App:
                                               self.refrescar()))
             menu.add_cascade(label="Marcar como no laborable", menu=sub)
         menu.tk_popup(evento.x_root, evento.y_root)
-
-    def _editar(self, _e=None):
-        """Doble clic en un apunte: editar horas, actividad y comentario."""
-        sel = self.tree.selection()
-        if not sel:
-            return
-        tags = self.tree.item(sel[0], "tags")
-        if len(tags) < 2:
-            return
-        entry_id, fecha = tags[0], tags[1]
-        apunte = None
-        for a in (self._cache_dia.get(fecha) or []):
-            if str(a["id"]) == str(entry_id):
-                apunte = a
-                break
-        if not apunte:
-            return
-        top = tk.Toplevel(self.root)
-        top.title("Editar apunte")
-        top.transient(self.root)
-        top.grab_set()
-        frm = ttk.Frame(top, padding=12)
-        frm.pack(fill="both", expand=True)
-        ttk.Label(frm, text=apunte["wp_titulo"],
-                  font=("Segoe UI", 10, "bold")).grid(row=0, column=0,
-                                                      columnspan=2, sticky="w")
-        ttk.Label(frm, text=f"Fecha: {fecha}").grid(row=1, column=0, columnspan=2,
-                                                    sticky="w", pady=(0, 8))
-        ttk.Label(frm, text="Horas:").grid(row=2, column=0, sticky="w", pady=3)
-        e_h = ttk.Entry(frm, width=8)
-        e_h.insert(0, f"{apunte['horas']:g}")
-        e_h.grid(row=2, column=1, sticky="w", padx=6)
-        ttk.Label(frm, text="Actividad:").grid(row=3, column=0, sticky="w", pady=3)
-        c_a = ttk.Combobox(frm, state="readonly", width=24,
-                           values=list(self.cbo_act["values"]))
-        if apunte["actividad"]:
-            c_a.set(apunte["actividad"])
-        c_a.grid(row=3, column=1, sticky="w", padx=6)
-        ttk.Label(frm, text="Comentario:").grid(row=4, column=0, sticky="w", pady=3)
-        e_c = ttk.Entry(frm, width=42)
-        e_c.insert(0, apunte["comentario"])
-        e_c.grid(row=4, column=1, sticky="we", padx=6)
-        frm.columnconfigure(1, weight=1)
-
-        def guardar():
-            try:
-                horas = float(e_h.get().strip().replace(",", "."))
-                if not 0 < horas <= 24:
-                    raise ValueError
-            except ValueError:
-                messagebox.showwarning("Horas", "Escribe un número de horas válido.",
-                                       parent=top)
-                return
-            actividad = c_a.get() or None
-            comentario = e_c.get().strip()
-            top.destroy()
-            self.status.config(text="Guardando cambios...")
-
-            def al_terminar(res, err):
-                if err:
-                    self.refrescar()
-                    messagebox.showerror("Error", f"No se pudo actualizar:\n{err}")
-                    return
-                self._msg_pendiente = "Apunte actualizado."
-                self.refrescar()
-
-            self._en_hilo(lambda: core.actualizar_entrada(
-                entry_id, horas, comentario, actividad, apunte["wp_id"]), al_terminar)
-
-        e_h.bind("<Return>", lambda _e: guardar())
-        e_c.bind("<Return>", lambda _e: guardar())
-        btns = ttk.Frame(frm)
-        btns.grid(row=5, column=0, columnspan=2, sticky="e", pady=(10, 0))
-        ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
-        ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
 
     def _deshacer_borrado(self):
         datos = self._ultimo_borrado
@@ -675,189 +662,6 @@ class App:
         self._en_hilo(lambda: core.crear_entrada(
             datos["fecha"], datos["wp_id"], datos["horas"],
             datos["comentario"], datos["actividad"]), al_terminar)
-
-    def _resumen_mes(self):
-        import calendar
-        ref = self.lunes + dt.timedelta(days=3)  # jueves: mes dominante de la semana
-        anio, mes = ref.year, ref.month
-        top = tk.Toplevel(self.root)
-        top.title(f"Resumen de {ref.strftime('%m/%Y')}")
-        top.transient(self.root)
-        top.grab_set()
-        frm = ttk.Frame(top, padding=14)
-        frm.pack(fill="both", expand=True)
-        lbl = ttk.Label(frm, text="Consultando el mes...", justify="left",
-                        font=("Consolas", 10))
-        lbl.pack(anchor="w")
-        ttk.Button(frm, text="Cerrar",
-                   command=top.destroy).pack(anchor="e", pady=(12, 0))
-
-        ultimo = calendar.monthrange(anio, mes)[1]
-        dias = [dt.date(anio, mes, n) for n in range(1, ultimo + 1)]
-        hoy = dt.date.today()
-
-        def trabajo():
-            total = obj_hasta_hoy = obj_mes = 0.0
-            incompletos = []
-            for d in dias:
-                if d.weekday() >= 5:
-                    continue
-                obj = core.objetivo_de(d)
-                obj_mes += obj
-                reg = sum(a["horas"] for a in core.entradas_dia(d.isoformat()))
-                total += reg
-                if d <= hoy:
-                    obj_hasta_hoy += obj
-                    if obj and reg < obj - 0.001:
-                        incompletos.append((d, reg, obj))
-            return total, obj_hasta_hoy, obj_mes, incompletos
-
-        def al_terminar(res, err):
-            if not top.winfo_exists():
-                return
-            if err:
-                lbl.config(text=f"No se pudo consultar el mes:\n{err}")
-                return
-            total, obj_hoy, obj_mes, incompletos = res
-            if total < obj_hoy - 0.001:
-                estado = f"   (te faltan {core._fmt(obj_hoy - total)})"
-            else:
-                estado = "   (al día ✔)"
-            lineas = [
-                f"Registrado en el mes: {core._fmt(total)}",
-                f"Objetivo hasta hoy:   {core._fmt(obj_hoy)}{estado}",
-                f"Objetivo del mes:     {core._fmt(obj_mes)}",
-            ]
-            if incompletos:
-                lineas += ["", "Días incompletos:"]
-                for d, reg, obj in incompletos:
-                    lineas.append(f"  {core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}:"
-                                  f" {core._fmt(reg)} / {obj}h")
-            lbl.config(text="\n".join(lineas))
-
-        self._en_hilo(trabajo, al_terminar)
-
-    def _plantillas(self):
-        top = tk.Toplevel(self.root)
-        top.title("Plantillas de apuntes")
-        top.transient(self.root)
-        top.grab_set()
-        frm = ttk.Frame(top, padding=10)
-        frm.pack(fill="both", expand=True)
-        ttk.Label(frm, text="Una plantilla guarda los apuntes de un día típico\n"
-                            "para aplicarlos de golpe a los días marcados.",
-                  foreground="#666").pack(anchor="w")
-        lb = tk.Listbox(frm, height=8, exportselection=False)
-        lb.pack(fill="both", expand=True, pady=6)
-
-        def repintar():
-            lb.delete(0, "end")
-            for p in core.PLANTILLAS:
-                n = len(p.get("apuntes", []))
-                tot = sum(a.get("horas", 0) for a in p.get("apuntes", []))
-                lb.insert("end", f"{p['nombre']}  ({n} apuntes, {core._fmt(tot)})")
-        repintar()
-
-        def guardar_actual():
-            marcados = self._dias_marcados()
-            if len(marcados) != 1:
-                messagebox.showwarning(
-                    "Plantilla", "Marca exactamente un día (el que quieres guardar).",
-                    parent=top)
-                return
-            d = marcados[0]
-            apuntes = self._cache_dia.get(d.isoformat()) or []
-            if not apuntes:
-                messagebox.showinfo("Plantilla", "Ese día no tiene apuntes.", parent=top)
-                return
-            nombre = simpledialog.askstring("Plantilla", "Nombre de la plantilla:",
-                                            parent=top)
-            if not nombre or not nombre.strip():
-                return
-            core.guardar_plantilla(nombre.strip(), [
-                {"id": a["wp_id"], "nombre": a["wp_titulo"], "horas": a["horas"],
-                 "comentario": a["comentario"], "actividad": a["actividad"]}
-                for a in apuntes])
-            repintar()
-
-        def aplicar():
-            sel = lb.curselection()
-            if not sel:
-                messagebox.showinfo("Plantilla", "Elige una plantilla de la lista.",
-                                    parent=top)
-                return
-            plantilla = core.PLANTILLAS[sel[0]]
-            dias = self._dias_marcados()
-            if not dias:
-                messagebox.showwarning("Plantilla", "Marca al menos un día de destino.",
-                                       parent=top)
-                return
-            if not messagebox.askyesno(
-                    "Plantilla",
-                    f"¿Aplicar '{plantilla['nombre']}' "
-                    f"({len(plantilla['apuntes'])} apuntes) a {len(dias)} día(s)?\n"
-                    "(Se saltan las tareas que ya tengan apunte ese día.)",
-                    parent=top):
-                return
-            top.destroy()
-            cache = dict(self._cache_dia)
-            self.status.config(text="Aplicando plantilla...")
-
-            def trabajo():
-                creados = saltados = errores = 0
-                ultimo = ""
-                for d in dias:
-                    existentes = cache.get(d.isoformat()) or []
-                    for a in plantilla["apuntes"]:
-                        if any(str(e.get("wp_id")) == str(a["id"])
-                               for e in existentes):
-                            saltados += 1
-                            continue
-                        try:
-                            core.crear_entrada(d.isoformat(), a["id"], a["horas"],
-                                               a.get("comentario", ""),
-                                               a.get("actividad"))
-                            creados += 1
-                        except Exception as ex:
-                            errores += 1
-                            ultimo = str(ex)
-                return creados, saltados, errores, ultimo
-
-            def al_terminar(res, err):
-                if err:
-                    self.refrescar()
-                    messagebox.showerror("Error", f"No se pudo aplicar:\n{err}")
-                    return
-                creados, saltados, errores, ultimo = res
-                msg = f"Plantilla aplicada: {creados} apuntes."
-                if saltados:
-                    msg += f" Saltados {saltados} (ya existían)."
-                if errores:
-                    messagebox.showwarning(
-                        "Con errores", f"{msg}\nErrores: {errores}. Último: {ultimo}")
-                self._msg_pendiente = msg
-                self.refrescar()
-
-            self._en_hilo(trabajo, al_terminar)
-
-        def borrar():
-            sel = lb.curselection()
-            if not sel:
-                return
-            nombre = core.PLANTILLAS[sel[0]]["nombre"]
-            if messagebox.askyesno("Plantilla", f"¿Eliminar la plantilla '{nombre}'?",
-                                   parent=top):
-                core.eliminar_plantilla(nombre)
-                repintar()
-
-        btns = ttk.Frame(frm)
-        btns.pack(fill="x")
-        ttk.Button(btns, text="Aplicar a días marcados",
-                   command=aplicar).pack(side="left")
-        ttk.Button(btns, text="Guardar día marcado como plantilla",
-                   command=guardar_actual).pack(side="left", padx=6)
-        ttk.Button(btns, text="Eliminar", command=borrar).pack(side="left")
-        ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
 
     def _copiar_semana_anterior(self):
         """Copia los apuntes de la semana pasada a la semana visible, dia a dia."""
@@ -1026,248 +830,6 @@ class App:
 
         self._en_hilo(buscar, encontrado)
 
-    def _buscar_tarea(self):
-        top = tk.Toplevel(self.root)
-        top.title("Buscar tarea")
-        top.geometry("580x480")
-        top.transient(self.root)
-        top.grab_set()
-        frm = ttk.Frame(top, padding=10)
-        frm.pack(fill="both", expand=True)
-
-        ttk.Label(frm, text="Proyecto:").grid(row=0, column=0, sticky="w")
-        cbo = ttk.Combobox(frm, state="readonly", width=52)
-        cbo.grid(row=0, column=1, sticky="we", padx=4, pady=3)
-        ttk.Label(frm, text="Filtro:").grid(row=1, column=0, sticky="w")
-        ent = ttk.Entry(frm)
-        ent.grid(row=1, column=1, sticky="we", padx=4, pady=3)
-        lb = tk.Listbox(frm, height=16, selectmode="extended", exportselection=False)
-        lb.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=6)
-        sb = ttk.Scrollbar(frm, orient="vertical", command=lb.yview)
-        sb.grid(row=2, column=2, sticky="ns")
-        lb.configure(yscrollcommand=sb.set)
-        estado = ttk.Label(frm, text="Cargando proyectos...")
-        estado.grid(row=3, column=0, columnspan=2, sticky="w")
-        var_fav = tk.BooleanVar(value=False)
-        ttk.Checkbutton(frm, text="Añadir también a favoritas (se guarda en la configuración)",
-                        variable=var_fav).grid(row=4, column=0, columnspan=2,
-                                               sticky="w", pady=(4, 0))
-        frm.rowconfigure(2, weight=1)
-        frm.columnconfigure(1, weight=1)
-
-        estado_data = {"tareas": [], "filtradas": []}
-        proyectos = []
-        carga_seq = [0]
-
-        def proyectos_cargados(res, err):
-            if not top.winfo_exists():
-                return
-            if err:
-                top.destroy()
-                messagebox.showerror("Sin conexión",
-                                     f"No pude cargar los proyectos de ProyectosTic:\n{err}")
-                return
-            if not res:
-                top.destroy()
-                messagebox.showinfo("Buscar", "No apareces asignado a ningún proyecto.")
-                return
-            proyectos[:] = res
-            cbo["values"] = [f"{p['id']} - {p['nombre']}" for p in proyectos]
-            estado.config(text=f"{len(proyectos)} proyectos. Elige uno para ver sus tareas.")
-
-        self._en_hilo(core.proyectos, proyectos_cargados)
-
-        def pintar(*_):
-            f = ent.get().strip().lower()
-            lb.delete(0, "end")
-            estado_data["filtradas"] = [
-                t for t in estado_data["tareas"]
-                if f in t["nombre"].lower() or f in str(t["id"])]
-            for t in estado_data["filtradas"]:
-                lb.insert("end", f"{t['id']} - {t['nombre']}")
-
-        def cargar(*_):
-            idx = cbo.current()
-            if idx < 0:
-                return
-            estado.config(text="Cargando tareas...")
-            pid = proyectos[idx]["id"]
-            carga_seq[0] += 1
-            seq = carga_seq[0]
-
-            def tareas_cargadas(res, err):
-                if not top.winfo_exists() or seq != carga_seq[0]:
-                    return  # dialogo cerrado o ya se pidio otro proyecto
-                if err:
-                    estado.config(text="")
-                    if "403" in str(err):
-                        messagebox.showinfo(
-                            "Sin permiso",
-                            "No tienes permiso para ver las tareas de este proyecto.\n"
-                            "Elige otro proyecto.", parent=top)
-                    else:
-                        messagebox.showerror(
-                            "Error", f"No pude cargar las tareas:\n{err}", parent=top)
-                    return
-                estado_data["tareas"] = res
-                pintar()
-                estado.config(text=f"{len(res)} tareas. "
-                                   "Filtra y elige (Ctrl o Mayús: varias).")
-
-            self._en_hilo(lambda: core.tareas_proyecto(pid), tareas_cargadas)
-
-        def elegir(*_):
-            sels = lb.curselection()
-            if not sels:
-                return
-            nuevas = [estado_data["filtradas"][i] for i in sels]
-            for t in reversed(nuevas):
-                if var_fav.get():
-                    core.anadir_favorito(t)
-                elif all(str(t["id"]) != str(e["id"]) for e in self._extras):
-                    self._extras.insert(0, t)
-            self._poblar_tareas()
-            t0 = nuevas[0]
-            self.cbo_tarea.set(f"{t0['id']} - {t0['nombre']}")
-            if var_fav.get():
-                self.status.config(
-                    text=f"{len(nuevas)} tarea(s) guardada(s) como favoritas.")
-            elif len(nuevas) > 1:
-                self.status.config(
-                    text=f"{len(nuevas)} tareas añadidas al desplegable de tareas.")
-            top.destroy()
-
-        cbo.bind("<<ComboboxSelected>>", cargar)
-        ent.bind("<KeyRelease>", pintar)
-        lb.bind("<Double-1>", elegir)
-        lb.bind("<Return>", elegir)
-        btns = ttk.Frame(frm)
-        btns.grid(row=5, column=0, columnspan=2, sticky="e", pady=(6, 0))
-        ttk.Button(btns, text="Elegir", command=elegir).pack(side="right", padx=4)
-        ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
-
-    def _exportar(self):
-        hoy = dt.date.today()
-        top = tk.Toplevel(self.root)
-        top.title("Exportar a CSV")
-        top.transient(self.root)
-        top.grab_set()
-        frm = ttk.Frame(top, padding=12)
-        frm.pack(fill="both", expand=True)
-        ttk.Label(frm, text="Desde (DD/MM/AAAA):").grid(row=0, column=0, sticky="w", pady=3)
-        e_desde = ttk.Entry(frm, width=14)
-        e_desde.insert(0, hoy.replace(day=1).strftime("%d/%m/%Y"))
-        e_desde.grid(row=0, column=1, sticky="w", padx=6)
-        ttk.Label(frm, text="Hasta (DD/MM/AAAA):").grid(row=1, column=0, sticky="w", pady=3)
-        e_hasta = ttk.Entry(frm, width=14)
-        e_hasta.insert(0, hoy.strftime("%d/%m/%Y"))
-        e_hasta.grid(row=1, column=1, sticky="w", padx=6)
-        lbl = ttk.Label(frm, text="")
-        lbl.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
-
-        vivo = {"v": True}
-
-        def cerrar():
-            vivo["v"] = False
-            top.destroy()
-
-        top.protocol("WM_DELETE_WINDOW", cerrar)
-
-        def parsear(txt):
-            for fmt in ("%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
-                try:
-                    return dt.datetime.strptime(txt.strip(), fmt).date()
-                except ValueError:
-                    continue
-            return None
-
-        def progreso(texto):
-            def _set():
-                if top.winfo_exists():
-                    lbl.config(text=texto)
-            try:
-                self.root.after(0, _set)
-            except Exception:
-                pass
-
-        def exportar():
-            desde, hasta = parsear(e_desde.get()), parsear(e_hasta.get())
-            if not desde or not hasta:
-                messagebox.showwarning("Fechas",
-                                       "Escribe las fechas como DD/MM/AAAA.", parent=top)
-                return
-            if hasta < desde:
-                desde, hasta = hasta, desde
-            ruta = filedialog.asksaveasfilename(
-                parent=top, defaultextension=".csv",
-                filetypes=[("CSV (Excel)", "*.csv")],
-                initialfile=f"horas_{desde.isoformat()}_a_{hasta.isoformat()}.csv")
-            if not ruta:
-                return
-            btn_exp.config(state="disabled")
-
-            def trabajo():
-                filas, total = [], 0.0
-                d = desde
-                while d <= hasta:
-                    if not vivo["v"]:
-                        return None  # dialogo cerrado: cancelar
-                    progreso(f"Consultando {d.strftime('%d/%m/%Y')}...")
-                    try:
-                        for a in core.entradas_dia(d.isoformat()):
-                            filas.append([d.isoformat(),
-                                          core._fmt(a["horas"]).rstrip("h"),
-                                          a["wp_titulo"], a["actividad"], a["comentario"]])
-                            total += a["horas"]
-                    except Exception as e:
-                        raise RuntimeError(
-                            f"No pude leer el {d.strftime('%d/%m/%Y')}:\n{e}")
-                    d += dt.timedelta(days=1)
-                return filas, total
-
-            def al_terminar(res, err):
-                if not vivo["v"] or not top.winfo_exists():
-                    return
-                btn_exp.config(state="normal")
-                if err:
-                    lbl.config(text="")
-                    messagebox.showerror("Error", str(err), parent=top)
-                    return
-                filas, total = res
-                if not filas:
-                    lbl.config(text="")
-                    messagebox.showinfo("Exportar", "No hay apuntes en ese rango.", parent=top)
-                    return
-                try:
-                    with open(ruta, "w", encoding="utf-8-sig", newline="") as fh:
-                        w = csv.writer(fh, delimiter=";")
-                        w.writerow(["Fecha", "Horas", "Tarea", "Actividad", "Comentario"])
-                        w.writerows(filas)
-                        w.writerow([])
-                        w.writerow(["", f"{total:g}", "TOTAL"])
-                except Exception as e:
-                    messagebox.showerror("Error",
-                                         f"No se pudo escribir el CSV:\n{e}", parent=top)
-                    return
-                cerrar()
-                self.status.config(text=f"Exportados {len(filas)} apuntes ({total:g}h) a {ruta}")
-                if messagebox.askyesno(
-                        "Exportado",
-                        f"{len(filas)} apuntes ({total:g}h) exportados a:\n{ruta}\n\n"
-                        "¿Abrir el archivo ahora?"):
-                    try:
-                        os.startfile(ruta)
-                    except Exception:
-                        pass
-
-            self._en_hilo(trabajo, al_terminar)
-
-        btns2 = ttk.Frame(frm)
-        btns2.grid(row=3, column=0, columnspan=2, sticky="e", pady=(10, 0))
-        btn_exp = ttk.Button(btns2, text="Exportar", command=exportar)
-        btn_exp.pack(side="right", padx=4)
-        ttk.Button(btns2, text="Cancelar", command=cerrar).pack(side="right")
-
     def _anadir(self):
         dias = self._dias_marcados()
         if not dias:
@@ -1407,6 +969,10 @@ class App:
 
 
 def main():
+    # Modo aviso: lo lanza la tarea programada de Windows (o --recordatorio a mano)
+    if "--recordatorio" in sys.argv[1:]:
+        recordatorio.main()
+        return
     root = tk.Tk()
     try:
         ttk.Style().theme_use("vista")

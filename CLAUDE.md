@@ -7,10 +7,15 @@ definición completa y el historial de decisiones.
 ## Estructura
 - `rellenar_horas.py` — motor (API + lógica) y app de consola.
 - `configurar.py` — utilidades de API compartidas + configurador de consola.
-- `registrar_gui.py` — app gráfica de registro (importa `rellenar_horas`).
+- `registrar_gui.py` — ventana principal de registro (importa `rellenar_horas`).
+- `dialogos.py` — ventanas secundarias (buscar, exportar, editar, resumen, plantillas);
+  cada función recibe la `App` y opera sobre ella.
+- `fichaui.py` — utilidades de UI sin lógica de negocio (`Tooltip`, `en_hilo`, recursos).
+- `recordatorio.py` — aviso de fichaje: comprobación suelta + alta/baja de la tarea
+  programada de Windows (`schtasks`). La app lo lanza con `--recordatorio`.
 - `configurar_gui.py` — asistente gráfico (wizard); importa `configurar`.
 - Lanzadores `.bat` (detectan Python, evitan el alias de la Microsoft Store).
-- `build_exe.bat` — empaqueta con PyInstaller.
+- `build_exe.bat` — empaqueta con PyInstaller (`--onefile`); CI en `.github/workflows`.
 
 ## Reglas / cuidado
 - **Nunca** subir `config.json` (contiene la API key). Usar `config.example.json`.
@@ -28,12 +33,17 @@ definición completa y el historial de decisiones.
 - v2.0 (jul 2026): editar apuntes (PATCH), deshacer borrado, resumen mensual,
   días no laborables y plantillas (persisten en config.json), paginación por offset
   (`_get_todos`), reintento de GETs, log en `fichacsirc.log`, build `--onefile`.
+- v2.1 (jul 2026): GitHub + release automática por etiqueta, aviso de actualización
+  (una vez/día), pie con versión/build/repo. Modularización de la GUI (`dialogos.py`,
+  `fichaui.py`). Recordatorio de fichaje (`recordatorio.py`, tarea programada).
+  Bug corregido: caché de actividades ahora POR wp_id (antes global). Lectura de
+  config tolerante a BOM (`utf-8-sig`).
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
-  (duraciones ISO, jornada/verano, parsing de la API, payloads) con la red mockeada.
-  Ejecutarlos tras tocar `rellenar_horas.py` o `configurar_gui.py`.
-- La GUI no tiene tests; verificarla a mano.
+  (duraciones ISO, jornada/verano, parsing/paginación de la API, payloads, pendientes)
+  con la red mockeada, más un smoke test de la GUI (`test_gui_smoke.py`, se salta sin
+  display). Ejecutarlos tras tocar el motor o la GUI.
 
 ## Pendiente / ideas
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.

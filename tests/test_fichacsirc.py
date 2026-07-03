@@ -97,7 +97,7 @@ class TestMsgConfigurar(unittest.TestCase):
 
 class TestApi(unittest.TestCase):
     def tearDown(self):
-        core._ACT_CACHE = None
+        core._ACT_CACHE = {}
 
     def test_get_401_no_mata_el_proceso(self):
         resp = mock.Mock(status_code=401)
@@ -137,11 +137,30 @@ class TestApi(unittest.TestCase):
         self.assertEqual(len(filtros), 1)  # solo la fecha
 
     def test_actividad_href(self):
-        core._ACT_CACHE = {"Soporte": "/href/s",
-                           "Gestión y planificación": "/href/g"}
+        core._ACT_CACHE = {"1": {"Soporte": "/href/s",
+                                 "Gestión y planificación": "/href/g"}}
         self.assertEqual(core._actividad_href(1, "soporte"), "/href/s")     # exacta
         self.assertEqual(core._actividad_href(1, "gestión"), "/href/g")    # parcial
         self.assertIsNone(core._actividad_href(1, "inexistente"))
+
+    def test_actividades_cache_por_wp(self):
+        """Cada work package cachea SUS actividades (no se comparten)."""
+        def _form(url, headers=None, json=None, timeout=None):
+            wp = json["_links"]["workPackage"]["href"].rsplit("/", 1)[-1]
+            nombre = "soporte" if wp == "10" else "correctivo"
+            r = mock.Mock(status_code=200)
+            r.json.return_value = {"_embedded": {"schema": {"activity": {"_embedded": {
+                "allowedValues": [{"name": nombre,
+                                   "_links": {"self": {"href": f"/act/{wp}"}}}]}}}}}
+            r.raise_for_status.return_value = None
+            return r
+        with mock.patch.object(core.requests, "post", side_effect=_form):
+            self.assertEqual(core._actividades_disponibles(10), {"soporte": "/act/10"})
+            self.assertEqual(core._actividades_disponibles(20), {"correctivo": "/act/20"})
+        # segunda llamada: cacheado, no vuelve a la red
+        with mock.patch.object(core.requests, "post") as m_post:
+            self.assertEqual(core._actividades_disponibles(10), {"soporte": "/act/10"})
+            m_post.assert_not_called()
 
     def test_crear_entrada_payload(self):
         resp = mock.Mock(status_code=201)
@@ -212,23 +231,36 @@ class TestApi(unittest.TestCase):
         self.assertEqual(m_get.call_count, 2)
         self.assertEqual(m_get.call_args_list[1].kwargs["params"]["offset"], 2)
 
+    def tearDown_update(self):
+        core.guardar_config_valor("ultimo_chequeo_update", "")
+
     def test_buscar_actualizacion(self):
+        self.addCleanup(self.tearDown_update)
         resp = mock.Mock(status_code=200)
         resp.json.return_value = {"tag_name": "v99.9",
                                   "html_url": "https://github.com/x/y/releases"}
         with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
              mock.patch.object(core.requests, "get", return_value=resp):
-            self.assertEqual(core.buscar_actualizacion(),
+            self.assertEqual(core.buscar_actualizacion(forzar=True),
                              ("99.9", "https://github.com/x/y/releases"))
         # misma version -> no hay actualizacion
         resp.json.return_value = {"tag_name": f"v{core.VERSION}"}
         with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
              mock.patch.object(core.requests, "get", return_value=resp):
-            self.assertIsNone(core.buscar_actualizacion())
+            self.assertIsNone(core.buscar_actualizacion(forzar=True))
         # sin repo configurado -> desactivada (y sin llamadas de red)
         with mock.patch.object(core, "GITHUB_REPO", ""), \
              mock.patch.object(core.requests, "get") as m_get:
             self.assertIsNone(core.buscar_actualizacion())
+            m_get.assert_not_called()
+
+    def test_buscar_actualizacion_una_vez_al_dia(self):
+        self.addCleanup(self.tearDown_update)
+        import datetime as _dt
+        core.guardar_config_valor("ultimo_chequeo_update", _dt.date.today().isoformat())
+        with mock.patch.object(core, "GITHUB_REPO", "x/y"), \
+             mock.patch.object(core.requests, "get") as m_get:
+            self.assertIsNone(core.buscar_actualizacion())  # ya chequeado hoy
             m_get.assert_not_called()
 
     def test_get_reintenta_error_de_red(self):
@@ -255,6 +287,43 @@ class TestNoLaborables(unittest.TestCase):
             core.quitar_no_laborable(f)
         self.assertFalse(core.es_no_laborable(f))
         self.assertEqual(core.objetivo_de(dt.date(2026, 7, 6)), 5)  # verano
+
+
+class TestPendientes(unittest.TestCase):
+    def test_dias_pendientes_semana(self):
+        # miercoles 8/07/2026: lun 6 completo, mar 7 a medias, mie 8 vacio
+        ref = dt.date(2026, 7, 8)
+        def entradas(fecha):
+            reg = {"2026-07-06": [{"horas": 5.0}], "2026-07-07": [{"horas": 2.0}]}
+            return reg.get(fecha, [])
+        with mock.patch.object(core, "entradas_dia", entradas), \
+             mock.patch.object(core, "NO_LABORABLES", {}):
+            pend = core.dias_pendientes_semana(referencia=ref)
+        # verano: objetivo 5h. Lunes completo (5/5), martes falta (2/5); mie/jue/vie futuros
+        self.assertEqual([(d.isoformat(), reg) for d, reg, _o in pend],
+                         [("2026-07-07", 2.0), ("2026-07-08", 0)])
+
+    def test_dias_pendientes_sin_conexion(self):
+        def boom(_f):
+            raise RuntimeError("sin red")
+        with mock.patch.object(core, "entradas_dia", boom):
+            self.assertIsNone(core.dias_pendientes_semana(referencia=dt.date(2026, 7, 8)))
+
+    def test_dias_pendientes_salta_no_laborables(self):
+        ref = dt.date(2026, 7, 8)
+        with mock.patch.object(core, "entradas_dia", lambda _f: []), \
+             mock.patch.object(core, "NO_LABORABLES",
+                               {"2026-07-06": "festivo", "2026-07-07": "festivo"}):
+            pend = core.dias_pendientes_semana(referencia=ref)
+        self.assertEqual([d.isoformat() for d, _r, _o in pend], ["2026-07-08"])
+
+    def test_mensaje_recordatorio(self):
+        import recordatorio
+        pend = [(dt.date(2026, 7, 7), 2.0, 5), (dt.date(2026, 7, 8), 0, 5)]
+        msg = recordatorio.mensaje_pendientes(pend)
+        self.assertIn("Martes 07/07", msg)
+        self.assertIn("Miércoles 08/07", msg)
+        self.assertEqual(recordatorio.mensaje_pendientes([]), "")
 
 
 class TestConfigPersistente(unittest.TestCase):
