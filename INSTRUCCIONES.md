@@ -13,8 +13,10 @@ eliges la tarea, pones las horas y listo.
    - **`FichaCSIRC-Configurar.exe`** — el asistente de configuración.
    - **`FichaCSIRC.exe`** — la aplicación de registro (la del día a día).
 
-   > 📁 Los encontrarás en: `\\RUTA\COMPARTIDA\PENDIENTE` *(o en la página de
-   > descargas que te hayan indicado)*.
+   > 📁 Descarga siempre la última versión desde:
+   > **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
+   > (los dos `.exe` están en el apartado *Assets*). La propia aplicación te
+   > avisará cuando haya una versión nueva.
 
 2. Si al ejecutarlos Windows muestra un aviso azul de **SmartScreen**
    ("Windows protegió su equipo"), pulsa **Más información → Ejecutar de todas

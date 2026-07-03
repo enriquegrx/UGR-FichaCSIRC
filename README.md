@@ -88,9 +88,11 @@ La variable de entorno `FICHACSIRC_CONFIG` permite usar otra ruta de config (la 
 - Los listados siguen la **paginación por offset** (antes, más de 200 proyectos/tareas se cortaban en silencio), y los GET reintentan una vez ante errores transitorios de red.
 - Editar un apunte usa `PATCH /api/v3/time_entries/{id}`.
 
-## 8. Empaquetado a .exe (opcional, para compañeros sin Python)
+## 8. Empaquetado y distribución
 
-Ejecuta `build_exe.bat` **en Windows**. Genera un único `.exe` por app (con metadatos de versión):
+**Automático (recomendado):** el repositorio tiene GitHub Actions configurado. Al subir una etiqueta de versión (`git tag v2.1 && git push origin v2.1`) se ejecutan los tests, se construyen los `.exe` y se publican en [Releases](https://github.com/enriquegrx/UGR-FichaCSIRC/releases). Los compañeros descargan siempre la última desde `.../releases/latest` (ver `INSTRUCCIONES.md`), y la app avisa al arrancar si hay versión nueva. Recuerda actualizar `VERSION` en `rellenar_horas.py` (y `version_info.txt`) antes de etiquetar.
+
+**Manual:** ejecuta `build_exe.bat` **en Windows**. Genera un único `.exe` por app (con metadatos de versión):
 
 - `dist\FichaCSIRC.exe` (app de registro)
 - `dist\FichaCSIRC-Configurar.exe` (asistente)

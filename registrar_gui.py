@@ -130,6 +130,14 @@ class App:
         base = getattr(sys, "_MEIPASS", "") or self._carpeta
         return os.path.join(base, nombre)
 
+    def _fecha_build(self):
+        """Fecha de compilacion (del .exe) o de ultima modificacion (del script)."""
+        ruta = sys.executable if getattr(sys, "frozen", False) else os.path.abspath(__file__)
+        try:
+            return dt.date.fromtimestamp(os.path.getmtime(ruta)).strftime("%d/%m/%Y")
+        except Exception:
+            return ""
+
     def _cerrar(self):
         """Guarda tamano de ventana y ultima actividad antes de salir."""
         try:
@@ -276,6 +284,16 @@ class App:
         self.btn_deshacer = ttk.Button(barra, text="Deshacer",
                                        command=self._deshacer_borrado)
         Tooltip(self.btn_deshacer, "Restaura el último apunte eliminado (Ctrl+Z)")
+        # Pie: version, fecha de build y repositorio
+        pie_txt = f"v{core.VERSION} · build {self._fecha_build()}"
+        pie = ttk.Label(barra, text=pie_txt, foreground="#888", padding=(6, 4))
+        pie.pack(side="right")
+        if core.GITHUB_REPO:
+            pie.configure(text=f"{pie_txt} · github.com/{core.GITHUB_REPO}",
+                          foreground="#0067c0", cursor="hand2")
+            pie.bind("<Button-1>", lambda _e: webbrowser.open(
+                f"https://github.com/{core.GITHUB_REPO}"))
+            Tooltip(pie, "Abrir el repositorio en GitHub")
         self.status = ttk.Label(barra, text="", relief="sunken", anchor="w", padding=4)
         self.status.pack(side="left", fill="x", expand=True)
 
