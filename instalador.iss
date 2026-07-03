@@ -33,6 +33,8 @@ UninstallDisplayIcon={app}\FichaCSIRC.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=no
+RestartApplications=no
 
 [Languages]
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
@@ -56,9 +58,20 @@ Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: deskt
 Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent
 
 [Code]
+procedure CerrarProceso(const Nombre: String);
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "' + Nombre + '" /T /F',
+       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 function InitializeSetup(): Boolean;
 begin
-  { Si lo lanza el actualizador, da tiempo a que FichaCSIRC se cierre. }
-  Sleep(2000);
+  { Si lo lanza el actualizador, cierra cualquier proceso que bloquee los .exe. }
+  Sleep(1500);
+  CerrarProceso('FichaCSIRC.exe');
+  CerrarProceso('FichaCSIRC-Configurar.exe');
+  Sleep(500);
   Result := True;
 end;
