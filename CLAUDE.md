@@ -71,6 +71,10 @@ definición completa y el historial de decisiones.
   "Copiar / Plantillas ▾" agrupa las copias; tooltip con el comentario completo
   en la tabla (`fichaui.TooltipFilas`); atajos Ctrl+←/→ y Alt+1..5 (Ayuda >
   Atajos); tests de acciones de GUI (`test_gui_acciones.py`, en_hilo síncrono).
+- v2.3.1 (jul 2026): Resumen del mes rediseñado (`dialogos.abrir_resumen_mes`):
+  navegación ← → entre meses, barra de progreso, cifras grandes, estado en
+  color y días incompletos en tabla con doble clic para ir a su semana.
+  Devuelve el Toplevel y expone `top._resumen` para los tests.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor

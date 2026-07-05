@@ -109,6 +109,24 @@ class TestGuiAcciones(unittest.TestCase):
         # 2h + 3h del lunes simulado deben aparecer sumadas en el titulo
         self.assertIn("5h /", self.app.lbl_semana.cget("text"))
 
+    def test_resumen_mes(self):
+        import dialogos
+        # Mes pasado fijo (marzo 2026, 22 laborables x 7h) y sin apuntes:
+        # el resultado no depende del dia en que corran los tests.
+        self.app.lunes = dt.date(2026, 3, 2)
+        entradas = mock.patch.object(core, "entradas_dia", lambda f: [])
+        sync = mock.patch.object(dialogos, "en_hilo", _en_hilo_sync)
+        with entradas, sync:
+            top = dialogos.abrir_resumen_mes(self.app)
+        try:
+            w = top._resumen
+            self.assertEqual(w["titulo"].cget("text"), "Marzo 2026")
+            self.assertEqual(w["reg"].cget("text"), "0h")
+            self.assertEqual(w["mes"].cget("text"), "154h")
+            self.assertIn("Te faltan 154h", w["estado"].cget("text"))
+        finally:
+            top.destroy()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

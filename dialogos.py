@@ -17,7 +17,11 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 
 import rellenar_horas as core
-from fichaui import en_hilo
+from fichaui import (COLOR_DANGER, COLOR_MUTED, COLOR_SUCCESS, COLOR_WARNING,
+                     en_hilo)
+
+MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+            "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
 def abrir_editar(app):
@@ -97,64 +101,162 @@ def abrir_editar(app):
 
 
 def abrir_resumen_mes(app):
+    """Resumen del mes: progreso, totales, estado y dias incompletos.
+    Con ← → se navega de mes en mes; doble clic en un dia incompleto
+    lleva a su semana. Devuelve el Toplevel (util para los tests)."""
     ref = app.lunes + dt.timedelta(days=3)  # jueves: mes dominante de la semana
-    anio, mes = ref.year, ref.month
+    estado = {"anio": ref.year, "mes": ref.month, "seq": 0}
     top = tk.Toplevel(app.root)
-    top.title(f"Resumen de {ref.strftime('%m/%Y')}")
+    top.title("Resumen del mes")
     top.transient(app.root)
     top.grab_set()
-    frm = ttk.Frame(top, padding=14)
+    top.resizable(False, False)
+    frm = ttk.Frame(top, padding=16)
     frm.pack(fill="both", expand=True)
-    lbl = ttk.Label(frm, text="Consultando el mes...", justify="left",
-                    font=("Consolas", 10))
-    lbl.pack(anchor="w")
-    ttk.Button(frm, text="Cerrar",
-               command=top.destroy).pack(anchor="e", pady=(12, 0))
 
-    ultimo = calendar.monthrange(anio, mes)[1]
-    dias = [dt.date(anio, mes, n) for n in range(1, ultimo + 1)]
-    hoy = dt.date.today()
+    # Cabecera: ← Mes Año →
+    head = ttk.Frame(frm)
+    head.pack(fill="x", pady=(0, 10))
+    b_ant = ttk.Button(head, text="←", width=3)
+    b_ant.pack(side="left")
+    b_sig = ttk.Button(head, text="→", width=3)
+    b_sig.pack(side="right")
+    lbl_mes = ttk.Label(head, text="", anchor="center",
+                        font=("TkDefaultFont", 13, "bold"))
+    lbl_mes.pack(side="left", expand=True, fill="x")
 
-    def trabajo():
-        total = obj_hasta_hoy = obj_mes = 0.0
-        incompletos = []
-        for d in dias:
-            if d.weekday() >= 5:
-                continue
-            obj = core.objetivo_de(d)
-            obj_mes += obj
-            reg = sum(a["horas"] for a in core.entradas_dia(d.isoformat()))
-            total += reg
-            if d <= hoy:
-                obj_hasta_hoy += obj
-                if obj and reg < obj - 0.001:
-                    incompletos.append((d, reg, obj))
-        return total, obj_hasta_hoy, obj_mes, incompletos
+    # Barra de progreso del mes (como las tarjetas de dia)
+    cv = tk.Canvas(frm, width=360, height=10, highlightthickness=0)
+    cv.pack(fill="x", pady=(0, 12))
+    barra = {"frac": 0.0, "color": COLOR_SUCCESS}
 
-    def al_terminar(res, err):
-        if not top.winfo_exists():
+    def dibujar(_e=None):
+        cv.delete("all")
+        ancho = max(cv.winfo_width(), 1)
+        cv.create_rectangle(0, 0, ancho, 10, fill="#e5e7eb", width=0)
+        if barra["frac"] > 0:
+            cv.create_rectangle(0, 0, int(ancho * barra["frac"]), 10,
+                                fill=barra["color"], width=0)
+    cv.bind("<Configure>", dibujar)
+
+    # Cifras: etiqueta discreta a la izquierda, valor grande a la derecha
+    datos = ttk.Frame(frm)
+    datos.pack(fill="x")
+    datos.columnconfigure(0, weight=1)
+
+    def fila(fila_n, texto):
+        ttk.Label(datos, text=texto,
+                  foreground=COLOR_MUTED).grid(row=fila_n, column=0,
+                                               sticky="w", pady=2)
+        v = ttk.Label(datos, text="…", font=("TkDefaultFont", 12, "bold"))
+        v.grid(row=fila_n, column=1, sticky="e", pady=2)
+        return v
+
+    v_reg = fila(0, "Registrado")
+    v_hoy = fila(1, "Objetivo hasta hoy")
+    v_mes = fila(2, "Objetivo del mes")
+
+    lbl_estado = ttk.Label(frm, text="", font=("TkDefaultFont", 11, "bold"))
+    lbl_estado.pack(anchor="w", pady=(10, 0))
+
+    lbl_inc = ttk.Label(frm, text="Días incompletos (doble clic para ir):",
+                        foreground=COLOR_MUTED)
+    tv = ttk.Treeview(frm, columns=("dia", "horas"), show="", height=5)
+    tv.column("dia", width=240)
+    tv.column("horas", width=120, anchor="e")
+
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", side="bottom", pady=(12, 0))
+    ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
+
+    def ir_a_dia(_e=None):
+        sel = tv.selection()
+        if not sel:
             return
-        if err:
-            lbl.config(text=f"No se pudo consultar el mes:\n{err}")
-            return
-        total, obj_hoy, obj_mes, incompletos = res
-        if total < obj_hoy - 0.001:
-            estado = f"   (te faltan {core._fmt(obj_hoy - total)})"
-        else:
-            estado = "   (al día ✔)"
-        lineas = [
-            f"Registrado en el mes: {core._fmt(total)}",
-            f"Objetivo hasta hoy:   {core._fmt(obj_hoy)}{estado}",
-            f"Objetivo del mes:     {core._fmt(obj_mes)}",
-        ]
-        if incompletos:
-            lineas += ["", "Días incompletos:"]
-            for d, reg, obj in incompletos:
-                lineas.append(f"  {core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}:"
-                              f" {core._fmt(reg)} / {obj}h")
-        lbl.config(text="\n".join(lineas))
+        d = dt.date.fromisoformat(sel[0])
+        app.lunes = d - dt.timedelta(days=d.weekday())
+        top.destroy()
+        app.refrescar()
+    tv.bind("<Double-1>", ir_a_dia)
+    tv.bind("<Return>", ir_a_dia)
 
-    en_hilo(app.root, trabajo, al_terminar)
+    def cargar():
+        anio, mes = estado["anio"], estado["mes"]
+        estado["seq"] += 1
+        seq = estado["seq"]
+        lbl_mes.config(text=f"{MESES_ES[mes - 1].capitalize()} {anio}")
+        lbl_estado.config(text="Consultando el mes...", foreground=COLOR_MUTED)
+        for v in (v_reg, v_hoy, v_mes):
+            v.config(text="…")
+        lbl_inc.pack_forget()
+        tv.pack_forget()
+        tv.delete(*tv.get_children())
+        ultimo = calendar.monthrange(anio, mes)[1]
+        dias = [dt.date(anio, mes, n) for n in range(1, ultimo + 1)]
+        hoy = dt.date.today()
+
+        def trabajo():
+            total = obj_hasta_hoy = obj_mes = 0.0
+            incompletos = []
+            for d in dias:
+                if d.weekday() >= 5:
+                    continue
+                obj = core.objetivo_de(d)
+                obj_mes += obj
+                reg = sum(a["horas"] for a in core.entradas_dia(d.isoformat()))
+                total += reg
+                if d <= hoy:
+                    obj_hasta_hoy += obj
+                    if obj and reg < obj - 0.001:
+                        incompletos.append((d, reg, obj))
+            return total, obj_hasta_hoy, obj_mes, incompletos
+
+        def al_terminar(res, err):
+            if not top.winfo_exists() or seq != estado["seq"]:
+                return
+            if err:
+                lbl_estado.config(text=f"No se pudo consultar el mes: {err}",
+                                  foreground=COLOR_DANGER)
+                return
+            total, obj_hoy, obj_mes, incompletos = res
+            v_reg.config(text=core._fmt(total))
+            v_hoy.config(text=core._fmt(obj_hoy))
+            v_mes.config(text=core._fmt(obj_mes))
+            al_dia = total >= obj_hoy - 0.001
+            if al_dia:
+                lbl_estado.config(text="Al día ✔", foreground=COLOR_SUCCESS)
+            else:
+                lbl_estado.config(
+                    text=f"Te faltan {core._fmt(obj_hoy - total)} para estar al día",
+                    foreground=COLOR_WARNING)
+            frac = (total / obj_mes) if obj_mes else 0.0
+            barra["frac"] = max(0.0, min(frac, 1.0))
+            barra["color"] = COLOR_SUCCESS if al_dia else COLOR_WARNING
+            dibujar()
+            if incompletos:
+                lbl_inc.pack(anchor="w", pady=(10, 2), before=btns)
+                tv.configure(height=min(len(incompletos), 8))
+                for d, reg, obj in incompletos:
+                    tv.insert("", "end", iid=d.isoformat(),
+                              values=(f"{core.DIAS_ES[d.weekday()]} "
+                                      f"{d.strftime('%d/%m')}",
+                                      f"{core._fmt(reg)} / {obj}h"))
+                tv.pack(fill="x", before=btns)
+
+        en_hilo(app.root, trabajo, al_terminar)
+
+    def cambiar(delta):
+        m = estado["mes"] + delta
+        estado["anio"] += (m - 1) // 12
+        estado["mes"] = (m - 1) % 12 + 1
+        cargar()
+
+    b_ant.configure(command=lambda: cambiar(-1))
+    b_sig.configure(command=lambda: cambiar(1))
+    top._resumen = {"reg": v_reg, "hoy": v_hoy, "mes": v_mes,
+                    "estado": lbl_estado, "titulo": lbl_mes}  # para tests
+    cargar()
+    return top
 
 
 def abrir_plantillas(app):
