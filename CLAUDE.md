@@ -43,6 +43,15 @@ definición completa y el historial de decisiones.
   `fichaui.py`). Recordatorio de fichaje (`recordatorio.py`, tarea programada).
   Bug corregido: caché de actividades ahora POR wp_id (antes global). Lectura de
   config tolerante a BOM (`utf-8-sig`).
+- v2.1.6 (jul 2026): arreglada la actualización que dejaba la versión antigua.
+  Causa: el aviso `--recordatorio` podía quedarse días en segundo plano (messagebox
+  invisible) bloqueando `FichaCSIRC.exe`. Ahora el aviso es una ventana topmost con
+  autocierre (10 min); el instalador cierra procesos con reintentos en
+  `InitializeSetup` Y `PrepareToInstall`, el desinstalador también los cierra y borra
+  la tarea programada, y la carpeta es siempre `{localappdata}\Programs` (evita la
+  doble instalación si se ejecuta como admin). La cadena del actualizador ya no hace
+  `taskkill` (con `/T` podía matarse a sí misma); de cerrar procesos se encarga el
+  instalador.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor

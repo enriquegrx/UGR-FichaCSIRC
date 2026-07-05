@@ -161,12 +161,10 @@ class App:
         flags = 0
         for nombre in ("CREATE_NO_WINDOW", "DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"):
             flags |= getattr(subprocess, nombre, 0)
-        cmd = (
-            'ping 127.0.0.1 -n 3 > nul'
-            ' & taskkill /IM FichaCSIRC.exe /T /F > nul 2>&1'
-            ' & taskkill /IM FichaCSIRC-Configurar.exe /T /F > nul 2>&1'
-            f' & start "" "{ruta}"'
-        )
+        # Sin taskkill aqui: este cmd es hijo de FichaCSIRC.exe y un
+        # "taskkill /T" sobre la app mataria tambien esta cadena antes del
+        # "start". Es el instalador quien cierra los procesos que bloqueen.
+        cmd = f'ping 127.0.0.1 -n 3 > nul & start "" "{ruta}"'
         subprocess.Popen(["cmd", "/c", cmd], close_fds=True, creationflags=flags)
 
     # ---------- utilidades ----------

@@ -22,7 +22,10 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyPublisher}
 AppPublisherURL={#MyUrl}
 VersionInfoVersion={#MyAppVersion}
-DefaultDirName={autopf}\{#MyAppName}
+; Carpeta SIEMPRE por usuario, aunque el instalador se ejecute como
+; administrador ({autopf} elevado apuntaria a C:\Program Files y dejaria
+; dos instalaciones paralelas, con accesos directos a la copia vieja).
+DefaultDirName={localappdata}\Programs\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
@@ -57,21 +60,60 @@ Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: deskt
 ; Al terminar, ofrecer abrir el configurador (imprescindible la primera vez)
 Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent
 
+[UninstallRun]
+; El aviso diario se programa con schtasks desde la app; si no se borra aqui,
+; la tarea queda huerfana tras desinstalar.
+Filename: "{sys}\schtasks.exe"; Parameters: "/delete /tn ""FichaCSIRC-Recordatorio"" /f"; Flags: runhidden; RunOnceId: "QuitarRecordatorio"
+
 [Code]
-procedure CerrarProceso(const Nombre: String);
+function MatarProceso(const Nombre: String): Integer;
 var
   ResultCode: Integer;
 begin
+  { taskkill devuelve 0 si mato algo y 128 si no habia ningun proceso. }
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "' + Nombre + '" /T /F',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Result := ResultCode;
+end;
+
+procedure CerrarProcesos;
+var
+  Intento, R1, R2: Integer;
+begin
+  { Insiste hasta que no quede ningun proceso de la app (incluido el aviso
+    --recordatorio, que puede llevar dias abierto en segundo plano bloqueando
+    los .exe). Si algo no se puede matar, tras ~5 s se sigue adelante y sera
+    la copia de archivos la que avise. }
+  for Intento := 1 to 10 do
+  begin
+    R1 := MatarProceso('FichaCSIRC.exe');
+    R2 := MatarProceso('FichaCSIRC-Configurar.exe');
+    if (R1 <> 0) and (R2 <> 0) then
+      Exit;
+    Sleep(500);
+  end;
 end;
 
 function InitializeSetup(): Boolean;
 begin
-  { Si lo lanza el actualizador, cierra cualquier proceso que bloquee los .exe. }
+  { Si lo lanza el actualizador, espera a que la app termine de cerrarse. }
   Sleep(1500);
-  CerrarProceso('FichaCSIRC.exe');
-  CerrarProceso('FichaCSIRC-Configurar.exe');
+  CerrarProcesos;
+  Result := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  { Justo antes de copiar archivos: el usuario puede tardar en el asistente y
+    algo puede haber relanzado la app mientras tanto (p. ej. la tarea
+    programada del aviso de fichaje). }
+  CerrarProcesos;
   Sleep(500);
+  Result := '';
+end;
+
+function InitializeUninstall(): Boolean;
+begin
+  CerrarProcesos;
   Result := True;
 end;

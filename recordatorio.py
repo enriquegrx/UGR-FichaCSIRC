@@ -22,6 +22,10 @@ import datetime as dt
 import rellenar_horas as core
 
 TASK_NAME = "FichaCSIRC-Recordatorio"
+# El aviso se autocierra pasado este tiempo: si nadie lo atiende, el proceso
+# no puede quedarse vivo dias bloqueando FichaCSIRC.exe (impedia actualizar
+# y desinstalar la aplicacion).
+AVISO_TIMEOUT_MIN = 10
 
 
 def recordatorios_soportados():
@@ -113,20 +117,53 @@ def main():
     if not pendientes:
         return  # nada que fichar (o sin conexion): salir en silencio
     import tkinter as tk
-    from tkinter import messagebox
+    from tkinter import ttk
+    # Ventana propia (no un messagebox): sale en primer plano, aparece en la
+    # barra de tareas y se autocierra sola. El messagebox anterior podia quedar
+    # oculto tras otras ventanas y dejaba el proceso vivo indefinidamente.
     root = tk.Tk()
-    root.withdraw()
+    root.title("FichaCSIRC - Recordatorio")
+    root.resizable(False, False)
     try:
         ico = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), "fichacsirc.ico")
         if os.path.exists(ico):
             root.iconbitmap(ico)
     except Exception:
         pass
-    if messagebox.askyesno("FichaCSIRC - Recordatorio",
-                           mensaje_pendientes(pendientes)
-                           + "\n\n¿Abrir FichaCSIRC para fichar ahora?"):
+
+    frm = ttk.Frame(root, padding=16)
+    frm.pack(fill="both", expand=True)
+    ttk.Label(frm, text=mensaje_pendientes(pendientes),
+              justify="left").pack(anchor="w")
+    ttk.Label(frm, text="¿Abrir FichaCSIRC para fichar ahora?",
+              justify="left").pack(anchor="w", pady=(10, 0))
+
+    resultado = {"abrir": False}
+
+    def responder(abrir):
+        resultado["abrir"] = abrir
+        root.destroy()
+
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", pady=(14, 0))
+    ttk.Button(btns, text="Abrir FichaCSIRC",
+               command=lambda: responder(True)).pack(side="right")
+    ttk.Button(btns, text="Ahora no",
+               command=lambda: responder(False)).pack(side="right", padx=(0, 8))
+    root.protocol("WM_DELETE_WINDOW", lambda: responder(False))
+    root.bind("<Return>", lambda _e: responder(True))
+    root.bind("<Escape>", lambda _e: responder(False))
+
+    root.update_idletasks()
+    try:
+        root.eval("tk::PlaceWindow . center")
+    except tk.TclError:
+        pass
+    root.attributes("-topmost", True)
+    root.after(AVISO_TIMEOUT_MIN * 60 * 1000, root.destroy)  # autocierre
+    root.mainloop()
+    if resultado["abrir"]:
         _abrir_app()
-    root.destroy()
 
 
 if __name__ == "__main__":
