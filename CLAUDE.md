@@ -52,6 +52,8 @@ definición completa y el historial de decisiones.
   doble instalación si se ejecuta como admin). La cadena del actualizador ya no hace
   `taskkill` (con `/T` podía matarse a sí misma); de cerrar procesos se encarga el
   instalador.
+- v2.1.7 (jul 2026): eliminar con multiselección borra TODOS los apuntes
+  seleccionados (antes solo `sel[0]`) y Deshacer restaura el lote completo.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor

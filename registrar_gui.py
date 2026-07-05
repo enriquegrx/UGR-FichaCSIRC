@@ -292,10 +292,11 @@ class App:
         mid_head.pack(fill="x", pady=(0, 8))
         ttk.Label(mid_head, text="Apuntes de los días marcados",
                   style="Section.TLabel").pack(side="left")
-        b_del = ttk.Button(mid_head, text="Eliminar seleccionado",
+        b_del = ttk.Button(mid_head, text="Eliminar seleccionados",
                            style="Danger.TButton", command=self._eliminar)
         b_del.pack(side="right")
-        Tooltip(b_del, "También con la tecla Supr. Doble clic en un apunte lo edita.")
+        Tooltip(b_del, "Elimina los apuntes seleccionados (Ctrl o Mayús: varios).\n"
+                       "También con la tecla Supr. Doble clic en un apunte lo edita.")
         cols = ("dia", "horas", "tarea", "actividad", "comentario")
         self.tree = ttk.Treeview(midf, columns=cols, show="headings", height=6)
         for c, txt, w in [("dia", "Día", 95), ("horas", "Horas", 70),
@@ -770,24 +771,42 @@ class App:
         menu.tk_popup(evento.x_root, evento.y_root)
 
     def _deshacer_borrado(self):
+        """Restaura el último borrado (uno o varios apuntes)."""
         datos = self._ultimo_borrado
         if not datos:
             return
         self._ultimo_borrado = None
         self.btn_deshacer.pack_forget()
-        self.status.config(text="Restaurando apunte...")
+        self.status.config(text="Restaurando...")
+
+        def trabajo():
+            restaurados, errores, ultimo = 0, 0, ""
+            for a in datos:
+                try:
+                    core.crear_entrada(a["fecha"], a["wp_id"], a["horas"],
+                                       a["comentario"], a["actividad"])
+                    restaurados += 1
+                except Exception as ex:
+                    errores += 1
+                    ultimo = str(ex)
+            return restaurados, errores, ultimo
 
         def al_terminar(res, err):
             if err:
                 self.refrescar()
-                messagebox.showerror("Error", f"No se pudo restaurar el apunte:\n{err}")
+                messagebox.showerror("Error", f"No se pudo restaurar:\n{err}")
                 return
-            self._msg_pendiente = "Apunte restaurado."
+            restaurados, errores, ultimo = res
+            if errores:
+                messagebox.showwarning(
+                    "Restaurado con errores",
+                    f"Restaurados: {restaurados}. Con errores: {errores}.\n"
+                    f"Último error: {ultimo}")
+            self._msg_pendiente = ("Apunte restaurado." if restaurados == 1
+                                   else f"{restaurados} apuntes restaurados.")
             self.refrescar()
 
-        self._en_hilo(lambda: core.crear_entrada(
-            datos["fecha"], datos["wp_id"], datos["horas"],
-            datos["comentario"], datos["actividad"]), al_terminar)
+        self._en_hilo(trabajo, al_terminar)
 
     def _copiar_semana_anterior(self):
         """Copia los apuntes de la semana pasada a la semana visible, dia a dia."""
@@ -1060,38 +1079,65 @@ class App:
         self._en_hilo(trabajo, al_terminar)
 
     def _eliminar(self):
+        """Elimina TODOS los apuntes seleccionados (Ctrl/Mayús: varios)."""
         sel = self.tree.selection()
         if not sel:
-            messagebox.showinfo("Eliminar", "Selecciona un apunte en la lista.")
+            messagebox.showinfo("Eliminar", "Selecciona uno o más apuntes en la lista.")
             return
-        tags = self.tree.item(sel[0], "tags")
-        if not tags:
+        # (entry_id, datos-para-deshacer) de cada apunte seleccionado
+        apuntes = []
+        for item in sel:
+            tags = self.tree.item(item, "tags")
+            if not tags:
+                continue
+            entry_id = tags[0]
+            fecha = tags[1] if len(tags) > 1 else ""
+            datos = None
+            for a in (self._cache_dia.get(fecha) or []):
+                if str(a["id"]) == str(entry_id):
+                    datos = {"fecha": fecha, "wp_id": a["wp_id"], "horas": a["horas"],
+                             "comentario": a["comentario"], "actividad": a["actividad"]}
+                    break
+            apuntes.append((entry_id, datos))
+        if not apuntes:
             return
-        entry_id = tags[0]
-        fecha = tags[1] if len(tags) > 1 else ""
-        # guardar los datos por si el usuario quiere deshacer
-        datos = None
-        for a in (self._cache_dia.get(fecha) or []):
-            if str(a["id"]) == str(entry_id):
-                datos = {"fecha": fecha, "wp_id": a["wp_id"], "horas": a["horas"],
-                         "comentario": a["comentario"], "actividad": a["actividad"]}
-                break
-        if not messagebox.askyesno("Eliminar", "¿Seguro que quieres eliminar este apunte?"):
+        pregunta = ("¿Seguro que quieres eliminar este apunte?" if len(apuntes) == 1
+                    else f"¿Seguro que quieres eliminar estos {len(apuntes)} apuntes?")
+        if not messagebox.askyesno("Eliminar", pregunta):
             return
         self.status.config(text="Eliminando...")
+
+        def trabajo():
+            eliminados, errores, ultimo = [], 0, ""
+            for entry_id, datos in apuntes:
+                try:
+                    core.eliminar_entrada(entry_id)
+                    if datos:
+                        eliminados.append(datos)
+                except Exception as ex:
+                    errores += 1
+                    ultimo = str(ex)
+            return eliminados, errores, ultimo
 
         def al_terminar(res, err):
             if err:
                 self.refrescar()
-                messagebox.showerror("Error", f"No se pudo eliminar el apunte:\n{err}")
+                messagebox.showerror("Error", f"No se pudo eliminar:\n{err}")
                 return
-            self._ultimo_borrado = datos
-            if datos:
+            eliminados, errores, ultimo = res
+            self._ultimo_borrado = eliminados or None
+            if eliminados:
                 self.btn_deshacer.pack(side="right", padx=4)
-            self._msg_pendiente = "Apunte eliminado."
+            if errores:
+                messagebox.showwarning(
+                    "Eliminado con errores",
+                    f"Eliminados: {len(eliminados)}. Con errores: {errores}.\n"
+                    f"Último error: {ultimo}")
+            self._msg_pendiente = ("Apunte eliminado." if len(eliminados) == 1
+                                   else f"{len(eliminados)} apuntes eliminados.")
             self.refrescar()
 
-        self._en_hilo(lambda: core.eliminar_entrada(entry_id), al_terminar)
+        self._en_hilo(trabajo, al_terminar)
 
 
 def main():
