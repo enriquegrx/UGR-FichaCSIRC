@@ -45,8 +45,8 @@ import recordatorio
 from fichaui import (
     COLOR_APP_BG, COLOR_BORDER, COLOR_DANGER, COLOR_MUTED, COLOR_PANEL,
     COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING, Tooltip,
-    aplicar_estilo, boton_peligro, boton_primario, en_hilo, recurso,
-    carpeta_app,
+    TooltipFilas, aplicar_estilo, boton_peligro, boton_primario, en_hilo,
+    recurso, carpeta_app,
 )
 
 
@@ -276,18 +276,21 @@ class App:
         fila2.pack(fill="x", pady=(10, 0))
         ttk.Checkbutton(fila2, text="Toda la semana", variable=self.var_semana,
                         command=self._toggle_semana).pack(side="left")
-        b_pla = ttk.Button(fila2, text="Plantillas...", command=self._plantillas)
-        b_pla.pack(side="left", padx=(12, 0))
-        Tooltip(b_pla, "Guarda un día típico y aplícalo de un clic")
-        b_sem = ttk.Button(fila2, text="Copiar semana anterior",
-                           command=self._copiar_semana_anterior)
-        b_sem.pack(side="right")
-        Tooltip(b_sem, "Repite toda la semana pasada en esta, día a día")
-        b_cop = ttk.Button(fila2, text="Copiar día anterior",
-                           command=self._copiar_anterior)
-        b_cop.pack(side="right", padx=(0, 8))
-        Tooltip(b_cop, "Repite en los días marcados los apuntes del último día con horas\n"
-                       "(botón derecho en un día: marcarlo como festivo/vacaciones)")
+        # Un solo desplegable agrupa las acciones de repetir (quita ruido de
+        # botones de la pantalla principal).
+        mb_cop = ttk.Menubutton(fila2, text="Copiar / Plantillas ▾")
+        m_cop = tk.Menu(mb_cop, tearoff=0)
+        m_cop.add_command(label="Copiar día anterior a los días marcados",
+                          command=self._copiar_anterior)
+        m_cop.add_command(label="Copiar semana anterior completa",
+                          command=self._copiar_semana_anterior)
+        m_cop.add_separator()
+        m_cop.add_command(label="Plantillas...", command=self._plantillas)
+        mb_cop["menu"] = m_cop
+        mb_cop.pack(side="right")
+        Tooltip(mb_cop, "Repetir apuntes: el último día con horas, la semana pasada\n"
+                        "o una plantilla guardada.\n"
+                        "(Botón derecho en un día: marcarlo festivo/vacaciones)")
 
         # Lista de apuntes
         midf = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
@@ -314,6 +317,7 @@ class App:
         self.tree.tag_configure("odd", background="#f8fafc")
         self.tree.tag_configure("even", background=COLOR_PANEL)
         self.tree.bind("<Double-1>", self._editar)
+        TooltipFilas(self.tree, self._texto_fila)
 
         # Formulario anadir
         form = ttk.Frame(self.root, padding=(14, 10), style="Panel.TFrame")
@@ -352,12 +356,22 @@ class App:
         Tooltip(self.btn_anadir, "También con Enter desde Horas o Comentario")
         form.columnconfigure(1, weight=1)
 
-        # Atajos: Enter anade, Supr elimina, F5 recarga, Ctrl+Z deshace el borrado
+        # Atajos: Enter anade, Supr elimina, F5 recarga, Ctrl+Z deshace el
+        # borrado, Ctrl+flechas cambia de semana y Alt+1..5 marca dias
+        # (ver Ayuda > Atajos de teclado).
         self.ent_horas.bind("<Return>", lambda _e: self._anadir())
         self.ent_com.bind("<Return>", lambda _e: self._anadir())
         self.tree.bind("<Delete>", lambda _e: self._eliminar())
         self.root.bind("<F5>", lambda _e: self.refrescar())
         self.root.bind("<Control-z>", lambda _e: self._deshacer_borrado())
+        self.root.bind("<Control-Left>", lambda _e: self._semana_ant())
+        self.root.bind("<Control-Right>", lambda _e: self._semana_sig())
+        for n in range(1, 6):
+            self.root.bind(f"<Alt-Key-{n}>",
+                           lambda _e, i=n - 1: self._toggle_dia_idx(i))
+        # El comentario habitual de cada tarea se recuerda y se sugiere
+        self._com_auto = ""
+        self.cbo_tarea.bind("<<ComboboxSelected>>", self._sugerir_comentario)
 
         # Barra de estado (+ boton Deshacer que aparece tras eliminar)
         barra = ttk.Frame(self.root, style="Subtle.TFrame")
@@ -382,6 +396,13 @@ class App:
         self.status = ttk.Label(barra, text="", style="Status.TLabel", anchor="w")
         self.status.pack(side="left", fill="x", expand=True)
 
+    def _texto_fila(self, iid):
+        """Texto del tooltip de una fila de la tabla: comentario completo."""
+        vals = self.tree.item(iid, "values")
+        if len(vals) >= 5 and vals[4]:
+            return f"{vals[2]}\n“{vals[4]}”"
+        return ""
+
     def _poner_conexion(self, estado, texto):
         colores = {
             "ok": COLOR_SUCCESS,
@@ -402,12 +423,15 @@ class App:
 
         m_herr = tk.Menu(barra, tearoff=0)
         m_herr.add_command(label="Plantillas...", command=self._plantillas)
+        m_herr.add_command(label="Importar festivos...",
+                           command=self._importar_festivos)
         if recordatorio.recordatorios_soportados():
             m_herr.add_command(label="Aviso diario de fichaje...",
                                command=self._config_recordatorio)
         barra.add_cascade(label="Herramientas", menu=m_herr)
 
         m_ayuda = tk.Menu(barra, tearoff=0)
+        m_ayuda.add_command(label="Atajos de teclado", command=self._atajos)
         m_ayuda.add_command(label="Comprobar actualizaciones",
                             command=lambda: self._comprobar_actualizacion(forzar=True))
         if core.GITHUB_REPO:
@@ -426,6 +450,40 @@ class App:
             f"Compilación: {self._fecha_build()}\n\n"
             "Registro de horas en OpenProject (ProyectosTic, UGR).\n"
             + (f"github.com/{core.GITHUB_REPO}" if core.GITHUB_REPO else ""))
+
+    def _importar_festivos(self):
+        """Marca de golpe los festivos conocidos (nacional/Andalucía/Granada)."""
+        pendientes = core.festivos_pendientes()
+        if not pendientes:
+            messagebox.showinfo(
+                "Importar festivos",
+                "Los festivos conocidos ya están marcados como no laborables.")
+            return
+        lineas = "\n".join(
+            f"  {dt.date.fromisoformat(f).strftime('%d/%m/%Y')}  ·  {m}"
+            for f, m in sorted(pendientes.items()))
+        if not messagebox.askyesno(
+                "Importar festivos",
+                f"¿Marcar estos {len(pendientes)} días como no laborables?\n\n"
+                f"{lineas}\n\n"
+                "Revísalos: los traslados los decide la Junta cada año.\n"
+                "(Cualquiera se quita con el botón derecho sobre su tarjeta.)"):
+            return
+        core.importar_festivos()
+        self._msg_pendiente = f"{len(pendientes)} festivos marcados."
+        self.refrescar()
+
+    def _atajos(self):
+        messagebox.showinfo(
+            "Atajos de teclado",
+            "Enter\tAñadir el apunte (desde Horas o Comentario)\n"
+            "Supr\tEliminar los apuntes seleccionados\n"
+            "Ctrl+Z\tDeshacer el último borrado\n"
+            "F5\tRecargar la semana\n"
+            "Ctrl+←/→\tSemana anterior / siguiente\n"
+            "Alt+1..5\tMarcar/desmarcar lunes..viernes\n\n"
+            "Doble clic en un apunte: editarlo.\n"
+            "Botón derecho en un día: marcarlo festivo/vacaciones.")
 
     def _config_recordatorio(self):
         """Activa/desactiva el aviso diario de fichaje (tarea programada)."""
@@ -574,6 +632,14 @@ class App:
     def _pintar_semana(self, dias, cache, fallos, nombre):
         self._cache_dia = cache
         hoy = dt.date.today()
+        # Total de la semana junto al titulo (evita sumar tarjetas de cabeza)
+        reg_sem = sum(sum(a["horas"] for a in (cache.get(d.isoformat()) or []))
+                      for d in dias)
+        obj_sem = sum(core.objetivo_de(d) for d in dias)
+        dom = dias[0] + dt.timedelta(days=6)
+        self.lbl_semana.config(
+            text=f"Semana {dias[0].strftime('%d/%m/%Y')} - {dom.strftime('%d/%m/%Y')}"
+                 f"    ·    {core._fmt(reg_sem)} / {obj_sem}h")
         for w in self.dias_frame.winfo_children():
             w.destroy()
         self.dia_vars = []
@@ -600,7 +666,7 @@ class App:
             lbl1 = tk.Label(card, text=titulo, font=fnt, anchor="w",
                             bg=COLOR_PANEL, fg="#111827")
             lbl1.pack(fill="x", padx=12, pady=(10, 5))
-            cv = tk.Canvas(card, height=6, highlightthickness=0, bg=COLOR_PANEL)
+            cv = tk.Canvas(card, height=8, highlightthickness=0, bg=COLOR_PANEL)
             cv.pack(fill="x", padx=12)
             if nolab:
                 frac, color = 1.0, COLOR_MUTED
@@ -621,16 +687,16 @@ class App:
             else:
                 frac, color = 0.0, "#9a9a9a"
                 texto2 = f"0h / {obj}h"
-            lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 10),
+            lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 12, "bold"),
                             fg=color, bg=COLOR_PANEL, anchor="w")
             lbl2.pack(fill="x", padx=12, pady=(7, 10))
 
             def dibujar(_e=None, cv=cv, frac=frac, color=color):
                 cv.delete("all")
                 ancho = max(cv.winfo_width(), 1)
-                cv.create_rectangle(0, 0, ancho, 6, fill="#e5e7eb", width=0)
+                cv.create_rectangle(0, 0, ancho, 8, fill="#e5e7eb", width=0)
                 if frac > 0:
-                    cv.create_rectangle(0, 0, int(ancho * frac), 6,
+                    cv.create_rectangle(0, 0, int(ancho * frac), 8,
                                         fill=color, width=0)
             cv.bind("<Configure>", dibujar)
             for wdg in (card, lbl1, cv, lbl2):
@@ -735,6 +801,37 @@ class App:
             self.status.config(text=f"{len(marcados)} días marcados")
         else:
             self.status.config(text="Marca al menos un día")
+
+    def _toggle_dia_idx(self, i):
+        """Alt+1..5: marca/desmarca el dia i de la semana (teclado)."""
+        if i < len(self.dia_vars):
+            self._click_dia(self.dia_vars[i][0])
+
+    def _sugerir_comentario(self, _e=None):
+        """Pre-rellena el comentario habitual de la tarea elegida,
+        sin pisar lo escrito a mano."""
+        wp_id = self.tareas.get(self.cbo_tarea.get())
+        if wp_id is None:
+            return
+        sugerido = (core.config_valor("comentarios_tarea") or {}).get(str(wp_id), "")
+        actual = self.ent_com.get().strip()
+        if actual and actual != self._com_auto:
+            return
+        self.ent_com.delete(0, "end")
+        if sugerido:
+            self.ent_com.insert(0, sugerido)
+        self._com_auto = sugerido
+
+    def _recordar_comentario(self, wp_id, comentario):
+        """Guarda el comentario usado con la tarea para sugerirlo despues."""
+        try:
+            mapa = dict(core.config_valor("comentarios_tarea") or {})
+            if mapa.get(str(wp_id)) == comentario:
+                return
+            mapa[str(wp_id)] = comentario
+            core.guardar_config_valor("comentarios_tarea", mapa)
+        except Exception:
+            pass  # es solo una comodidad: nunca debe romper el registro
 
     def _sugerir_horas(self, falta):
         """Pre-rellena el campo Horas con lo que falta, sin pisar lo escrito a mano."""
@@ -1068,6 +1165,9 @@ class App:
             self.ent_horas.delete(0, "end")
             self._horas_auto = ""
             self.ent_com.delete(0, "end")
+            self._com_auto = ""
+            if creados and comentario:
+                self._recordar_comentario(wp_id, comentario)
             if errores and creados == 0:
                 self.refrescar()
                 messagebox.showerror(

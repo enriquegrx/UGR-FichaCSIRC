@@ -168,3 +168,39 @@ class Tooltip:
         if self.tip:
             self.tip.destroy()
             self.tip = None
+
+
+class TooltipFilas:
+    """Tooltip dinamico para un Treeview: al pasar el raton por una fila
+    muestra el texto que devuelva texto_de(iid) (p. ej. el comentario
+    completo, que en la celda sale cortado). Si devuelve "", no molesta."""
+
+    def __init__(self, tree, texto_de):
+        self.tree, self.texto_de = tree, texto_de
+        self.tip, self.fila = None, None
+        tree.bind("<Motion>", self._mover)
+        tree.bind("<Leave>", self._ocultar)
+
+    def _mover(self, e):
+        fila = self.tree.identify_row(e.y)
+        if fila == self.fila:
+            return
+        self._ocultar()
+        self.fila = fila
+        if not fila:
+            return
+        texto = self.texto_de(fila)
+        if not texto:
+            return
+        self.tip = tk.Toplevel(self.tree)
+        self.tip.wm_overrideredirect(True)
+        self.tip.wm_geometry(f"+{e.x_root + 14}+{e.y_root + 12}")
+        tk.Label(self.tip, text=texto, bg="#ffffe0", relief="solid",
+                 borderwidth=1, font=("Segoe UI", 9), justify="left",
+                 wraplength=420).pack(ipadx=5, ipady=2)
+
+    def _ocultar(self, _e=None):
+        if self.tip:
+            self.tip.destroy()
+            self.tip = None
+        self.fila = None

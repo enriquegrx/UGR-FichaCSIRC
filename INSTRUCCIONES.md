@@ -117,8 +117,11 @@ Trucos que ahorran tiempo:
   te lo pida.
 - **Resumen mes**: cuántas horas llevas y qué días tienes incompletos.
 - **Exportar CSV…**: tus horas en un archivo que abre Excel.
+- **Importar festivos** (menú *Herramientas*): marca de golpe los festivos del
+  año como no laborables, para que no te los pida.
 - **Aviso diario** (menú *Herramientas → Aviso diario de fichaje*): si sueles
-  olvidarte, actívalo y Windows te avisará cada tarde solo si te faltan horas.
+  olvidarte, actívalo y el sistema te avisará cada tarde solo si te faltan
+  horas (funciona en Windows y en macOS).
 
 ## 5. Si algo no va
 

@@ -62,9 +62,10 @@ La app avisa de cuántas horas te faltan para completar el día, pero te deja ce
    - Navega por semanas; cada día es una **tarjeta con barra de progreso** (verde completo, ámbar parcial, rojo si te pasas). Clic para marcar uno o varios, o casilla *Toda la semana*. Botón derecho: marcar un día como **no laborable** (festivo, vacaciones…).
    - Añade apuntes: tarea (favoritas o *Buscar…*, con selección múltiple y opción de guardarlas como favoritas; el desplegable filtra al escribir) + horas (pre-rellenas con lo que falta) + actividad + comentario. Enter también añade.
    - **Doble clic en un apunte lo edita** (horas, actividad, comentario); Supr lo elimina, con **Deshacer** (Ctrl+Z) si te arrepientes.
-   - *Copiar día anterior*, **Copiar semana anterior** (repite la semana pasada día a día) y **Plantillas** (guarda un día típico y aplícalo de un clic).
-   - **Resumen mes**: horas registradas vs. objetivo y días incompletos.
-   - **Aviso diario de fichaje** (menú *Herramientas*, solo Windows): opcional, te avisa los días laborables si te faltan horas (usa el Programador de tareas de Windows; solo aparece si hay algo pendiente).
+   - Menú **Copiar / Plantillas ▾**: copiar el día anterior, la semana anterior completa o aplicar **plantillas** (día típico guardado).
+   - **Resumen mes**: horas registradas vs. objetivo y días incompletos. El título muestra también el **total de la semana**.
+   - **Importar festivos** (menú *Herramientas*): marca de golpe los festivos conocidos (nacional/Andalucía/Granada) como no laborables.
+   - **Aviso diario de fichaje** (menú *Herramientas*): opcional, te avisa los días laborables si te faltan horas. En Windows usa el Programador de tareas; en macOS un LaunchAgent (`launchd`). Solo aparece si hay algo pendiente.
    - Exporta a CSV por rango de fechas (botón *Exportar CSV…*).
    - Avisa si un apunte va a superar la jornada del día y evita duplicados.
    - Recuerda el tamaño de la ventana y la última actividad usada.

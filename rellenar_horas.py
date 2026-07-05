@@ -45,7 +45,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.2.0"
+VERSION = "2.3.0"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -437,14 +437,12 @@ def tareas_proyecto(pid):
             for w in _get_todos(f"/api/v3/projects/{pid}/work_packages")]
 
 
-def buscar_wp(texto):
+def buscar_wp(texto, limite=50):
+    """Busca tareas por texto en TODOS los proyectos visibles. Lanza excepcion
+    si falla la red (el que llama decide como avisar)."""
     filtros = [{"subject": {"operator": "~", "values": [texto]}}]
-    try:
-        data = _get("/api/v3/work_packages",
-                    params={"filters": json.dumps(filtros), "pageSize": 20})
-    except Exception as e:
-        print(f"  Error al buscar: {e}")
-        return []
+    data = _get("/api/v3/work_packages",
+                params={"filters": json.dumps(filtros), "pageSize": limite})
     return [{"id": int(w["id"]), "nombre": w.get("subject", "?")}
             for w in data.get("_embedded", {}).get("elements", [])]
 
@@ -509,7 +507,11 @@ def elegir_tarea():
                 return wp
             print("  No existe ese ID o no tienes acceso.")
             continue
-        res = buscar_wp(r)
+        try:
+            res = buscar_wp(r)
+        except Exception as e:
+            print(f"  Error al buscar: {e}")
+            continue
         if not res:
             print("  Sin resultados. Prueba otro texto o un ID.")
             continue
@@ -559,6 +561,46 @@ def marcar_no_laborable(fecha_iso, motivo="festivo"):
 def quitar_no_laborable(fecha_iso):
     NO_LABORABLES.pop(fecha_iso, None)
     guardar_config_valor("no_laborables", NO_LABORABLES)
+
+
+# Festivos conocidos (nacionales + Andalucia + Granada). REVISAR CADA AÑO:
+# los traslados de domingo a lunes los decide la Junta y pueden cambiar.
+# Se importan desde la GUI (Herramientas > Importar festivos).
+FESTIVOS_CONOCIDOS = {
+    "2026-01-01": "Año Nuevo",
+    "2026-01-02": "Toma de Granada",
+    "2026-01-06": "Reyes",
+    "2026-04-02": "Jueves Santo",
+    "2026-04-03": "Viernes Santo",
+    "2026-05-01": "Día del Trabajo",
+    "2026-06-04": "Corpus Christi",
+    "2026-10-12": "Fiesta Nacional",
+    "2026-11-02": "Todos los Santos (traslado)",
+    "2026-12-07": "La Constitución (traslado)",
+    "2026-12-08": "La Inmaculada",
+    "2026-12-25": "Navidad",
+}
+
+
+def festivos_pendientes():
+    """Festivos conocidos que caen en dia laborable y aun no estan marcados."""
+    out = {}
+    for fecha, motivo in FESTIVOS_CONOCIDOS.items():
+        if fecha in NO_LABORABLES:
+            continue
+        if dt.date.fromisoformat(fecha).weekday() >= 5:
+            continue
+        out[fecha] = motivo
+    return out
+
+
+def importar_festivos():
+    """Marca como no laborables los festivos pendientes. Devuelve cuantos."""
+    pendientes = festivos_pendientes()
+    NO_LABORABLES.update(pendientes)
+    if pendientes:
+        guardar_config_valor("no_laborables", NO_LABORABLES)
+    return len(pendientes)
 
 
 def objetivo_de(dia):

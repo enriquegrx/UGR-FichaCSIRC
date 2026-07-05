@@ -4,12 +4,13 @@
 recordatorio.py - Aviso de horas pendientes de fichar en FichaCSIRC.
 
 Dos usos:
-  1) Como comprobacion suelta (lo lanza la tarea programada de Windows):
+  1) Como comprobacion suelta (la lanza la tarea programada):
          pythonw recordatorio.py         (o  FichaCSIRC.exe --recordatorio)
      Mira la semana en curso y, SOLO si te faltan horas, muestra un aviso con
      opcion de abrir la aplicacion. Si no hay nada pendiente, no molesta.
-  2) Como modulo: la app lo usa para activar/desactivar el aviso diario, que se
-     programa con el Programador de tareas de Windows (schtasks).
+  2) Como modulo: la app lo usa para activar/desactivar el aviso diario.
+     En Windows se programa con el Programador de tareas (schtasks); en macOS
+     con un LaunchAgent de usuario (launchd).
 
 El aviso diario es opcional y por-usuario; no requiere permisos de administrador.
 """
@@ -22,6 +23,7 @@ import datetime as dt
 import rellenar_horas as core
 
 TASK_NAME = "FichaCSIRC-Recordatorio"
+LAUNCHD_LABEL = "es.ugr.fichacsirc.recordatorio"
 # El aviso se autocierra pasado este tiempo: si nadie lo atiende, el proceso
 # no puede quedarse vivo dias bloqueando FichaCSIRC.exe (impedia actualizar
 # y desinstalar la aplicacion).
@@ -29,8 +31,8 @@ AVISO_TIMEOUT_MIN = 10
 
 
 def recordatorios_soportados():
-    """El alta/baja automatica usa el Programador de tareas de Windows."""
-    return os.name == "nt"
+    """Windows (schtasks) y macOS (launchd)."""
+    return os.name == "nt" or sys.platform == "darwin"
 
 
 # ----------------------- mensaje -----------------------
@@ -47,7 +49,7 @@ def mensaje_pendientes(pendientes):
     return "\n".join(lineas)
 
 
-# ----------------------- programacion (schtasks) -----------------------
+# ----------------------- programacion (schtasks / launchd) -----------------------
 
 def _comando_recordatorio():
     """Comando que la tarea programada debe ejecutar segun sea .exe o script."""
@@ -59,8 +61,50 @@ def _comando_recordatorio():
     return f'"{pyw}" "{script}"'
 
 
+def _argv_recordatorio():
+    """Argumentos (lista) del aviso, para el plist de launchd en macOS."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "--recordatorio"]
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordatorio.py")
+    return [sys.executable, script]
+
+
+def _plist_path():
+    return os.path.expanduser(f"~/Library/LaunchAgents/{LAUNCHD_LABEL}.plist")
+
+
+def _plist_contenido(hora):
+    h, m = (int(x) for x in hora.split(":"))
+    args = "\n".join(f"        <string>{a}</string>" for a in _argv_recordatorio())
+    dias = "\n".join(
+        "        <dict>\n"
+        f"            <key>Weekday</key><integer>{wd}</integer>\n"
+        f"            <key>Hour</key><integer>{h}</integer>\n"
+        f"            <key>Minute</key><integer>{m}</integer>\n"
+        "        </dict>" for wd in range(1, 6))  # 1=lunes ... 5=viernes
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>{LAUNCHD_LABEL}</string>
+    <key>ProgramArguments</key>
+    <array>
+{args}
+    </array>
+    <key>StartCalendarInterval</key>
+    <array>
+{dias}
+    </array>
+</dict>
+</plist>
+"""
+
+
 def recordatorio_activo():
-    if not recordatorios_soportados():
+    if sys.platform == "darwin":
+        return os.path.exists(_plist_path())
+    if os.name != "nt":
         return False
     try:
         r = subprocess.run(["schtasks", "/query", "/tn", TASK_NAME],
@@ -72,9 +116,23 @@ def recordatorio_activo():
 
 
 def activar_recordatorio(hora="16:00"):
-    """Crea/actualiza la tarea programada (lun-vie a la hora indicada)."""
-    if not recordatorios_soportados():
-        raise RuntimeError("El aviso diario automatico solo esta disponible en Windows.")
+    """Programa el aviso (lun-vie a la hora indicada) en Windows o macOS."""
+    if sys.platform == "darwin":
+        ruta = _plist_path()
+        os.makedirs(os.path.dirname(ruta), exist_ok=True)
+        with open(ruta, "w", encoding="utf-8") as f:
+            f.write(_plist_contenido(hora))
+        subprocess.run(["launchctl", "unload", ruta], capture_output=True)
+        r = subprocess.run(["launchctl", "load", ruta],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout or "").strip()
+                               or "launchctl fallo")
+        core.LOG.info("Recordatorio diario (launchd) activado a las %s", hora)
+        return
+    if os.name != "nt":
+        raise RuntimeError("El aviso diario automatico solo esta disponible "
+                           "en Windows y macOS.")
     cmd = ["schtasks", "/create", "/tn", TASK_NAME,
            "/tr", _comando_recordatorio(),
            "/sc", "weekly", "/d", "MON,TUE,WED,THU,FRI",
@@ -87,8 +145,18 @@ def activar_recordatorio(hora="16:00"):
 
 
 def desactivar_recordatorio():
-    if not recordatorios_soportados():
-        raise RuntimeError("El aviso diario automatico solo esta disponible en Windows.")
+    if sys.platform == "darwin":
+        ruta = _plist_path()
+        subprocess.run(["launchctl", "unload", ruta], capture_output=True)
+        try:
+            os.remove(ruta)
+        except FileNotFoundError:
+            pass
+        core.LOG.info("Recordatorio diario (launchd) desactivado")
+        return
+    if os.name != "nt":
+        raise RuntimeError("El aviso diario automatico solo esta disponible "
+                           "en Windows y macOS.")
     r = subprocess.run(["schtasks", "/delete", "/tn", TASK_NAME, "/f"],
                        capture_output=True, text=True,
                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

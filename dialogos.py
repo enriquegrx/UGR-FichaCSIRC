@@ -295,6 +295,8 @@ def abrir_buscar_tarea(app):
     ttk.Label(frm, text="Filtro:").grid(row=1, column=0, sticky="w")
     ent = ttk.Entry(frm)
     ent.grid(row=1, column=1, sticky="we", padx=4, pady=3)
+    b_todo = ttk.Button(frm, text="Buscar en todo")
+    b_todo.grid(row=1, column=2, padx=(4, 0), pady=3)
     lb = tk.Listbox(frm, height=16, selectmode="extended", exportselection=False)
     lb.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=6)
     sb = ttk.Scrollbar(frm, orient="vertical", command=lb.yview)
@@ -369,6 +371,36 @@ def abrir_buscar_tarea(app):
                                "Filtra y elige (Ctrl o Mayús: varias).")
 
         en_hilo(app.root, lambda: core.tareas_proyecto(pid), tareas_cargadas)
+
+    def buscar_global(*_):
+        """Busca por texto en TODOS los proyectos (sin pasar por proyecto)."""
+        texto = ent.get().strip()
+        if len(texto) < 3:
+            estado.config(text="Escribe al menos 3 letras y pulsa "
+                               "'Buscar en todo' (o Enter).")
+            return
+        estado.config(text=f"Buscando «{texto}» en todos los proyectos...")
+        carga_seq[0] += 1
+        seq = carga_seq[0]
+
+        def encontradas(res, err):
+            if not top.winfo_exists() or seq != carga_seq[0]:
+                return
+            if err:
+                estado.config(text="")
+                messagebox.showerror("Error", f"No pude buscar:\n{err}",
+                                     parent=top)
+                return
+            estado_data["tareas"] = res
+            pintar()
+            estado.config(
+                text=(f"{len(res)} tareas encontradas en todos tus proyectos."
+                      if res else f"Nada con «{texto}» en tus proyectos."))
+
+        en_hilo(app.root, lambda: core.buscar_wp(texto), encontradas)
+
+    b_todo.configure(command=buscar_global)
+    ent.bind("<Return>", buscar_global)
 
     def elegir(*_):
         sels = lb.curselection()

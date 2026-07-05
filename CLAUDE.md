@@ -29,7 +29,8 @@ definición completa y el historial de decisiones.
 - La config vive junto al script. En apps empaquetadas se guarda en `%APPDATA%\FichaCSIRC`
   en Windows y `~/Library/Application Support/FichaCSIRC` en macOS; la variable de entorno
   `FICHACSIRC_CONFIG` puede apuntar a otra ruta (la usan los tests).
-- El recordatorio diario automatico usa `schtasks`; solo se muestra/activa en Windows.
+- El recordatorio diario automatico usa `schtasks` en Windows y un LaunchAgent
+  de usuario (`launchd`) en macOS.
 
 ## Hecho recientemente
 - Revisión UX aplicada (jul 2026): quick wins + llamadas a la API en hilos en la
@@ -62,6 +63,14 @@ definición completa y el historial de decisiones.
   Revisión UI: fondo gris con paneles-tarjeta, navegación `← Hoy →` agrupada,
   título de semana grande, banda azul en la tarjeta de "hoy" (widgets con
   `_fijo=True` no se repintan en `_pintar_sel`), formulario realineado.
+- v2.3.0 (jul 2026): total semanal en el título; búsqueda global de tareas
+  ("Buscar en todo", `buscar_wp` ahora lanza excepción y el caller avisa);
+  Importar festivos (`FESTIVOS_CONOCIDOS`, revisar cada año los traslados);
+  comentario habitual por tarea (`comentarios_tarea` en config); aviso diario
+  también en macOS (LaunchAgent, `recordatorio._plist_contenido`); menú
+  "Copiar / Plantillas ▾" agrupa las copias; tooltip con el comentario completo
+  en la tabla (`fichaui.TooltipFilas`); atajos Ctrl+←/→ y Alt+1..5 (Ayuda >
+  Atajos); tests de acciones de GUI (`test_gui_acciones.py`, en_hilo síncrono).
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor

@@ -312,6 +312,63 @@ class TestApi(unittest.TestCase):
             self.assertEqual(core._get("/x"), {"x": 1})
 
 
+class TestBuscarWp(unittest.TestCase):
+    @mock.patch.object(core, "_get")
+    def test_devuelve_resultados(self, m_get):
+        m_get.return_value = {"_embedded": {"elements": [
+            {"id": 5, "subject": "Proxmox + dockers"}]}}
+        self.assertEqual(core.buscar_wp("prox"),
+                         [{"id": 5, "nombre": "Proxmox + dockers"}])
+
+    @mock.patch.object(core, "_get", side_effect=RuntimeError("sin red"))
+    def test_propaga_errores(self, _m):
+        with self.assertRaises(RuntimeError):
+            core.buscar_wp("prox")  # la GUI decide como avisar
+
+
+class TestFestivos(unittest.TestCase):
+    def test_importar_festivos(self):
+        festivos = {
+            "2026-01-01": "Año Nuevo",   # jueves: se importa
+            "2026-02-28": "Andalucía",   # sabado: se salta
+            "2026-12-25": "Navidad",     # viernes: se importa
+        }
+        with mock.patch.object(core, "NO_LABORABLES", {}), \
+             mock.patch.object(core, "FESTIVOS_CONOCIDOS", festivos), \
+             mock.patch.object(core, "guardar_config_valor") as m_g:
+            self.assertEqual(core.festivos_pendientes(),
+                             {"2026-01-01": "Año Nuevo",
+                              "2026-12-25": "Navidad"})
+            self.assertEqual(core.importar_festivos(), 2)
+            self.assertTrue(core.es_no_laborable("2026-01-01"))
+            self.assertFalse(core.es_no_laborable("2026-02-28"))
+            # idempotente: la segunda vez no hay nada que importar
+            self.assertEqual(core.importar_festivos(), 0)
+            m_g.assert_called_once()
+
+    def test_no_pisa_marcas_del_usuario(self):
+        with mock.patch.object(core, "NO_LABORABLES",
+                               {"2026-01-01": "vacaciones"}), \
+             mock.patch.object(core, "FESTIVOS_CONOCIDOS",
+                               {"2026-01-01": "Año Nuevo"}), \
+             mock.patch.object(core, "guardar_config_valor"):
+            self.assertEqual(core.importar_festivos(), 0)
+            self.assertEqual(core.motivo_no_laborable("2026-01-01"), "vacaciones")
+
+
+class TestRecordatorioMac(unittest.TestCase):
+    def test_plist(self):
+        import recordatorio
+        plist = recordatorio._plist_contenido("16:30")
+        self.assertIn(recordatorio.LAUNCHD_LABEL, plist)
+        self.assertIn("<key>Hour</key><integer>16</integer>", plist)
+        self.assertIn("<key>Minute</key><integer>30</integer>", plist)
+        # lunes a viernes (Weekday 1..5)
+        self.assertEqual(plist.count("<key>Weekday</key>"), 5)
+        self.assertIn("<integer>1</integer>", plist)
+        self.assertIn("<integer>5</integer>", plist)
+
+
 class TestNoLaborables(unittest.TestCase):
     def test_ciclo_completo(self):
         f = "2026-07-06"
