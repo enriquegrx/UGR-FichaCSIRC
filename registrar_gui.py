@@ -44,8 +44,9 @@ import dialogos
 import recordatorio
 from fichaui import (
     COLOR_APP_BG, COLOR_BORDER, COLOR_DANGER, COLOR_MUTED, COLOR_PANEL,
-    COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING, Tooltip, aplicar_estilo,
-    en_hilo, recurso, carpeta_app,
+    COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING, Tooltip,
+    aplicar_estilo, boton_peligro, boton_primario, en_hilo, recurso,
+    carpeta_app,
 )
 
 
@@ -154,18 +155,11 @@ class App:
         self._en_hilo(trabajo, al_terminar)
 
     def _lanzar_instalador_tras_cerrar(self, ruta):
-        """Lanza el instalador cuando esta app ya no bloquee los ejecutables."""
-        if os.name != "nt":
-            subprocess.Popen([ruta], close_fds=True)
-            return
-        flags = 0
-        for nombre in ("CREATE_NO_WINDOW", "DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP"):
-            flags |= getattr(subprocess, nombre, 0)
-        # Sin taskkill aqui: este cmd es hijo de FichaCSIRC.exe y un
-        # "taskkill /T" sobre la app mataria tambien esta cadena antes del
-        # "start". Es el instalador quien cierra los procesos que bloqueen.
-        cmd = f'ping 127.0.0.1 -n 3 > nul & start "" "{ruta}"'
-        subprocess.Popen(["cmd", "/c", cmd], close_fds=True, creationflags=flags)
+        """Lanza el instalador directamente (sin cmd/start: sus comillas se
+        mangleaban y start acababa buscando el archivo '\\\\'). No hace falta
+        esperar aqui: el instalador espera y cierra los procesos de la app
+        antes de copiar (InitializeSetup y PrepareToInstall)."""
+        subprocess.Popen([ruta], close_fds=True)
 
     # ---------- utilidades ----------
     def _lunes_actual(self):
@@ -246,20 +240,30 @@ class App:
         self.lbl_user.pack(side="right", padx=(0, 4))
         ttk.Separator(self.root, orient="horizontal").pack(fill="x")
 
-        # Barra superior: navegacion semanal
+        # Barra superior: navegacion agrupada a la izquierda (← Hoy →), titulo
+        # de la semana protagonista en el centro y acciones a la derecha.
         top = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
         top.pack(fill="x", padx=12, pady=(12, 8))
-        ttk.Button(top, text="← Semana", command=self._semana_ant).pack(side="left")
-        self.lbl_semana = ttk.Label(top, text="", style="Section.TLabel")
-        self.lbl_semana.pack(side="left", expand=True, padx=12)
-        ttk.Button(top, text="Semana →", command=self._semana_sig).pack(side="left")
-        ttk.Button(top, text="Hoy", command=self._ir_hoy).pack(side="left", padx=(8, 0))
+        nav = ttk.Frame(top, style="Panel.TFrame")
+        nav.pack(side="left")
+        b_ant = ttk.Button(nav, text="←", width=3, command=self._semana_ant)
+        b_ant.pack(side="left")
+        Tooltip(b_ant, "Semana anterior")
+        b_hoy = ttk.Button(nav, text="Hoy", width=5, command=self._ir_hoy)
+        b_hoy.pack(side="left", padx=3)
+        Tooltip(b_hoy, "Volver a la semana actual")
+        b_sig = ttk.Button(nav, text="→", width=3, command=self._semana_sig)
+        b_sig.pack(side="left")
+        Tooltip(b_sig, "Semana siguiente")
         b_exp = ttk.Button(top, text="Exportar CSV…", command=self._exportar)
         b_exp.pack(side="right", padx=(8, 0))
         Tooltip(b_exp, "Exporta tus apuntes a CSV por rango de fechas")
         b_mes = ttk.Button(top, text="Resumen", command=self._resumen_mes)
         b_mes.pack(side="right", padx=(8, 0))
         Tooltip(b_mes, "Horas del mes: registradas, objetivo y días incompletos")
+        self.lbl_semana = ttk.Label(top, text="", style="WeekTitle.TLabel",
+                                    anchor="center")
+        self.lbl_semana.pack(side="left", expand=True, fill="x", padx=12)
 
         # Dias (tarjetas con estado)
         self.var_semana = tk.BooleanVar(value=False)
@@ -292,8 +296,7 @@ class App:
         mid_head.pack(fill="x", pady=(0, 8))
         ttk.Label(mid_head, text="Apuntes de los días marcados",
                   style="Section.TLabel").pack(side="left")
-        b_del = ttk.Button(mid_head, text="Eliminar seleccionados",
-                           style="Danger.TButton", command=self._eliminar)
+        b_del = boton_peligro(mid_head, "Eliminar seleccionados", self._eliminar)
         b_del.pack(side="right")
         Tooltip(b_del, "Elimina los apuntes seleccionados (Ctrl o Mayús: varios).\n"
                        "También con la tecla Supr. Doble clic en un apunte lo edita.")
@@ -317,34 +320,37 @@ class App:
         # La accion diaria principal debe quedar visible incluso en ventanas no maximizadas.
         form.pack(fill="x", padx=12, pady=(0, 8), before=midf)
         ttk.Label(form, text="Añadir apunte", style="Section.TLabel").grid(
-            row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
 
         ttk.Label(form, text="Tarea:", background=COLOR_PANEL).grid(row=1, column=0, sticky="w")
         self.cbo_tarea = ttk.Combobox(form, width=46)
-        self.cbo_tarea.grid(row=1, column=1, columnspan=2, sticky="we", padx=(8, 8), pady=4)
+        self.cbo_tarea.grid(row=1, column=1, sticky="we", padx=(8, 8), pady=4)
         self.cbo_tarea.bind("<KeyRelease>", self._filtrar_tareas)
         Tooltip(self.cbo_tarea, "Escribe para filtrar tus tareas favoritas")
         b_buscar = ttk.Button(form, text="Buscar...", command=self._buscar_tarea)
-        b_buscar.grid(row=1, column=3, padx=(0, 0), pady=4, sticky="ew")
+        b_buscar.grid(row=1, column=2, pady=4, sticky="ew")
         Tooltip(b_buscar, "Busca tareas por proyecto (Ctrl/Mayús para elegir varias)")
 
+        # Horas y actividad juntas, alineadas bajo la tarea (el campo Horas
+        # quedaba huerfano y la actividad descolgada a la derecha).
         ttk.Label(form, text="Horas:", background=COLOR_PANEL).grid(row=2, column=0, sticky="w")
-        self.ent_horas = ttk.Entry(form, width=8)
-        self.ent_horas.grid(row=2, column=1, sticky="w", padx=(8, 8), pady=4)
-
-        ttk.Label(form, text="Actividad:", background=COLOR_PANEL).grid(row=2, column=2, sticky="e")
-        self.cbo_act = ttk.Combobox(form, state="readonly", width=22)
-        self.cbo_act.grid(row=2, column=3, sticky="ew", pady=4)
+        fila_ha = ttk.Frame(form, style="Panel.TFrame")
+        fila_ha.grid(row=2, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=4)
+        self.ent_horas = ttk.Entry(fila_ha, width=8)
+        self.ent_horas.pack(side="left")
+        ttk.Label(fila_ha, text="Actividad:",
+                  background=COLOR_PANEL).pack(side="left", padx=(18, 6))
+        self.cbo_act = ttk.Combobox(fila_ha, state="readonly", width=24)
+        self.cbo_act.pack(side="left")
 
         ttk.Label(form, text="Comentario:", background=COLOR_PANEL).grid(row=3, column=0, sticky="w")
         self.ent_com = ttk.Entry(form, width=50)
-        self.ent_com.grid(row=3, column=1, columnspan=2, sticky="we", padx=(8, 8), pady=4)
+        self.ent_com.grid(row=3, column=1, sticky="we", padx=(8, 8), pady=4)
 
-        self.btn_anadir = ttk.Button(form, text="Añadir a días marcados",
-                                     style="Primary.TButton", command=self._anadir)
-        self.btn_anadir.grid(row=3, column=3, pady=4, sticky="ew")
+        self.btn_anadir = boton_primario(form, "Añadir a días marcados", self._anadir)
+        self.btn_anadir.grid(row=3, column=2, pady=4, sticky="ew")
+        Tooltip(self.btn_anadir, "También con Enter desde Horas o Comentario")
         form.columnconfigure(1, weight=1)
-        form.columnconfigure(3, weight=0)
 
         # Atajos: Enter anade, Supr elimina, F5 recarga, Ctrl+Z deshace el borrado
         self.ent_horas.bind("<Return>", lambda _e: self._anadir())
@@ -583,6 +589,12 @@ class App:
             card = tk.Frame(self.dias_frame, bg=COLOR_PANEL, highlightthickness=1,
                             highlightbackground=COLOR_BORDER, cursor="hand2")
             card.grid(row=0, column=i, padx=5, pady=2, sticky="nsew")
+            if es_hoy:
+                # Banda azul superior: "hoy" se distingue de un vistazo, no
+                # solo por la negrita del titulo.
+                banda = tk.Frame(card, bg=COLOR_PRIMARY, height=4)
+                banda.pack(fill="x")
+                banda._fijo = True  # _pintar_sel no debe repintarla
             fnt = ("TkDefaultFont", 10, "bold") if es_hoy else ("TkDefaultFont", 10)
             titulo = f"{core.DIAS_ES[i]} {d.strftime('%d/%m')}" + ("  · hoy" if es_hoy else "")
             lbl1 = tk.Label(card, text=titulo, font=fnt, anchor="w",
@@ -662,6 +674,8 @@ class App:
             card.configure(bg=bg, highlightbackground=borde, highlightcolor=borde,
                            highlightthickness=(2 if sel else 1))
             for ch in card.winfo_children():
+                if getattr(ch, "_fijo", False):
+                    continue  # p. ej. la banda azul de "hoy"
                 try:
                     ch.configure(bg=bg)
                 except tk.TclError:

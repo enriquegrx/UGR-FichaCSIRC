@@ -16,9 +16,9 @@ import tkinter.font as tkfont
 from tkinter import ttk
 
 
-COLOR_APP_BG = "#f4f6f8"
+COLOR_APP_BG = "#e9edf2"   # gris con cuerpo: los paneles blancos se leen como tarjetas
 COLOR_PANEL = "#ffffff"
-COLOR_PANEL_ALT = "#eef2f6"
+COLOR_PANEL_ALT = "#dfe5ec"
 COLOR_BORDER = "#d7dce2"
 COLOR_TEXT = "#1f2933"
 COLOR_MUTED = "#64707d"
@@ -85,17 +85,14 @@ def aplicar_estilo(root):
                     font=("TkDefaultFont", 18, "bold"))
     style.configure("Subtitle.TLabel", background=COLOR_PANEL, foreground=COLOR_MUTED,
                     font=("TkDefaultFont", 11))
-    style.configure("Section.TLabel", background=COLOR_PANEL, foreground=COLOR_TEXT,
-                    font=("TkDefaultFont", 11, "bold"))
+    style.configure("Section.TLabel", background=COLOR_PANEL, foreground=COLOR_MUTED,
+                    font=("TkDefaultFont", 10, "bold"))
+    style.configure("WeekTitle.TLabel", background=COLOR_PANEL, foreground=COLOR_TEXT,
+                    font=("TkDefaultFont", 13, "bold"))
     style.configure("Muted.TLabel", background=COLOR_APP_BG, foreground=COLOR_MUTED)
     style.configure("Status.TLabel", background=COLOR_PANEL_ALT, foreground=COLOR_MUTED,
                     padding=(8, 5))
     style.configure("TButton", padding=(12, 7))
-    style.configure("Primary.TButton", padding=(14, 8), foreground="white",
-                    background=COLOR_PRIMARY)
-    style.map("Primary.TButton",
-              background=[("active", COLOR_PRIMARY_DARK), ("pressed", COLOR_PRIMARY_DARK)])
-    style.configure("Danger.TButton", padding=(12, 7), foreground=COLOR_DANGER)
     style.configure("Treeview", rowheight=28, background=COLOR_PANEL,
                     fieldbackground=COLOR_PANEL, borderwidth=0)
     style.configure("Treeview.Heading", padding=(8, 6),
@@ -103,6 +100,33 @@ def aplicar_estilo(root):
     style.map("Treeview", background=[("selected", COLOR_SELECTED)],
               foreground=[("selected", COLOR_TEXT)])
     return style
+
+
+def boton_primario(parent, texto, comando):
+    """Boton de la accion principal (azul relleno, texto blanco).
+
+    En Windows los temas ttk (vista/xpnative) IGNORAN el color de fondo de los
+    botones: con Primary.TButton el texto blanco quedaba sobre fondo blanco,
+    invisible. Por eso aqui se usa un tk.Button clasico, que si acepta colores.
+    En macOS el boton nativo aqua se ve bien y no admite fondo: se deja ttk."""
+    if sys.platform == "darwin":
+        return ttk.Button(parent, text=texto, command=comando)
+    return tk.Button(parent, text=texto, command=comando,
+                     bg=COLOR_PRIMARY, fg="white",
+                     activebackground=COLOR_PRIMARY_DARK, activeforeground="white",
+                     disabledforeground="#bdd7ef",
+                     relief="flat", bd=0, cursor="hand2",
+                     font=("TkDefaultFont", 10, "bold"), padx=16, pady=8)
+
+
+def boton_peligro(parent, texto, comando):
+    """Boton de accion destructiva (rojo sobre fondo rojizo suave)."""
+    if sys.platform == "darwin":
+        return ttk.Button(parent, text=texto, command=comando)
+    return tk.Button(parent, text=texto, command=comando,
+                     bg="#fbeceb", fg=COLOR_DANGER,
+                     activebackground="#f6d9d6", activeforeground=COLOR_DANGER,
+                     relief="flat", bd=0, cursor="hand2", padx=12, pady=7)
 
 
 def en_hilo(root, trabajo, al_terminar):

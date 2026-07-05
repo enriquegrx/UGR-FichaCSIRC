@@ -54,6 +54,14 @@ definición completa y el historial de decisiones.
   instalador.
 - v2.1.7 (jul 2026): eliminar con multiselección borra TODOS los apuntes
   seleccionados (antes solo `sel[0]`) y Deshacer restaura el lote completo.
+- v2.2.0 (jul 2026): el actualizador lanza el instalador con `Popen([ruta])`
+  directo — la cadena `cmd /c ... start` mangleaba las comillas (`\"` no es
+  escape para cmd) y `start` buscaba el archivo «\\». OJO: en Windows los temas
+  ttk ignoran el fondo de los botones; los botones con color usan `tk.Button`
+  vía `fichaui.boton_primario/boton_peligro` (en macOS devuelven ttk nativo).
+  Revisión UI: fondo gris con paneles-tarjeta, navegación `← Hoy →` agrupada,
+  título de semana grande, banda azul en la tarjeta de "hoy" (widgets con
+  `_fijo=True` no se repintan en `_pintar_sel`), formulario realineado.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
