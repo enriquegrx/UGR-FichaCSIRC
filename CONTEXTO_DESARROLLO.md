@@ -1,4 +1,4 @@
-# Contexto para Claude Code — FichaCSIRC
+# Contexto de desarrollo - FichaCSIRC
 
 App de escritorio (Windows, Python/Tkinter) para fichar horas en OpenProject
 (instancia ProyectosTic de la UGR) vía su API REST v3. Ver `README.md` para la
