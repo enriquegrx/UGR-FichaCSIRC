@@ -89,5 +89,20 @@ definición completa y el historial de decisiones.
   con la red mockeada, más un smoke test de la GUI (`test_gui_smoke.py`, se salta sin
   display). Ejecutarlos tras tocar el motor o la GUI.
 
+- v2.4.0 (jul 2026): módulo de días especiales. Festivos **calculados por año**
+  (`_pascua` Gauss; `festivos_del_anio` con ámbitos nacional/andalucia/local:
+  incluye 28-feb, Toma de Granada 2-ene y Corpus=Pascua+60). Diálogo "Importar
+  festivos" con casillas por ámbito (`dialogos.abrir_importar_festivos`). Preset
+  `DIAS_UGR_CONOCIDOS` + config `dias_ugr` (Navidad/Semana Santa/San Pascual/Feria,
+  **a rellenar con el calendario laboral PTGAS**, se trasladan y no se calculan).
+  Vacaciones: color morado (`es_vacaciones`), cupo libre `cupo_vacaciones` y
+  contador `vacaciones_usadas`. Modalidades independientes que NO cambian objetivo:
+  guardia (`GUARDIAS`, comentario "Servicio de Guardia" autorrelleno) y teletrabajo
+  (`TELETRABAJO`, cupo semanal `teletrabajo_por_semana`, aviso suave). Chips en la
+  tarjeta, leyenda bajo la semana, contador teletrabajo en el título. Diálogo
+  "Vacaciones y teletrabajo" (`dialogos.abrir_ajustes_dias`). Fichar en día no
+  laborable avisa claro (no "0h") y nunca bloquea. El wizard admite medias horas.
+
 ## Pendiente / ideas
+- Rellenar `DIAS_UGR_CONOCIDOS` con el calendario laboral PTGAS oficial cada año.
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.

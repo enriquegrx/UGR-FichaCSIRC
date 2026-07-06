@@ -1,8 +1,8 @@
 # Metadatos de version para los .exe (PyInstaller --version-file)
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(2, 3, 3, 0),
-    prodvers=(2, 3, 3, 0),
+    filevers=(2, 4, 0, 0),
+    prodvers=(2, 4, 0, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -15,9 +15,9 @@ VSVersionInfo(
       StringTable('040a04B0', [
         StringStruct('CompanyName', 'Universidad de Granada - CSIRC'),
         StringStruct('FileDescription', 'FichaCSIRC - Registro de horas en OpenProject'),
-        StringStruct('FileVersion', '2.3.3'),
+        StringStruct('FileVersion', '2.4.0'),
         StringStruct('ProductName', 'FichaCSIRC'),
-        StringStruct('ProductVersion', '2.3.3'),
+        StringStruct('ProductVersion', '2.4.0'),
         StringStruct('LegalCopyright', 'Proyecto interno UGR')
       ])
     ]),

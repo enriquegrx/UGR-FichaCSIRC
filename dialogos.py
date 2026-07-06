@@ -656,3 +656,124 @@ def abrir_exportar(app):
     btn_exp = ttk.Button(btns2, text="Exportar", command=exportar)
     btn_exp.pack(side="right", padx=4)
     ttk.Button(btns2, text="Cancelar", command=cerrar).pack(side="right")
+
+
+def abrir_importar_festivos(app):
+    """Marca festivos como no laborables, eligiendo el ámbito."""
+    top = tk.Toplevel(app.root)
+    top.title("Importar festivos")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+    ttk.Label(frm, text="Marca como no laborables los festivos de:",
+              style="Section.TLabel").pack(anchor="w")
+
+    v_nac = tk.BooleanVar(value=True)
+    v_and = tk.BooleanVar(value=True)
+    v_loc = tk.BooleanVar(value=True)
+    v_ugr = tk.BooleanVar(value=True)
+    for txt, var in (("Nacionales", v_nac), ("Andalucía", v_and),
+                     ("Locales (Granada capital)", v_loc),
+                     ("Días propios UGR (Navidad, Semana Santa, San Pascual…)", v_ugr)):
+        ttk.Checkbutton(frm, text=txt, variable=var,
+                        command=lambda: recalc()).pack(anchor="w", pady=1)
+
+    lbl = ttk.Label(frm, text="", justify="left", font=("Consolas", 9))
+    lbl.pack(anchor="w", pady=(8, 0))
+
+    estado = {"pendientes": {}}
+
+    def _ambitos():
+        amb = []
+        if v_nac.get():
+            amb.append("nacional")
+        if v_and.get():
+            amb.append("andalucia")
+        if v_loc.get():
+            amb.append("local")
+        return tuple(amb)
+
+    def recalc():
+        pend = core.festivos_pendientes(_ambitos(), incluir_ugr=v_ugr.get())
+        estado["pendientes"] = pend
+        if not pend:
+            lbl.config(text="No hay festivos nuevos que marcar con esta selección.")
+        else:
+            lineas = "\n".join(
+                f"  {dt.date.fromisoformat(f).strftime('%d/%m/%Y')}  ·  {m}"
+                for f, m in sorted(pend.items()))
+            lbl.config(text=f"Se marcarán {len(pend)} días:\n{lineas}")
+        b_imp.config(state=("normal" if pend else "disabled"))
+
+    def importar():
+        pend = estado["pendientes"]
+        if not pend:
+            return
+        core.NO_LABORABLES.update(pend)
+        core.guardar_config_valor("no_laborables", core.NO_LABORABLES)
+        top.destroy()
+        app._msg_pendiente = f"{len(pend)} festivos marcados."
+        app.refrescar()
+
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", pady=(12, 0))
+    ttk.Label(btns, text="Cualquiera se quita con botón derecho sobre su día.",
+              style="Muted.TLabel").pack(side="left")
+    ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
+    b_imp = ttk.Button(btns, text="Importar", command=importar)
+    b_imp.pack(side="right", padx=4)
+    recalc()
+
+
+def abrir_ajustes_dias(app):
+    """Ajustes de vacaciones (cupo anual) y teletrabajo (cupo semanal)."""
+    anio = dt.date.today().year
+    top = tk.Toplevel(app.root)
+    top.title("Vacaciones y teletrabajo")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+
+    ttk.Label(frm, text="Vacaciones", style="Section.TLabel").grid(
+        row=0, column=0, columnspan=2, sticky="w")
+    ttk.Label(frm, text=f"Días de vacaciones al año ({anio}):").grid(
+        row=1, column=0, sticky="w", pady=3)
+    e_cupo = ttk.Spinbox(frm, from_=0, to=60, width=6)
+    e_cupo.set(core.cupo_vacaciones())
+    e_cupo.grid(row=1, column=1, sticky="w", padx=6)
+    usadas = core.vacaciones_usadas(anio)
+    ttk.Label(frm, text=f"Ya usados este año: {usadas}",
+              style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w")
+    ttk.Label(frm, text="Fijos: 22, +1 a los 15/20/25/30 años.\n"
+                        "Interinos: los que te corresponden por prorrateo (RRHH).",
+              style="Muted.TLabel").grid(row=3, column=0, columnspan=2,
+                                         sticky="w", pady=(2, 10))
+
+    ttk.Label(frm, text="Teletrabajo", style="Section.TLabel").grid(
+        row=4, column=0, columnspan=2, sticky="w")
+    ttk.Label(frm, text="Días de teletrabajo por semana:").grid(
+        row=5, column=0, sticky="w", pady=3)
+    e_tt = ttk.Spinbox(frm, from_=0, to=5, width=6)
+    e_tt.set(core.teletrabajo_por_semana())
+    e_tt.grid(row=5, column=1, sticky="w", padx=6)
+    ttk.Label(frm, text="0 = no llevar la cuenta.",
+              style="Muted.TLabel").grid(row=6, column=0, columnspan=2, sticky="w")
+
+    def guardar():
+        try:
+            cupo = int(float(e_cupo.get()))
+            tt = int(float(e_tt.get()))
+        except ValueError:
+            messagebox.showwarning("Valores", "Escribe números válidos.", parent=top)
+            return
+        core.guardar_config_valor("cupo_vacaciones", cupo)
+        core.guardar_config_valor("teletrabajo_por_semana", tt)
+        top.destroy()
+        app.refrescar()
+
+    btns = ttk.Frame(frm)
+    btns.grid(row=7, column=0, columnspan=2, sticky="e", pady=(12, 0))
+    ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
+    ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")

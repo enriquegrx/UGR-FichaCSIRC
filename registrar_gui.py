@@ -44,7 +44,9 @@ import dialogos
 import recordatorio
 from fichaui import (
     COLOR_APP_BG, COLOR_BORDER, COLOR_DANGER, COLOR_MUTED, COLOR_PANEL,
-    COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING, Tooltip,
+    COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING,
+    COLOR_VACACIONES, COLOR_GUARDIA_BG, COLOR_GUARDIA_FG, COLOR_TELE_BG,
+    COLOR_TELE_FG, Tooltip,
     TooltipFilas, aplicar_estilo, boton_peligro, boton_primario, en_hilo,
     recurso, carpeta_app,
 )
@@ -292,6 +294,8 @@ class App:
                         "o una plantilla guardada.\n"
                         "(Botón derecho en un día: marcarlo festivo/vacaciones)")
 
+        self._construir_leyenda(diaf)
+
         # Lista de apuntes
         midf = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
         midf.pack(fill="both", expand=True, padx=12, pady=(0, 8))
@@ -424,7 +428,9 @@ class App:
         m_herr = tk.Menu(barra, tearoff=0)
         m_herr.add_command(label="Plantillas...", command=self._plantillas)
         m_herr.add_command(label="Importar festivos...",
-                           command=self._importar_festivos)
+                           command=lambda: dialogos.abrir_importar_festivos(self))
+        m_herr.add_command(label="Vacaciones y teletrabajo...",
+                           command=lambda: dialogos.abrir_ajustes_dias(self))
         if recordatorio.recordatorios_soportados():
             m_herr.add_command(label="Aviso diario de fichaje...",
                                command=self._config_recordatorio)
@@ -443,6 +449,30 @@ class App:
         barra.add_cascade(label="Ayuda", menu=m_ayuda)
         self.root.config(menu=barra)
 
+    def _construir_leyenda(self, parent):
+        """Tira compacta que explica los colores (tipo de día) y chips (modalidad)."""
+        fila = ttk.Frame(parent, style="Panel.TFrame")
+        fila.pack(fill="x", pady=(10, 0))
+
+        def swatch(color, texto):
+            cont = ttk.Frame(fila, style="Panel.TFrame")
+            cont.pack(side="left", padx=(0, 14))
+            tk.Label(cont, bg=color, width=2, height=1).pack(side="left", padx=(0, 5))
+            ttk.Label(cont, text=texto, style="Muted.TLabel").pack(side="left")
+
+        def chip(bg, fg, texto):
+            cont = ttk.Frame(fila, style="Panel.TFrame")
+            cont.pack(side="left", padx=(0, 14))
+            tk.Label(cont, text=texto, bg=bg, fg=fg,
+                     font=("TkDefaultFont", 8), padx=5).pack(side="left")
+
+        swatch(COLOR_SUCCESS, "Completo")
+        swatch(COLOR_WARNING, "Parcial")
+        swatch(COLOR_MUTED, "Festivo / cierre")
+        swatch(COLOR_VACACIONES, "Vacaciones")
+        chip(COLOR_GUARDIA_BG, COLOR_GUARDIA_FG, "⚙ Guardia")
+        chip(COLOR_TELE_BG, COLOR_TELE_FG, "⌂ Teletrabajo")
+
     def _acerca_de(self):
         messagebox.showinfo(
             "Acerca de FichaCSIRC",
@@ -450,28 +480,6 @@ class App:
             f"Compilación: {self._fecha_build()}\n\n"
             "Registro de horas en OpenProject (ProyectosTic, UGR).\n"
             + (f"github.com/{core.GITHUB_REPO}" if core.GITHUB_REPO else ""))
-
-    def _importar_festivos(self):
-        """Marca de golpe los festivos conocidos (nacional/Andalucía/Granada)."""
-        pendientes = core.festivos_pendientes()
-        if not pendientes:
-            messagebox.showinfo(
-                "Importar festivos",
-                "Los festivos conocidos ya están marcados como no laborables.")
-            return
-        lineas = "\n".join(
-            f"  {dt.date.fromisoformat(f).strftime('%d/%m/%Y')}  ·  {m}"
-            for f, m in sorted(pendientes.items()))
-        if not messagebox.askyesno(
-                "Importar festivos",
-                f"¿Marcar estos {len(pendientes)} días como no laborables?\n\n"
-                f"{lineas}\n\n"
-                "Revísalos: los traslados los decide la Junta cada año.\n"
-                "(Cualquiera se quita con el botón derecho sobre su tarjeta.)"):
-            return
-        core.importar_festivos()
-        self._msg_pendiente = f"{len(pendientes)} festivos marcados."
-        self.refrescar()
 
     def _atajos(self):
         messagebox.showinfo(
@@ -483,7 +491,7 @@ class App:
             "Ctrl+←/→\tSemana anterior / siguiente\n"
             "Alt+1..5\tMarcar/desmarcar lunes..viernes\n\n"
             "Doble clic en un apunte: editarlo.\n"
-            "Botón derecho en un día: marcarlo festivo/vacaciones.")
+            "Botón derecho en un día: festivo/vacaciones y guardia/teletrabajo.")
 
     def _config_recordatorio(self):
         """Activa/desactiva el aviso diario de fichaje (tarea programada)."""
@@ -637,9 +645,11 @@ class App:
                       for d in dias)
         obj_sem = sum(core.objetivo_de(d) for d in dias)
         dom = dias[0] + dt.timedelta(days=6)
+        cupo_tt = core.teletrabajo_por_semana()
+        tt = f"    ·    ⌂ {core.teletrabajo_en_semana(dias[0])}/{cupo_tt}" if cupo_tt else ""
         self.lbl_semana.config(
             text=f"Semana {dias[0].strftime('%d/%m/%Y')} - {dom.strftime('%d/%m/%Y')}"
-                 f"    ·    {core._fmt(reg_sem)} / {obj_sem}h")
+                 f"    ·    {core._fmt(reg_sem)} / {obj_sem}h{tt}")
         for w in self.dias_frame.winfo_children():
             w.destroy()
         self.dia_vars = []
@@ -669,7 +679,9 @@ class App:
             cv = tk.Canvas(card, height=8, highlightthickness=0, bg=COLOR_PANEL)
             cv.pack(fill="x", padx=12)
             if nolab:
-                frac, color = 1.0, COLOR_MUTED
+                # Vacaciones en morado; festivo/cierre/otros en gris. Nunca rojo.
+                color = COLOR_VACACIONES if core.es_vacaciones(d.isoformat()) else COLOR_MUTED
+                frac = 1.0
                 texto2 = core.motivo_no_laborable(d.isoformat()).capitalize()
                 if reg:
                     texto2 = f"{core._fmt(reg)} · {texto2}"
@@ -689,7 +701,22 @@ class App:
                 texto2 = f"0h / {obj}h"
             lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 12, "bold"),
                             fg=color, bg=COLOR_PANEL, anchor="w")
-            lbl2.pack(fill="x", padx=12, pady=(7, 10))
+            lbl2.pack(fill="x", padx=12, pady=(7, 6 if (core.es_guardia(d.isoformat())
+                                                        or core.es_teletrabajo(d.isoformat()))
+                                                else 10))
+
+            # Chips de modalidad (guardia / teletrabajo). _fijo: no se repintan
+            # con la seleccion, para conservar su color propio.
+            chips = []
+            if core.es_guardia(d.isoformat()):
+                chips.append(("⚙ Guardia", COLOR_GUARDIA_BG, COLOR_GUARDIA_FG))
+            if core.es_teletrabajo(d.isoformat()):
+                chips.append(("⌂ Teletrabajo", COLOR_TELE_BG, COLOR_TELE_FG))
+            for texto_chip, bg_chip, fg_chip in chips:
+                chip = tk.Label(card, text=texto_chip, bg=bg_chip, fg=fg_chip,
+                                font=("TkDefaultFont", 9), padx=6, pady=1)
+                chip._fijo = True
+                chip.pack(anchor="w", padx=12, pady=(0, 6))
 
             def dibujar(_e=None, cv=cv, frac=frac, color=color):
                 cv.delete("all")
@@ -788,6 +815,7 @@ class App:
                 motivo = core.motivo_no_laborable(d.isoformat())
                 self.status.config(text=f"{etiqueta}: no laborable ({motivo})")
                 self._sugerir_horas(0)
+                self._sugerir_comentario()   # p. ej. guardia en vacaciones
                 return
             apuntes = self._cache_dia.get(d.isoformat())
             reg = sum(a["horas"] for a in apuntes) if apuntes else 0
@@ -797,6 +825,7 @@ class App:
                      else ("completo" if abs(falta) < 0.001 else f"te pasas {core._fmt(-falta)}"))
             self.status.config(text=f"{etiqueta}: {core._fmt(reg)}/{obj}h  ({extra})")
             self._sugerir_horas(falta)
+            self._sugerir_comentario()
         elif marcados:
             self.status.config(text=f"{len(marcados)} días marcados")
         else:
@@ -808,15 +837,20 @@ class App:
             self._click_dia(self.dia_vars[i][0])
 
     def _sugerir_comentario(self, _e=None):
-        """Pre-rellena el comentario habitual de la tarea elegida,
-        sin pisar lo escrito a mano."""
-        wp_id = self.tareas.get(self.cbo_tarea.get())
-        if wp_id is None:
-            return
-        sugerido = (core.config_valor("comentarios_tarea") or {}).get(str(wp_id), "")
+        """Pre-rellena el comentario, sin pisar lo escrito a mano. En un día de
+        guardia gana 'Servicio de Guardia'; si no, el comentario habitual de la
+        tarea elegida."""
         actual = self.ent_com.get().strip()
         if actual and actual != self._com_auto:
             return
+        marcados = self._dias_marcados()
+        if len(marcados) == 1 and core.es_guardia(marcados[0].isoformat()):
+            sugerido = core.comentario_guardia()
+        else:
+            wp_id = self.tareas.get(self.cbo_tarea.get())
+            if wp_id is None:
+                return
+            sugerido = (core.config_valor("comentarios_tarea") or {}).get(str(wp_id), "")
         self.ent_com.delete(0, "end")
         if sugerido:
             self.ent_com.insert(0, sugerido)
@@ -864,9 +898,10 @@ class App:
 
     # ---------- acciones del dia/semana ----------
     def _menu_dia(self, evento, d):
-        """Menu contextual de una tarjeta: marcar/quitar dia no laborable."""
+        """Menu contextual de una tarjeta: tipo de dia y modalidad de trabajo."""
         fecha = d.isoformat()
         menu = tk.Menu(self.root, tearoff=0)
+        # --- Tipo de dia (no laborable) ---
         if core.es_no_laborable(fecha):
             menu.add_command(
                 label=f"Quitar marca ({core.motivo_no_laborable(fecha)})",
@@ -879,7 +914,37 @@ class App:
                     command=lambda m=motivo: (core.marcar_no_laborable(fecha, m),
                                               self.refrescar()))
             menu.add_cascade(label="Marcar como no laborable", menu=sub)
+        menu.add_separator()
+        # --- Modalidad de trabajo (se trabaja igual) ---
+        if core.es_guardia(fecha):
+            menu.add_command(label="Quitar guardia",
+                             command=lambda: (core.quitar_guardia(fecha), self.refrescar()))
+        else:
+            menu.add_command(label="Marcar día de guardia",
+                             command=lambda: self._marcar_guardia(fecha))
+        if core.es_teletrabajo(fecha):
+            menu.add_command(label="Quitar teletrabajo",
+                             command=lambda: (core.quitar_teletrabajo(fecha), self.refrescar()))
+        else:
+            menu.add_command(label="Marcar teletrabajo",
+                             command=lambda: self._marcar_teletrabajo(d))
         menu.tk_popup(evento.x_root, evento.y_root)
+
+    def _marcar_guardia(self, fecha):
+        core.marcar_guardia(fecha)
+        self.refrescar()
+
+    def _marcar_teletrabajo(self, d):
+        lunes = d - dt.timedelta(days=d.weekday())
+        cupo = core.teletrabajo_por_semana()
+        if cupo and core.teletrabajo_en_semana(lunes) >= cupo:
+            if not messagebox.askyesno(
+                    "Teletrabajo",
+                    f"Ya tienes {cupo} día(s) de teletrabajo esta semana.\n"
+                    "¿Marcar otro igualmente?"):
+                return
+        core.marcar_teletrabajo(d.isoformat())
+        self.refrescar()
 
     def _deshacer_borrado(self):
         """Restaura el último borrado (uno o varios apuntes)."""
@@ -1116,12 +1181,32 @@ class App:
                     f"¿Añadir {core._fmt(horas)} de '{txt}' [{actividad}] a {len(dias)} días?"):
                 return
 
-        # Aviso si con este apunte algun dia supera su jornada
+        # Aviso 1: dias no laborables (festivo/vacaciones/cierre) -> permitir,
+        # pero con un mensaje claro (una guardia en festivo es un caso real).
+        nolab = []
+        for d in dias:
+            existentes = self._cache_dia.get(d.isoformat()) or []
+            if any(str(e.get("wp_id")) == str(wp_id) for e in existentes):
+                continue
+            if core.es_no_laborable(d.isoformat()):
+                nolab.append(f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')} "
+                             f"({core.motivo_no_laborable(d.isoformat())})")
+        if nolab:
+            plural = "estos días son no laborables" if len(nolab) > 1 else "ese día es no laborable"
+            if not messagebox.askyesno(
+                    "Día no laborable",
+                    f"Vas a imputar horas aunque {plural}:\n  "
+                    + "\n  ".join(nolab) + "\n\n¿Continuar igualmente?"):
+                return
+
+        # Aviso 2: en dias laborables, si con este apunte se supera la jornada
         exceso = []
         for d in dias:
             existentes = self._cache_dia.get(d.isoformat()) or []
             if any(str(e.get("wp_id")) == str(wp_id) for e in existentes):
                 continue  # se saltara por duplicado, no suma
+            if core.es_no_laborable(d.isoformat()):
+                continue  # ya avisado arriba; su objetivo es 0
             reg = sum(a["horas"] for a in existentes)
             if reg + horas > core.objetivo_de(d) + 0.001:
                 exceso.append(f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')} "

@@ -28,6 +28,12 @@ COLOR_SUCCESS = "#248a46"
 COLOR_WARNING = "#b7791f"
 COLOR_DANGER = "#b42318"
 COLOR_SELECTED = "#e8f3ff"
+# Tipo de dia (barra) y modalidades (chips)
+COLOR_VACACIONES = "#7a5db5"       # morado: dia de vacaciones
+COLOR_GUARDIA_BG = "#e6f1fb"       # chip guardia (fondo azul claro)
+COLOR_GUARDIA_FG = "#0c447c"       # chip guardia (texto azul oscuro)
+COLOR_TELE_BG = "#eceff3"          # chip teletrabajo (fondo gris)
+COLOR_TELE_FG = "#44484f"          # chip teletrabajo (texto gris)
 
 
 def recurso(carpeta, nombre):

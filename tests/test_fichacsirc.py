@@ -422,6 +422,88 @@ class TestPendientes(unittest.TestCase):
         self.assertEqual(recordatorio.mensaje_pendientes([]), "")
 
 
+class TestFestivos(unittest.TestCase):
+    def test_pascua(self):
+        self.assertEqual(core._pascua(2026), dt.date(2026, 4, 5))
+        self.assertEqual(core._pascua(2027), dt.date(2027, 3, 28))
+
+    def test_festivos_del_anio_2026(self):
+        f = core.festivos_del_anio(2026)
+        self.assertEqual(f["2026-04-02"][0], "Jueves Santo")
+        self.assertEqual(f["2026-04-03"][0], "Viernes Santo")
+        self.assertEqual(f["2026-06-04"][0], "Corpus Christi")     # Pascua + 60
+        self.assertEqual(f["2026-02-28"][0], "Día de Andalucía")
+        self.assertEqual(f["2026-01-02"][0], "Toma de Granada")
+        self.assertEqual(f["2026-12-25"][0], "Navidad")
+        self.assertEqual(f["2026-06-04"][1], "local")
+
+    def test_ambitos(self):
+        solo_nac = core.festivos_del_anio(2026, ambitos=("nacional",))
+        self.assertIn("2026-12-25", solo_nac)
+        self.assertNotIn("2026-02-28", solo_nac)   # Andalucia fuera
+        self.assertNotIn("2026-01-02", solo_nac)   # local fuera
+
+    def test_festivos_locales_extra(self):
+        core.guardar_config_valor("festivos_locales_extra", ["09-08"])
+        try:
+            f = core.festivos_del_anio(2026)
+            self.assertIn("2026-09-08", f)
+        finally:
+            core.guardar_config_valor("festivos_locales_extra", [])
+
+    def test_festivos_pendientes_salta_finde_y_marcados(self):
+        with mock.patch.object(core, "NO_LABORABLES", {"2026-12-25": "Navidad"}):
+            pend = core.festivos_pendientes(ambitos=("nacional",), incluir_ugr=False)
+        self.assertNotIn("2026-12-25", pend)          # ya marcado
+        self.assertNotIn("2026-02-28", pend)          # sabado (y ambito fuera)
+        self.assertIn("2026-01-06", pend)             # Reyes, laborable, sin marcar
+
+    def test_dias_ugr_desde_config(self):
+        core.guardar_config_valor("dias_ugr", {"2026-05-18": "San Pascual"})
+        try:
+            self.assertIn("2026-05-18", core.dias_ugr())
+        finally:
+            core.guardar_config_valor("dias_ugr", {})
+
+
+class TestModalidades(unittest.TestCase):
+    def tearDown(self):
+        core.GUARDIAS.clear()
+        core.TELETRABAJO.clear()
+        core.guardar_config_valor("guardias", [])
+        core.guardar_config_valor("teletrabajo", [])
+
+    def test_guardia(self):
+        core.marcar_guardia("2026-10-12")
+        self.assertTrue(core.es_guardia("2026-10-12"))
+        core.quitar_guardia("2026-10-12")
+        self.assertFalse(core.es_guardia("2026-10-12"))
+
+    def test_comentario_guardia_por_defecto(self):
+        self.assertEqual(core.comentario_guardia(), "Servicio de Guardia")
+
+    def test_teletrabajo_cupo_semanal(self):
+        lunes = dt.date(2026, 7, 6)  # lunes
+        self.assertEqual(core.teletrabajo_en_semana(lunes), 0)
+        core.marcar_teletrabajo("2026-07-07")   # martes
+        core.marcar_teletrabajo("2026-07-11")   # sabado: fuera de L-V
+        self.assertEqual(core.teletrabajo_en_semana(lunes), 1)
+        self.assertEqual(core.teletrabajo_por_semana(), 1)
+
+
+class TestVacacionesCupo(unittest.TestCase):
+    def test_vacaciones_usadas(self):
+        nl = {"2026-07-06": "vacaciones",   # lunes
+              "2026-07-07": "Vacaciones",   # martes (mayus)
+              "2026-07-11": "vacaciones",   # sabado: no cuenta
+              "2026-07-08": "festivo",      # otro motivo: no cuenta
+              "2025-07-07": "vacaciones"}   # otro año: no cuenta
+        with mock.patch.object(core, "NO_LABORABLES", nl):
+            self.assertEqual(core.vacaciones_usadas(2026), 2)
+            self.assertTrue(core.es_vacaciones("2026-07-06"))
+            self.assertFalse(core.es_vacaciones("2026-07-08"))
+
+
 class TestConfigPersistente(unittest.TestCase):
     def test_anadir_favorito_no_duplica(self):
         antes = len(core.FAVORITOS)

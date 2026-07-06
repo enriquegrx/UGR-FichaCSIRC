@@ -31,8 +31,11 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
   posibilidad de deshacer.
 - Copiar el día anterior, copiar la semana anterior o aplicar plantillas de día
   típico.
-- Marcar festivos, vacaciones u otros días no laborables.
-- Importar festivos conocidos de ámbito nacional, Andalucía y Granada.
+- Marcar festivos, vacaciones u otros días no laborables (nunca bloquean el fichaje).
+- Importar festivos por ámbito (nacional, Andalucía, Granada) calculados para cada
+  año, más un preset de días propios de la UGR.
+- Marcar guardias (con comentario "Servicio de Guardia" automático) y teletrabajo,
+  con contador semanal; llevar la cuenta del cupo de vacaciones.
 - Consultar un resumen mensual con objetivo, horas registradas y días
   incompletos.
 - Exportar horas a CSV.

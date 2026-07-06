@@ -45,7 +45,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.3.3"
+VERSION = "2.4.0"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -192,6 +192,10 @@ VERANO_FIN = tuple(_cfg.get("verano_fin", [9, 15]))
 FAVORITOS = _cfg.get("favoritos", [])
 NO_LABORABLES = dict(_cfg.get("no_laborables", {}))  # "AAAA-MM-DD" -> motivo
 PLANTILLAS = list(_cfg.get("plantillas", []))
+# Modalidades de trabajo (NO son dias no laborables: se trabaja igual). Cada
+# una es un conjunto de fechas "AAAA-MM-DD".
+GUARDIAS = set(_cfg.get("guardias", []))
+TELETRABAJO = set(_cfg.get("teletrabajo", []))
 
 
 def config_valor(clave, defecto=None):
@@ -563,40 +567,109 @@ def quitar_no_laborable(fecha_iso):
     guardar_config_valor("no_laborables", NO_LABORABLES)
 
 
-# Festivos conocidos (nacionales + Andalucia + Granada). REVISAR CADA AÑO:
-# los traslados de domingo a lunes los decide la Junta y pueden cambiar.
-# Se importan desde la GUI (Herramientas > Importar festivos).
-FESTIVOS_CONOCIDOS = {
-    "2026-01-01": "Año Nuevo",
-    "2026-01-02": "Toma de Granada",
-    "2026-01-06": "Reyes",
-    "2026-04-02": "Jueves Santo",
-    "2026-04-03": "Viernes Santo",
-    "2026-05-01": "Día del Trabajo",
-    "2026-06-04": "Corpus Christi",
-    "2026-10-12": "Fiesta Nacional",
-    "2026-11-02": "Todos los Santos (traslado)",
-    "2026-12-07": "La Constitución (traslado)",
-    "2026-12-08": "La Inmaculada",
-    "2026-12-25": "Navidad",
+# ----------------------- festivos -----------------------
+
+AMBITOS = ("nacional", "andalucia", "local")
+
+
+def _pascua(anio):
+    """Domingo de Pascua del anio (algoritmo de Gauss/Butcher)."""
+    a = anio % 19
+    b, c = divmod(anio, 100)
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    ll = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * ll) // 451
+    mes = (h + ll - 7 * m + 114) // 31
+    dia = ((h + ll - 7 * m + 114) % 31) + 1
+    return dt.date(anio, mes, dia)
+
+
+def festivos_del_anio(anio, ambitos=AMBITOS):
+    """Festivos {fecha_iso: (nombre, ambito)} CALCULADOS para el anio.
+
+    - nacional: fijos + Jueves/Viernes Santo (derivados de la Pascua).
+    - andalucia: Dia de Andalucia (28-feb).
+    - local: Granada = Toma de Granada (2-ene) + Corpus (Pascua+60), mas los
+      festivos locales extra de config (`festivos_locales_extra`, lista de
+      'MM-DD' para quien este en otro municipio).
+    """
+    pascua = _pascua(anio)
+    festivos = {}
+
+    def _add(fecha, nombre, ambito):
+        festivos[fecha.isoformat()] = (nombre, ambito)
+
+    if "nacional" in ambitos:
+        for mes, dia, nombre in [
+            (1, 1, "Año Nuevo"), (1, 6, "Reyes"), (5, 1, "Día del Trabajo"),
+            (8, 15, "Asunción"), (10, 12, "Fiesta Nacional"),
+            (11, 1, "Todos los Santos"), (12, 6, "La Constitución"),
+            (12, 8, "La Inmaculada"), (12, 25, "Navidad"),
+        ]:
+            _add(dt.date(anio, mes, dia), nombre, "nacional")
+        _add(pascua - dt.timedelta(days=3), "Jueves Santo", "nacional")
+        _add(pascua - dt.timedelta(days=2), "Viernes Santo", "nacional")
+
+    if "andalucia" in ambitos:
+        _add(dt.date(anio, 2, 28), "Día de Andalucía", "andalucia")
+
+    if "local" in ambitos:
+        _add(dt.date(anio, 1, 2), "Toma de Granada", "local")
+        _add(pascua + dt.timedelta(days=60), "Corpus Christi", "local")
+        for md in config_valor("festivos_locales_extra", []) or []:
+            try:
+                mes, dia = (int(x) for x in str(md).split("-"))
+                _add(dt.date(anio, mes, dia), "Festivo local", "local")
+            except (ValueError, TypeError):
+                pass
+
+    return festivos
+
+
+# Dias propios de la UGR (cierres de Navidad/Semana Santa, San Pascual Bailon
+# patron del PTGAS, Feria del Corpus). Se fijan cada año en el calendario
+# laboral del PTGAS y se trasladan si caen en finde, asi que NO se calculan:
+# se rellenan con el PDF oficial, aqui o en config (`dias_ugr`).
+DIAS_UGR_CONOCIDOS = {
+    # "2026-05-18": "San Pascual Bailón (patrón PTGAS)",
+    # "2026-12-24": "Cierre de Navidad",
 }
 
 
-def festivos_pendientes():
-    """Festivos conocidos que caen en dia laborable y aun no estan marcados."""
+def dias_ugr():
+    """Dias UGR conocidos + los que el usuario añada en config (`dias_ugr`)."""
+    combinado = dict(DIAS_UGR_CONOCIDOS)
+    combinado.update(config_valor("dias_ugr", {}) or {})
+    return combinado
+
+
+def festivos_pendientes(ambitos=AMBITOS, incluir_ugr=True):
+    """Festivos de los ambitos pedidos (del año en curso y el siguiente) que
+    caen en dia laborable y aun no estan marcados. Devuelve {fecha_iso: nombre}."""
+    hoy = _hoy()
+    catalogo = {}
+    for anio in (hoy.year, hoy.year + 1):  # +1: para enero (Año Nuevo, Reyes...)
+        for fecha, (nombre, _amb) in festivos_del_anio(anio, ambitos).items():
+            catalogo[fecha] = nombre
+    if incluir_ugr:
+        catalogo.update(dias_ugr())
     out = {}
-    for fecha, motivo in FESTIVOS_CONOCIDOS.items():
+    for fecha, nombre in catalogo.items():
         if fecha in NO_LABORABLES:
             continue
         if dt.date.fromisoformat(fecha).weekday() >= 5:
             continue
-        out[fecha] = motivo
+        out[fecha] = nombre
     return out
 
 
-def importar_festivos():
-    """Marca como no laborables los festivos pendientes. Devuelve cuantos."""
-    pendientes = festivos_pendientes()
+def importar_festivos(ambitos=AMBITOS, incluir_ugr=True):
+    """Marca como no laborables (motivo = nombre del festivo) los pendientes."""
+    pendientes = festivos_pendientes(ambitos, incluir_ugr)
     NO_LABORABLES.update(pendientes)
     if pendientes:
         guardar_config_valor("no_laborables", NO_LABORABLES)
@@ -604,10 +677,86 @@ def importar_festivos():
 
 
 def objetivo_de(dia):
-    """Jornada objetivo del dia, contando los dias marcados como no laborables."""
+    """Jornada objetivo del dia, contando los dias marcados como no laborables.
+    Guardia y teletrabajo NO cambian el objetivo (se trabaja igual)."""
     if es_no_laborable(dia.isoformat()):
         return 0
     return jornada_de(dia)
+
+
+# ----------------------- vacaciones (cupo anual) -----------------------
+
+def es_vacaciones(fecha_iso):
+    """Un dia no laborable cuyo motivo son vacaciones (cuenta al cupo)."""
+    return motivo_no_laborable(fecha_iso).strip().lower() == "vacaciones"
+
+
+def cupo_vacaciones():
+    return config_valor("cupo_vacaciones", 22)
+
+
+def vacaciones_usadas(anio):
+    """Dias laborables marcados como vacaciones en ese año."""
+    n = 0
+    for fecha in NO_LABORABLES:
+        if not es_vacaciones(fecha):
+            continue
+        try:
+            d = dt.date.fromisoformat(fecha)
+        except ValueError:
+            continue
+        if d.year == anio and d.weekday() < 5:
+            n += 1
+    return n
+
+
+# ----------------------- guardias (modalidad) -----------------------
+
+def es_guardia(fecha_iso):
+    return fecha_iso in GUARDIAS
+
+
+def marcar_guardia(fecha_iso):
+    GUARDIAS.add(fecha_iso)
+    guardar_config_valor("guardias", sorted(GUARDIAS))
+
+
+def quitar_guardia(fecha_iso):
+    GUARDIAS.discard(fecha_iso)
+    guardar_config_valor("guardias", sorted(GUARDIAS))
+
+
+def comentario_guardia():
+    return config_valor("comentario_guardia", "Servicio de Guardia")
+
+
+# ----------------------- teletrabajo (modalidad, cupo semanal) -----------------------
+
+def es_teletrabajo(fecha_iso):
+    return fecha_iso in TELETRABAJO
+
+
+def marcar_teletrabajo(fecha_iso):
+    TELETRABAJO.add(fecha_iso)
+    guardar_config_valor("teletrabajo", sorted(TELETRABAJO))
+
+
+def quitar_teletrabajo(fecha_iso):
+    TELETRABAJO.discard(fecha_iso)
+    guardar_config_valor("teletrabajo", sorted(TELETRABAJO))
+
+
+def teletrabajo_por_semana():
+    try:
+        return int(config_valor("teletrabajo_por_semana", 1))
+    except (ValueError, TypeError):
+        return 1
+
+
+def teletrabajo_en_semana(lunes):
+    """Cuenta los dias de teletrabajo marcados en la semana de ese lunes (L-V)."""
+    dias = {(lunes + dt.timedelta(days=i)).isoformat() for i in range(5)}
+    return len(TELETRABAJO & dias)
 
 
 def dias_pendientes_semana(referencia=None, incluir_futuros=False):
