@@ -48,7 +48,7 @@ Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; Gr
 [Files]
 Source: "dist\FichaCSIRC.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "dist\FichaCSIRC-Configurar.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "INSTRUCCIONES.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
+Source: "INSTRUCCIONES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\FichaCSIRC (Registrar horas)"; Filename: "{app}\FichaCSIRC.exe"
@@ -59,6 +59,8 @@ Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: deskt
 [Run]
 ; Al terminar, ofrecer abrir el configurador (imprescindible la primera vez)
 Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent
+; Y ofrecer las instrucciones en la web (renderizadas), en vez de un .txt suelto
+Filename: "{#MyUrl}/blob/main/INSTRUCCIONES.md"; Description: "Ver las instrucciones de uso (web)"; Flags: postinstall shellexec skipifsilent unchecked
 
 [UninstallRun]
 ; El aviso diario se programa con schtasks desde la app; si no se borra aqui,

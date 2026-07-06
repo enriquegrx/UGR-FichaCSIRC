@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\\\Users\\\\Administrador\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\" -m py_compile rellenar_horas.py registrar_gui.py configurar_gui.py configurar.py)",
+      "PowerShell(if \\($?\\) { \"COMPILA OK\" })",
+      "PowerShell(& \"C:\\\\Users\\\\Administrador\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\" -c \"import registrar_gui, configurar_gui; print\\('IMPORTS OK'\\)\")"
+    ]
+  }
+}

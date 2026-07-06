@@ -75,6 +75,9 @@ definición completa y el historial de decisiones.
   navegación ← → entre meses, barra de progreso, cifras grandes, estado en
   color y días incompletos en tabla con doble clic para ir a su semana.
   Devuelve el Toplevel y expone `top._resumen` para los tests.
+- v2.3.2 (jul 2026): el instalador ya no ofrece abrir `INSTRUCCIONES.md` como
+  `.txt` (`isreadme` fuera); en su lugar, casilla postinstall opcional que abre
+  las instrucciones renderizadas en GitHub (`shellexec`).
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
