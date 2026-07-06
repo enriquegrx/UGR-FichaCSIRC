@@ -47,6 +47,26 @@ def _lista_a_fecha(lst):
         return "16/06"
 
 
+def _num_jornada(txt):
+    """'4,5' o '7' -> numero (int si es entero); None si no vale o esta fuera de 0-24."""
+    try:
+        v = float(str(txt).replace(",", "."))
+    except (ValueError, TypeError):
+        return None
+    if not 0 < v <= 24:
+        return None
+    return int(v) if v == int(v) else v
+
+
+def _fmt_jornada(v):
+    """Numero -> texto sin '.0' sobrante (7 -> '7', 4.5 -> '4.5')."""
+    try:
+        f = float(v)
+    except (ValueError, TypeError):
+        return "7"
+    return str(int(f)) if f == int(f) else f"{f:g}"
+
+
 def escribir_lanzadores():
     if getattr(sys, "frozen", False) or os.name != "nt":
         return
@@ -84,9 +104,9 @@ class Wizard:
         self.v = {
             "url": tk.StringVar(value=previa.get("base_url", "https://proyectostic.ugr.es")),
             "key": tk.StringVar(value=previa.get("api_key", "")),
-            "jinv": tk.IntVar(value=int(previa.get("jornada_invierno", 7))),
+            "jinv": tk.StringVar(value=_fmt_jornada(previa.get("jornada_invierno", 7))),
             "tver": tk.BooleanVar(value=bool(previa.get("tiene_verano", True))),
-            "jver": tk.IntVar(value=int(previa.get("jornada_verano", 5))),
+            "jver": tk.StringVar(value=_fmt_jornada(previa.get("jornada_verano", 5))),
             "vini": tk.StringVar(value=_lista_a_fecha(previa.get("verano_inicio", [6, 16]))),
             "vfin": tk.StringVar(value=_lista_a_fecha(previa.get("verano_fin", [9, 15]))),
             "act": tk.StringVar(value=previa.get("actividad_defecto")
@@ -183,15 +203,28 @@ class Wizard:
                         "Sin conexión",
                         f"No se pudo conectar con esos datos:\n{e}\n\n"
                         "¿Continuar de todas formas?")
-        if i == 2 and self.v["tver"].get():  # jornada: fechas del verano
-            for nombre, txt in (("inicio", self.v["vini"].get()),
-                                ("fin", self.v["vfin"].get())):
-                if _fecha_a_lista(txt, None) is None:
+        if i == 2:  # jornada
+            if _num_jornada(self.v["jinv"].get()) is None:
+                messagebox.showwarning(
+                    "Jornada no válida",
+                    "Las horas por día (normal) deben ser un número entre 0 y 24\n"
+                    "(puedes usar medias horas, p. ej. 4.5).")
+                return False
+            if self.v["tver"].get():
+                if _num_jornada(self.v["jver"].get()) is None:
                     messagebox.showwarning(
-                        "Fecha no válida",
-                        f"La fecha de {nombre} del verano no es válida.\n"
-                        "Escríbela como DD/MM (ej. 16/06).")
+                        "Jornada no válida",
+                        "Las horas por día (verano) deben ser un número entre 0 y 24\n"
+                        "(puedes usar medias horas, p. ej. 4.5).")
                     return False
+                for nombre, txt in (("inicio", self.v["vini"].get()),
+                                    ("fin", self.v["vfin"].get())):
+                    if _fecha_a_lista(txt, None) is None:
+                        messagebox.showwarning(
+                            "Fecha no válida",
+                            f"La fecha de {nombre} del verano no es válida.\n"
+                            "Escríbela como DD/MM (ej. 16/06).")
+                        return False
         return True
 
     # ---------- paginas ----------
@@ -242,13 +275,17 @@ class Wizard:
         f = ttk.Frame(self.content)
         f.pack(fill="x")
         ttk.Label(f, text="Horas por día (normal):").grid(row=0, column=0, sticky="w", pady=4)
-        ttk.Spinbox(f, from_=1, to=24, textvariable=self.v["jinv"], width=6).grid(row=0, column=1, sticky="w", padx=6)
+        ttk.Spinbox(f, from_=0.5, to=24, increment=0.5,
+                    textvariable=self.v["jinv"], width=6).grid(row=0, column=1, sticky="w", padx=6)
         ttk.Checkbutton(f, text="Tengo horario de verano distinto",
                         variable=self.v["tver"], command=self._toggle_verano).grid(
             row=1, column=0, columnspan=2, sticky="w", pady=(10, 4))
         ttk.Label(f, text="Horas por día (verano):").grid(row=2, column=0, sticky="w", pady=4)
-        sp = ttk.Spinbox(f, from_=1, to=24, textvariable=self.v["jver"], width=6)
+        sp = ttk.Spinbox(f, from_=0.5, to=24, increment=0.5,
+                         textvariable=self.v["jver"], width=6)
         sp.grid(row=2, column=1, sticky="w", padx=6)
+        ttk.Label(f, text="(puedes poner medias horas, p. ej. 4.5)",
+                  foreground="#666").grid(row=2, column=2, sticky="w", padx=6)
         ttk.Label(f, text="Inicio verano (DD/MM):").grid(row=3, column=0, sticky="w", pady=4)
         e1 = ttk.Entry(f, textvariable=self.v["vini"], width=10)
         e1.grid(row=3, column=1, sticky="w", padx=6)
@@ -367,11 +404,11 @@ class Wizard:
         lineas = [
             f"OpenProject:  {self.v['url'].get().strip()}",
             f"API key:      {'*' * 6}{self.v['key'].get()[-4:] if self.v['key'].get() else ''}",
-            f"Jornada normal: {self.v['jinv'].get()} h/día",
+            f"Jornada normal: {_fmt_jornada(_num_jornada(self.v['jinv'].get()) or 7)} h/día",
             f"Horario verano: {ver}",
         ]
         if self.v["tver"].get():
-            lineas.append(f"   Verano: {self.v['jver'].get()} h/día, "
+            lineas.append(f"   Verano: {_fmt_jornada(_num_jornada(self.v['jver'].get()) or 7)} h/día, "
                           f"del {self.v['vini'].get()} al {self.v['vfin'].get()}")
         lineas.append(f"Actividad por defecto: {self.v['act'].get()}")
         lineas.append(f"Tareas favoritas: {len(self.favoritos)}")
@@ -386,9 +423,9 @@ class Wizard:
         cfg = {
             "base_url": self.v["url"].get().strip().rstrip("/"),
             "api_key": self.v["key"].get().strip(),
-            "jornada_invierno": int(self.v["jinv"].get()),
+            "jornada_invierno": _num_jornada(self.v["jinv"].get()) or 7,
             "tiene_verano": bool(self.v["tver"].get()),
-            "jornada_verano": int(self.v["jver"].get()),
+            "jornada_verano": _num_jornada(self.v["jver"].get()) or 7,
             "verano_inicio": _fecha_a_lista(self.v["vini"].get(), [6, 16]),
             "verano_fin": _fecha_a_lista(self.v["vfin"].get(), [9, 15]),
             "actividad_defecto": self.v["act"].get(),

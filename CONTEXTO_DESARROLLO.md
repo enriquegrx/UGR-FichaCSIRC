@@ -78,6 +78,10 @@ definición completa y el historial de decisiones.
 - v2.3.2 (jul 2026): el instalador ya no ofrece abrir `INSTRUCCIONES.md` como
   `.txt` (`isreadme` fuera); en su lugar, casilla postinstall opcional que abre
   las instrucciones renderizadas en GitHub (`shellexec`).
+- v2.3.3 (jul 2026): la jornada admite medias horas (4.5) en el wizard y en el
+  configurador de consola (`_num_jornada`/`_fmt_jornada`, `preguntar_numero`); el
+  motor ya soportaba floats. El instalador no ofrece "Configurar ahora" cuando es
+  una actualización (función `EsActualizacion` mira si existe el `config.json`).
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor

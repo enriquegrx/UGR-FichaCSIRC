@@ -85,6 +85,24 @@ def preguntar_entero(pregunta, defecto=None, minimo=None, maximo=None):
         return valor
 
 
+def preguntar_numero(pregunta, defecto=None, minimo=None, maximo=None):
+    """Como preguntar_entero pero admite medias horas (4.5); entero si es exacto."""
+    while True:
+        resp = preguntar_texto(pregunta, str(defecto) if defecto is not None else None)
+        try:
+            valor = float(str(resp).replace(",", "."))
+        except ValueError:
+            print("  Escribe un numero (ej. 7  o  4.5).")
+            continue
+        if minimo is not None and valor < minimo:
+            print(f"  Debe ser {minimo} o mas.")
+            continue
+        if maximo is not None and valor > maximo:
+            print(f"  Debe ser {maximo} o menos.")
+            continue
+        return int(valor) if valor == int(valor) else valor
+
+
 def preguntar_si_no(pregunta, defecto=True):
     sufijo = " [S/n]" if defecto else " [s/N]"
     while True:
@@ -254,17 +272,17 @@ def recoger_datos(previa):
     cfg["api_key"] = preguntar_texto("Tu API key", previa.get("api_key"))
 
     print("\n-- Jornada (siempre de lunes a viernes) ----------------")
-    cfg["jornada_invierno"] = preguntar_entero(
+    cfg["jornada_invierno"] = preguntar_numero(
         "Horas por dia en jornada normal (ej. 7)",
-        previa.get("jornada_invierno", 7), minimo=1, maximo=24)
+        previa.get("jornada_invierno", 7), minimo=0.5, maximo=24)
     tiene_verano = preguntar_si_no(
         "Tienes horario de verano distinto (menos horas)?",
         defecto=bool(previa.get("tiene_verano", True)))
     cfg["tiene_verano"] = tiene_verano
     if tiene_verano:
-        cfg["jornada_verano"] = preguntar_entero(
-            "Horas por dia en verano (ej. 5)",
-            previa.get("jornada_verano", 5), minimo=1, maximo=24)
+        cfg["jornada_verano"] = preguntar_numero(
+            "Horas por dia en verano (ej. 5  o  4.5)",
+            previa.get("jornada_verano", 5), minimo=0.5, maximo=24)
         ini_def = tuple(previa.get("verano_inicio", [6, 16]))
         fin_def = tuple(previa.get("verano_fin", [9, 15]))
         cfg["verano_inicio"] = list(preguntar_fecha_dm("Inicio del verano (DD/MM)", ini_def))

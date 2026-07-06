@@ -57,8 +57,9 @@ Name: "{group}\Desinstalar FichaCSIRC"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: desktopicon
 
 [Run]
-; Al terminar, ofrecer abrir el configurador (imprescindible la primera vez)
-Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent
+; Ofrecer el configurador SOLO en una instalacion nueva (si ya hay config.json
+; es una actualizacion y no hay que reconfigurar: la casilla ni aparece).
+Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion
 ; Y ofrecer las instrucciones en la web (renderizadas), en vez de un .txt suelto
 Filename: "{#MyUrl}/blob/main/INSTRUCCIONES.md"; Description: "Ver las instrucciones de uso (web)"; Flags: postinstall shellexec skipifsilent unchecked
 
@@ -68,6 +69,13 @@ Filename: "{#MyUrl}/blob/main/INSTRUCCIONES.md"; Description: "Ver las instrucci
 Filename: "{sys}\schtasks.exe"; Parameters: "/delete /tn ""FichaCSIRC-Recordatorio"" /f"; Flags: runhidden; RunOnceId: "QuitarRecordatorio"
 
 [Code]
+function EsActualizacion(): Boolean;
+begin
+  { Hay configuracion previa => el usuario ya uso la app antes (actualizacion).
+    La config del .exe vive en %APPDATA%\FichaCSIRC. }
+  Result := FileExists(ExpandConstant('{userappdata}\FichaCSIRC\config.json'));
+end;
+
 function MatarProceso(const Nombre: String): Integer;
 var
   ResultCode: Integer;
