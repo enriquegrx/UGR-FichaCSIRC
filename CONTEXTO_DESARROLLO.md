@@ -82,18 +82,11 @@ definición completa y el historial de decisiones.
   configurador de consola (`_num_jornada`/`_fmt_jornada`, `preguntar_numero`); el
   motor ya soportaba floats. El instalador no ofrece "Configurar ahora" cuando es
   una actualización (función `EsActualizacion` mira si existe el `config.json`).
-
-## Tests
-- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
-  (duraciones ISO, jornada/verano, parsing/paginación de la API, payloads, pendientes)
-  con la red mockeada, más un smoke test de la GUI (`test_gui_smoke.py`, se salta sin
-  display). Ejecutarlos tras tocar el motor o la GUI.
-
 - v2.4.0 (jul 2026): módulo de días especiales. Festivos **calculados por año**
   (`_pascua` Gauss; `festivos_del_anio` con ámbitos nacional/andalucia/local:
   incluye 28-feb, Toma de Granada 2-ene y Corpus=Pascua+60). Diálogo "Importar
-  festivos" con casillas por ámbito (`dialogos.abrir_importar_festivos`). Preset
-  `DIAS_UGR_CONOCIDOS` + config `dias_ugr` (Navidad/Semana Santa/San Pascual/Feria,
+  festivos" con casillas por ámbito (`dialogos.abrir_importar_festivos`). Días
+  propios UGR en config `dias_ugr` (Navidad/Semana Santa/San Pascual/Feria,
   **a rellenar con el calendario laboral PTGAS**, se trasladan y no se calculan).
   Vacaciones: color morado (`es_vacaciones`), cupo libre `cupo_vacaciones` y
   contador `vacaciones_usadas`. Modalidades independientes que NO cambian objetivo:
@@ -102,7 +95,32 @@ definición completa y el historial de decisiones.
   tarjeta, leyenda bajo la semana, contador teletrabajo en el título. Diálogo
   "Vacaciones y teletrabajo" (`dialogos.abrir_ajustes_dias`). Fichar en día no
   laborable avisa claro (no "0h") y nunca bloquea. El wizard admite medias horas.
+- v2.4.1 (jul 2026): correcciones de la revisión multi-agente de v2.4.0.
+  **Festivos en domingo se trasladan al lunes** en `festivos_del_anio` (la tabla
+  fija que se sustituyó ya los llevaba: sin esto se perdían 02/11 y 07/12 de 2026
+  y el 01/03/2027 de Andalucía); el diálogo avisa de que el traslado real lo
+  decide la Junta. **`finalizar()` del wizard fusiona con `cargar_previa()`**
+  (antes volcaba un dict fijo y borraba no_laborables/guardias/plantillas/etc. al
+  re-ejecutarlo). **Comentario de guardia por-día** en `_anadir` (`comentario_para`):
+  en multi-día ya no se cuela en días normales ni se persiste como comentario
+  habitual. Chips y banda de "hoy" clicables (bindings). `repintar_local()`:
+  marcar festivo/guardia/teletrabajo repinta desde caché sin relanzar los 5 GET.
+  `parsear_numero` compartido (consola+wizard) rechaza NaN/inf; validación de
+  rangos y OverflowError en "Vacaciones y teletrabajo" (`guardar_config_valores`
+  en lote). Estilo `PanelMuted.TLabel` y `chip_modalidad` en fichaui (superficies
+  correctas en leyenda y diálogos nuevos). `MOTIVO_VACACIONES` como constante.
+  Tests: eliminada la clase `TestFestivos` duplicada que sombreaba 2 tests,
+  `_hoy` mockeado (no dependen del reloj), `festivos_pendientes` solo ofrece el
+  año siguiente a partir de noviembre; tests nuevos de traslados, wizard y
+  comentario de guardia (65 en total).
+
+## Tests
+- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
+  (duraciones ISO, jornada/verano, parsing/paginación de la API, payloads, pendientes)
+  con la red mockeada, más un smoke test de la GUI (`test_gui_smoke.py`, se salta sin
+  display). Ejecutarlos tras tocar el motor o la GUI.
 
 ## Pendiente / ideas
-- Rellenar `DIAS_UGR_CONOCIDOS` con el calendario laboral PTGAS oficial cada año.
+- Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
+  (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.

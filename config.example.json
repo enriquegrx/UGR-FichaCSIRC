@@ -12,6 +12,7 @@
   "plantillas": [],
   "guardias": [],
   "teletrabajo": [],
+  "comentario_guardia": "Servicio de Guardia",
   "cupo_vacaciones": 22,
   "teletrabajo_por_semana": 1,
   "festivos_locales_extra": [],

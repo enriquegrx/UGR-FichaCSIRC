@@ -45,7 +45,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -202,17 +202,22 @@ def config_valor(clave, defecto=None):
     return _cfg.get(clave, defecto)
 
 
-def guardar_config_valor(clave, valor):
-    """Actualiza una clave de config.json sin tocar el resto."""
+def guardar_config_valores(valores):
+    """Actualiza varias claves de config.json en una sola lectura/escritura."""
     try:
         with open(CONFIG_PATH, encoding="utf-8-sig") as f:
             cfg = json.load(f)
     except Exception:
         cfg = {}
-    cfg[clave] = valor
+    cfg.update(valores)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(cfg, f, ensure_ascii=False, indent=2)
-    _cfg[clave] = valor
+    _cfg.update(valores)
+
+
+def guardar_config_valor(clave, valor):
+    """Actualiza una clave de config.json sin tocar el resto."""
+    guardar_config_valores({clave: valor})
 
 ACTIVIDADES = ["actuacion tecnica", "correctivo", "formacion",
                "gestion/planificacion", "soporte"]
@@ -601,6 +606,12 @@ def festivos_del_anio(anio, ambitos=AMBITOS):
     festivos = {}
 
     def _add(fecha, nombre, ambito):
+        # Los festivos que caen en DOMINGO se trasladan al lunes (practica
+        # habitual del BOE/Junta; el dialogo de importar pide revisarlos
+        # porque la decision final es anual). Los de sabado no se trasladan.
+        if fecha.weekday() == 6:
+            fecha += dt.timedelta(days=1)
+            nombre += " (traslado)"
         festivos[fecha.isoformat()] = (nombre, ambito)
 
     if "nacional" in ambitos:
@@ -630,29 +641,23 @@ def festivos_del_anio(anio, ambitos=AMBITOS):
     return festivos
 
 
-# Dias propios de la UGR (cierres de Navidad/Semana Santa, San Pascual Bailon
-# patron del PTGAS, Feria del Corpus). Se fijan cada año en el calendario
-# laboral del PTGAS y se trasladan si caen en finde, asi que NO se calculan:
-# se rellenan con el PDF oficial, aqui o en config (`dias_ugr`).
-DIAS_UGR_CONOCIDOS = {
-    # "2026-05-18": "San Pascual Bailón (patrón PTGAS)",
-    # "2026-12-24": "Cierre de Navidad",
-}
-
-
 def dias_ugr():
-    """Dias UGR conocidos + los que el usuario añada en config (`dias_ugr`)."""
-    combinado = dict(DIAS_UGR_CONOCIDOS)
-    combinado.update(config_valor("dias_ugr", {}) or {})
-    return combinado
+    """Dias propios de la UGR (cierres de Navidad/Semana Santa, San Pascual
+    Bailon patron del PTGAS, Feria del Corpus): {"AAAA-MM-DD": "nombre"} en la
+    clave de config `dias_ugr`. Se fijan cada año en el calendario laboral del
+    PTGAS y se trasladan, asi que no se calculan ni se hardcodean."""
+    return dict(config_valor("dias_ugr", {}) or {})
 
 
 def festivos_pendientes(ambitos=AMBITOS, incluir_ugr=True):
-    """Festivos de los ambitos pedidos (del año en curso y el siguiente) que
-    caen en dia laborable y aun no estan marcados. Devuelve {fecha_iso: nombre}."""
+    """Festivos de los ambitos pedidos que caen en dia laborable y aun no
+    estan marcados. Devuelve {fecha_iso: nombre}. A partir de noviembre se
+    incluye tambien el año siguiente (deja enero preparado sin ofrecer 18
+    meses de golpe el resto del año)."""
     hoy = _hoy()
+    anios = (hoy.year, hoy.year + 1) if hoy.month >= 11 else (hoy.year,)
     catalogo = {}
-    for anio in (hoy.year, hoy.year + 1):  # +1: para enero (Año Nuevo, Reyes...)
+    for anio in anios:
         for fecha, (nombre, _amb) in festivos_del_anio(anio, ambitos).items():
             catalogo[fecha] = nombre
     if incluir_ugr:
@@ -686,9 +691,14 @@ def objetivo_de(dia):
 
 # ----------------------- vacaciones (cupo anual) -----------------------
 
+# Motivo canonico: lo escriben el menu contextual de la GUI y lo lee el cupo.
+# Usar siempre esta constante para que ambos no se desincronicen.
+MOTIVO_VACACIONES = "vacaciones"
+
+
 def es_vacaciones(fecha_iso):
     """Un dia no laborable cuyo motivo son vacaciones (cuenta al cupo)."""
-    return motivo_no_laborable(fecha_iso).strip().lower() == "vacaciones"
+    return motivo_no_laborable(fecha_iso).strip().lower() == MOTIVO_VACACIONES
 
 
 def cupo_vacaciones():

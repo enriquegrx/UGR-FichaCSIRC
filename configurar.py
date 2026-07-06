@@ -85,13 +85,27 @@ def preguntar_entero(pregunta, defecto=None, minimo=None, maximo=None):
         return valor
 
 
+def parsear_numero(txt):
+    """'4,5' o '7' -> numero (int si es exacto); None si no es un numero finito.
+
+    Compartido por el configurador de consola y el wizard grafico para que
+    ambos acepten exactamente las mismas jornadas. Rechaza NaN e infinitos
+    (esquivan las comparaciones de rango y revientan al convertir a int)."""
+    try:
+        v = float(str(txt).replace(",", "."))
+    except (ValueError, TypeError):
+        return None
+    if v != v or v in (float("inf"), float("-inf")):
+        return None
+    return int(v) if v == int(v) else v
+
+
 def preguntar_numero(pregunta, defecto=None, minimo=None, maximo=None):
     """Como preguntar_entero pero admite medias horas (4.5); entero si es exacto."""
     while True:
         resp = preguntar_texto(pregunta, str(defecto) if defecto is not None else None)
-        try:
-            valor = float(str(resp).replace(",", "."))
-        except ValueError:
+        valor = parsear_numero(resp)
+        if valor is None:
             print("  Escribe un numero (ej. 7  o  4.5).")
             continue
         if minimo is not None and valor < minimo:
@@ -100,7 +114,7 @@ def preguntar_numero(pregunta, defecto=None, minimo=None, maximo=None):
         if maximo is not None and valor > maximo:
             print(f"  Debe ser {maximo} o menos.")
             continue
-        return int(valor) if valor == int(valor) else valor
+        return valor
 
 
 def preguntar_si_no(pregunta, defecto=True):

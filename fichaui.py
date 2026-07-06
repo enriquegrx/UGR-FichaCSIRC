@@ -96,6 +96,10 @@ def aplicar_estilo(root):
     style.configure("WeekTitle.TLabel", background=COLOR_PANEL, foreground=COLOR_TEXT,
                     font=("TkDefaultFont", 13, "bold"))
     style.configure("Muted.TLabel", background=COLOR_APP_BG, foreground=COLOR_MUTED)
+    # Variante de texto atenuado para superficies BLANCAS (Panel.TFrame):
+    # Muted.TLabel lleva el fondo gris de la app y sobre un panel se ve
+    # como una caja gris. Usar esta dentro de paneles.
+    style.configure("PanelMuted.TLabel", background=COLOR_PANEL, foreground=COLOR_MUTED)
     style.configure("Status.TLabel", background=COLOR_PANEL_ALT, foreground=COLOR_MUTED,
                     padding=(8, 5))
     style.configure("TButton", padding=(12, 7))
@@ -106,6 +110,16 @@ def aplicar_estilo(root):
     style.map("Treeview", background=[("selected", COLOR_SELECTED)],
               foreground=[("selected", COLOR_TEXT)])
     return style
+
+
+def chip_modalidad(parent, texto, bg, fg, pequeno=False):
+    """Chip de modalidad (guardia/teletrabajo): mismo aspecto en las tarjetas
+    de dia y en la leyenda. _fijo=True para que _pintar_sel no lo repinte."""
+    chip = tk.Label(parent, text=texto, bg=bg, fg=fg,
+                    font=("TkDefaultFont", 8 if pequeno else 9),
+                    padx=5 if pequeno else 6, pady=0 if pequeno else 1)
+    chip._fijo = True
+    return chip
 
 
 def boton_primario(parent, texto, comando):

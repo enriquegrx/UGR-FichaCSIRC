@@ -667,7 +667,7 @@ def abrir_importar_festivos(app):
     frm = ttk.Frame(top, padding=14)
     frm.pack(fill="both", expand=True)
     ttk.Label(frm, text="Marca como no laborables los festivos de:",
-              style="Section.TLabel").pack(anchor="w")
+              font=("TkDefaultFont", 10, "bold")).pack(anchor="w")
 
     v_nac = tk.BooleanVar(value=True)
     v_and = tk.BooleanVar(value=True)
@@ -681,8 +681,10 @@ def abrir_importar_festivos(app):
 
     lbl = ttk.Label(frm, text="", justify="left", font=("Consolas", 9))
     lbl.pack(anchor="w", pady=(8, 0))
-
-    estado = {"pendientes": {}}
+    ttk.Label(frm, text="Los festivos en domingo se estiman trasladados al lunes;\n"
+                        "revísalos: el traslado real lo decide la Junta cada año.\n"
+                        "Cualquiera se quita con botón derecho sobre su día.",
+              foreground=COLOR_MUTED, justify="left").pack(anchor="w", pady=(8, 0))
 
     def _ambitos():
         amb = []
@@ -696,7 +698,6 @@ def abrir_importar_festivos(app):
 
     def recalc():
         pend = core.festivos_pendientes(_ambitos(), incluir_ugr=v_ugr.get())
-        estado["pendientes"] = pend
         if not pend:
             lbl.config(text="No hay festivos nuevos que marcar con esta selección.")
         else:
@@ -707,19 +708,14 @@ def abrir_importar_festivos(app):
         b_imp.config(state=("normal" if pend else "disabled"))
 
     def importar():
-        pend = estado["pendientes"]
-        if not pend:
-            return
-        core.NO_LABORABLES.update(pend)
-        core.guardar_config_valor("no_laborables", core.NO_LABORABLES)
+        n = core.importar_festivos(_ambitos(), incluir_ugr=v_ugr.get())
         top.destroy()
-        app._msg_pendiente = f"{len(pend)} festivos marcados."
-        app.refrescar()
+        if n:
+            app._msg_pendiente = f"{n} festivos marcados."
+        app.repintar_local()
 
     btns = ttk.Frame(frm)
     btns.pack(fill="x", pady=(12, 0))
-    ttk.Label(btns, text="Cualquiera se quita con botón derecho sobre su día.",
-              style="Muted.TLabel").pack(side="left")
     ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
     b_imp = ttk.Button(btns, text="Importar", command=importar)
     b_imp.pack(side="right", padx=4)
@@ -736,7 +732,8 @@ def abrir_ajustes_dias(app):
     frm = ttk.Frame(top, padding=14)
     frm.pack(fill="both", expand=True)
 
-    ttk.Label(frm, text="Vacaciones", style="Section.TLabel").grid(
+    negrita = ("TkDefaultFont", 10, "bold")
+    ttk.Label(frm, text="Vacaciones", font=negrita).grid(
         row=0, column=0, columnspan=2, sticky="w")
     ttk.Label(frm, text=f"Días de vacaciones al año ({anio}):").grid(
         row=1, column=0, sticky="w", pady=3)
@@ -745,13 +742,13 @@ def abrir_ajustes_dias(app):
     e_cupo.grid(row=1, column=1, sticky="w", padx=6)
     usadas = core.vacaciones_usadas(anio)
     ttk.Label(frm, text=f"Ya usados este año: {usadas}",
-              style="Muted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w")
+              foreground=COLOR_MUTED).grid(row=2, column=0, columnspan=2, sticky="w")
     ttk.Label(frm, text="Fijos: 22, +1 a los 15/20/25/30 años.\n"
                         "Interinos: los que te corresponden por prorrateo (RRHH).",
-              style="Muted.TLabel").grid(row=3, column=0, columnspan=2,
-                                         sticky="w", pady=(2, 10))
+              foreground=COLOR_MUTED).grid(row=3, column=0, columnspan=2,
+                                           sticky="w", pady=(2, 10))
 
-    ttk.Label(frm, text="Teletrabajo", style="Section.TLabel").grid(
+    ttk.Label(frm, text="Teletrabajo", font=negrita).grid(
         row=4, column=0, columnspan=2, sticky="w")
     ttk.Label(frm, text="Días de teletrabajo por semana:").grid(
         row=5, column=0, sticky="w", pady=3)
@@ -759,19 +756,27 @@ def abrir_ajustes_dias(app):
     e_tt.set(core.teletrabajo_por_semana())
     e_tt.grid(row=5, column=1, sticky="w", padx=6)
     ttk.Label(frm, text="0 = no llevar la cuenta.",
-              style="Muted.TLabel").grid(row=6, column=0, columnspan=2, sticky="w")
+              foreground=COLOR_MUTED).grid(row=6, column=0, columnspan=2, sticky="w")
 
     def guardar():
+        # El Spinbox admite texto libre: validar tipo, finitud y rango
+        # (int(float('1e999')) lanza OverflowError, que no es ValueError).
         try:
-            cupo = int(float(e_cupo.get()))
-            tt = int(float(e_tt.get()))
-        except ValueError:
+            cupo = int(float(str(e_cupo.get()).replace(",", ".")))
+            tt = int(float(str(e_tt.get()).replace(",", ".")))
+        except (ValueError, OverflowError):
             messagebox.showwarning("Valores", "Escribe números válidos.", parent=top)
             return
-        core.guardar_config_valor("cupo_vacaciones", cupo)
-        core.guardar_config_valor("teletrabajo_por_semana", tt)
+        if not (0 <= cupo <= 60 and 0 <= tt <= 5):
+            messagebox.showwarning(
+                "Valores",
+                "El cupo de vacaciones va de 0 a 60 días\n"
+                "y el teletrabajo de 0 a 5 días por semana.", parent=top)
+            return
+        core.guardar_config_valores({"cupo_vacaciones": cupo,
+                                     "teletrabajo_por_semana": tt})
         top.destroy()
-        app.refrescar()
+        app.repintar_local()
 
     btns = ttk.Frame(frm)
     btns.grid(row=7, column=0, columnspan=2, sticky="e", pady=(12, 0))

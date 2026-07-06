@@ -47,8 +47,8 @@ from fichaui import (
     COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING,
     COLOR_VACACIONES, COLOR_GUARDIA_BG, COLOR_GUARDIA_FG, COLOR_TELE_BG,
     COLOR_TELE_FG, Tooltip,
-    TooltipFilas, aplicar_estilo, boton_peligro, boton_primario, en_hilo,
-    recurso, carpeta_app,
+    TooltipFilas, aplicar_estilo, boton_peligro, boton_primario, chip_modalidad,
+    en_hilo, recurso, carpeta_app,
 )
 
 
@@ -458,13 +458,12 @@ class App:
             cont = ttk.Frame(fila, style="Panel.TFrame")
             cont.pack(side="left", padx=(0, 14))
             tk.Label(cont, bg=color, width=2, height=1).pack(side="left", padx=(0, 5))
-            ttk.Label(cont, text=texto, style="Muted.TLabel").pack(side="left")
+            ttk.Label(cont, text=texto, style="PanelMuted.TLabel").pack(side="left")
 
         def chip(bg, fg, texto):
             cont = ttk.Frame(fila, style="Panel.TFrame")
             cont.pack(side="left", padx=(0, 14))
-            tk.Label(cont, text=texto, bg=bg, fg=fg,
-                     font=("TkDefaultFont", 8), padx=5).pack(side="left")
+            chip_modalidad(cont, texto, bg, fg, pequeno=True).pack(side="left")
 
         swatch(COLOR_SUCCESS, "Completo")
         swatch(COLOR_WARNING, "Parcial")
@@ -637,6 +636,21 @@ class App:
 
         self._en_hilo(trabajo, al_terminar)
 
+    def repintar_local(self):
+        """Repinta la semana desde la caché tras un cambio LOCAL (marcar
+        festivo/vacaciones, guardia, teletrabajo, ajustes): los apuntes del
+        servidor no han cambiado, así que no se relanzan los 5 GET."""
+        if not self._cache_dia or all(v is None for v in self._cache_dia.values()):
+            self.refrescar()  # sin cache util: refresco normal
+            return
+        marcados = {d.isoformat() for d in self._dias_marcados()}
+        self._pintar_semana(self._dias_semana(), self._cache_dia, 0, "")
+        if marcados:  # conservar la seleccion que hubiera
+            for var, d, _card in self.dia_vars:
+                var.set(d.isoformat() in marcados)
+            self._pintar_sel()
+            self._recargar_tree()
+
     def _pintar_semana(self, dias, cache, fallos, nombre):
         self._cache_dia = cache
         hoy = dt.date.today()
@@ -654,23 +668,28 @@ class App:
             w.destroy()
         self.dia_vars = []
         for i, d in enumerate(dias):
+            iso = d.isoformat()
             self.dias_frame.columnconfigure(i, weight=1, uniform="dias")
-            apuntes = cache.get(d.isoformat())
+            apuntes = cache.get(iso)
             reg = sum(a["horas"] for a in apuntes) if apuntes else 0
             obj = core.objetivo_de(d)
-            nolab = core.es_no_laborable(d.isoformat())
+            nolab = core.es_no_laborable(iso)
+            hay_guardia = core.es_guardia(iso)
+            hay_tt = core.es_teletrabajo(iso)
             es_hoy = (d == hoy)
             var = tk.BooleanVar(value=es_hoy)
 
             card = tk.Frame(self.dias_frame, bg=COLOR_PANEL, highlightthickness=1,
                             highlightbackground=COLOR_BORDER, cursor="hand2")
             card.grid(row=0, column=i, padx=5, pady=2, sticky="nsew")
+            clicables = [card]  # todos los hijos deben responder al raton
             if es_hoy:
                 # Banda azul superior: "hoy" se distingue de un vistazo, no
                 # solo por la negrita del titulo.
                 banda = tk.Frame(card, bg=COLOR_PRIMARY, height=4)
                 banda.pack(fill="x")
                 banda._fijo = True  # _pintar_sel no debe repintarla
+                clicables.append(banda)
             fnt = ("TkDefaultFont", 10, "bold") if es_hoy else ("TkDefaultFont", 10)
             titulo = f"{core.DIAS_ES[i]} {d.strftime('%d/%m')}" + ("  · hoy" if es_hoy else "")
             lbl1 = tk.Label(card, text=titulo, font=fnt, anchor="w",
@@ -680,9 +699,9 @@ class App:
             cv.pack(fill="x", padx=12)
             if nolab:
                 # Vacaciones en morado; festivo/cierre/otros en gris. Nunca rojo.
-                color = COLOR_VACACIONES if core.es_vacaciones(d.isoformat()) else COLOR_MUTED
+                color = COLOR_VACACIONES if core.es_vacaciones(iso) else COLOR_MUTED
                 frac = 1.0
-                texto2 = core.motivo_no_laborable(d.isoformat()).capitalize()
+                texto2 = core.motivo_no_laborable(iso).capitalize()
                 if reg:
                     texto2 = f"{core._fmt(reg)} · {texto2}"
             elif apuntes is None:
@@ -701,22 +720,21 @@ class App:
                 texto2 = f"0h / {obj}h"
             lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 12, "bold"),
                             fg=color, bg=COLOR_PANEL, anchor="w")
-            lbl2.pack(fill="x", padx=12, pady=(7, 6 if (core.es_guardia(d.isoformat())
-                                                        or core.es_teletrabajo(d.isoformat()))
-                                                else 10))
+            lbl2.pack(fill="x", padx=12, pady=(7, 6 if (hay_guardia or hay_tt) else 10))
+            clicables += [lbl1, cv, lbl2]
 
-            # Chips de modalidad (guardia / teletrabajo). _fijo: no se repintan
-            # con la seleccion, para conservar su color propio.
-            chips = []
-            if core.es_guardia(d.isoformat()):
-                chips.append(("⚙ Guardia", COLOR_GUARDIA_BG, COLOR_GUARDIA_FG))
-            if core.es_teletrabajo(d.isoformat()):
-                chips.append(("⌂ Teletrabajo", COLOR_TELE_BG, COLOR_TELE_FG))
-            for texto_chip, bg_chip, fg_chip in chips:
-                chip = tk.Label(card, text=texto_chip, bg=bg_chip, fg=fg_chip,
-                                font=("TkDefaultFont", 9), padx=6, pady=1)
-                chip._fijo = True
+            # Chips de modalidad (guardia / teletrabajo): mismo helper que la
+            # leyenda, y clicables como el resto de la tarjeta.
+            if hay_guardia:
+                chip = chip_modalidad(card, "⚙ Guardia",
+                                      COLOR_GUARDIA_BG, COLOR_GUARDIA_FG)
                 chip.pack(anchor="w", padx=12, pady=(0, 6))
+                clicables.append(chip)
+            if hay_tt:
+                chip = chip_modalidad(card, "⌂ Teletrabajo",
+                                      COLOR_TELE_BG, COLOR_TELE_FG)
+                chip.pack(anchor="w", padx=12, pady=(0, 6))
+                clicables.append(chip)
 
             def dibujar(_e=None, cv=cv, frac=frac, color=color):
                 cv.delete("all")
@@ -726,7 +744,7 @@ class App:
                     cv.create_rectangle(0, 0, int(ancho * frac), 8,
                                         fill=color, width=0)
             cv.bind("<Configure>", dibujar)
-            for wdg in (card, lbl1, cv, lbl2):
+            for wdg in clicables:
                 wdg.bind("<Button-1>", lambda _e, v=var: self._click_dia(v))
                 wdg.bind("<Button-3>", lambda e, d=d: self._menu_dia(e, d))
             self.dia_vars.append((var, d, card))
@@ -898,41 +916,44 @@ class App:
 
     # ---------- acciones del dia/semana ----------
     def _menu_dia(self, evento, d):
-        """Menu contextual de una tarjeta: tipo de dia y modalidad de trabajo."""
+        """Menu contextual de una tarjeta: tipo de dia y modalidad de trabajo.
+        Todas estas marcas son locales (config): se repinta desde la cache,
+        sin volver a pedir la semana a la API."""
         fecha = d.isoformat()
         menu = tk.Menu(self.root, tearoff=0)
         # --- Tipo de dia (no laborable) ---
         if core.es_no_laborable(fecha):
             menu.add_command(
                 label=f"Quitar marca ({core.motivo_no_laborable(fecha)})",
-                command=lambda: (core.quitar_no_laborable(fecha), self.refrescar()))
+                command=lambda: (core.quitar_no_laborable(fecha),
+                                 self.repintar_local()))
         else:
             sub = tk.Menu(menu, tearoff=0)
-            for motivo in ("festivo", "vacaciones", "asuntos propios", "baja"):
+            for motivo in ("festivo", core.MOTIVO_VACACIONES,
+                           "asuntos propios", "baja"):
                 sub.add_command(
                     label=motivo.capitalize(),
                     command=lambda m=motivo: (core.marcar_no_laborable(fecha, m),
-                                              self.refrescar()))
+                                              self.repintar_local()))
             menu.add_cascade(label="Marcar como no laborable", menu=sub)
         menu.add_separator()
         # --- Modalidad de trabajo (se trabaja igual) ---
         if core.es_guardia(fecha):
             menu.add_command(label="Quitar guardia",
-                             command=lambda: (core.quitar_guardia(fecha), self.refrescar()))
+                             command=lambda: (core.quitar_guardia(fecha),
+                                              self.repintar_local()))
         else:
             menu.add_command(label="Marcar día de guardia",
-                             command=lambda: self._marcar_guardia(fecha))
+                             command=lambda: (core.marcar_guardia(fecha),
+                                              self.repintar_local()))
         if core.es_teletrabajo(fecha):
             menu.add_command(label="Quitar teletrabajo",
-                             command=lambda: (core.quitar_teletrabajo(fecha), self.refrescar()))
+                             command=lambda: (core.quitar_teletrabajo(fecha),
+                                              self.repintar_local()))
         else:
             menu.add_command(label="Marcar teletrabajo",
                              command=lambda: self._marcar_teletrabajo(d))
         menu.tk_popup(evento.x_root, evento.y_root)
-
-    def _marcar_guardia(self, fecha):
-        core.marcar_guardia(fecha)
-        self.refrescar()
 
     def _marcar_teletrabajo(self, d):
         lunes = d - dt.timedelta(days=d.weekday())
@@ -944,7 +965,7 @@ class App:
                     "¿Marcar otro igualmente?"):
                 return
         core.marcar_teletrabajo(d.isoformat())
-        self.refrescar()
+        self.repintar_local()
 
     def _deshacer_borrado(self):
         """Restaura el último borrado (uno o varios apuntes)."""
@@ -1174,6 +1195,16 @@ class App:
             return
         actividad = self.cbo_act.get() or None
         comentario = self.ent_com.get().strip()
+        # El comentario de guardia se resuelve POR DIA: si el texto del campo
+        # es el autorrelleno de guardia, solo se envia a los dias de guardia
+        # (a un dia normal no le corresponde); y un dia de guardia lo recibe
+        # aunque el campo haya quedado vacio o con otro autorrelleno.
+        auto_guardia = (comentario == core.comentario_guardia())
+
+        def comentario_para(d):
+            if core.es_guardia(d.isoformat()):
+                return comentario or core.comentario_guardia()
+            return "" if auto_guardia else comentario
 
         if len(dias) > 1:
             if not messagebox.askyesno(
@@ -1233,7 +1264,8 @@ class App:
                     saltados += 1
                     continue
                 try:
-                    core.crear_entrada(d.isoformat(), wp_id, horas, comentario, actividad)
+                    core.crear_entrada(d.isoformat(), wp_id, horas,
+                                       comentario_para(d), actividad)
                     creados += 1
                 except Exception as ex:
                     errores += 1
@@ -1251,7 +1283,9 @@ class App:
             self._horas_auto = ""
             self.ent_com.delete(0, "end")
             self._com_auto = ""
-            if creados and comentario:
+            # El comentario de guardia no es "habitual de la tarea": no debe
+            # persistirse ni sugerirse luego en dias normales.
+            if creados and comentario and comentario != core.comentario_guardia():
                 self._recordar_comentario(wp_id, comentario)
             if errores and creados == 0:
                 self.refrescar()

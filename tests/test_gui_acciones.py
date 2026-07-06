@@ -109,6 +109,39 @@ class TestGuiAcciones(unittest.TestCase):
         # 2h + 3h del lunes simulado deben aparecer sumadas en el titulo
         self.assertIn("5h /", self.app.lbl_semana.cget("text"))
 
+    def test_comentario_guardia_por_dia(self):
+        # Lunes = dia de guardia; martes normal. El autorrelleno de guardia
+        # solo debe viajar al dia de guardia, el resto va sin comentario, y
+        # NUNCA se persiste como comentario habitual de la tarea.
+        lunes_d = dt.date.fromisoformat(self.lunes)
+        martes = (lunes_d + dt.timedelta(days=1)).isoformat()
+        core.GUARDIAS.add(self.lunes)
+        self.addCleanup(core.GUARDIAS.discard, self.lunes)
+        # tarea nueva (no duplicada en el lunes simulado)
+        self.app._extras.insert(0, {"id": 30, "nombre": "Tarea C"})
+        self.app._poblar_tareas()
+        self.app.cbo_tarea.set("30 - Tarea C")
+        self.app.dia_vars[0][0].set(True)
+        self.app.dia_vars[1][0].set(True)
+        self.app._recargar_tree()
+        self.app.ent_horas.delete(0, "end")
+        self.app.ent_horas.insert(0, "1")
+        self.app.ent_com.delete(0, "end")
+        self.app.ent_com.insert(0, core.comentario_guardia())
+        self.app._com_auto = core.comentario_guardia()
+        creadas = []
+        with mock.patch.object(core, "crear_entrada",
+                               lambda f, wp, h, com, act: creadas.append((f, com))), \
+             mock.patch.object(self.gui.messagebox, "askyesno",
+                               lambda *a, **k: True), \
+             mock.patch.object(core, "guardar_config_valor") as m_gcv:
+            self.app._anadir()
+        com_por_fecha = dict(creadas)
+        self.assertEqual(com_por_fecha[self.lunes], core.comentario_guardia())
+        self.assertEqual(com_por_fecha[martes], "")
+        self.assertFalse(any(c.args and c.args[0] == "comentarios_tarea"
+                             for c in m_gcv.call_args_list))
+
     def test_resumen_mes(self):
         import dialogos
         # Mes pasado fijo (marzo 2026, 22 laborables x 7h) y sin apuntes:
@@ -126,6 +159,41 @@ class TestGuiAcciones(unittest.TestCase):
             self.assertIn("Te faltan 154h", w["estado"].cget("text"))
         finally:
             top.destroy()
+
+
+class TestWizardConfig(unittest.TestCase):
+    def test_finalizar_preserva_claves_ajenas(self):
+        # Re-ejecutar el asistente NO debe borrar lo que el wizard no gestiona
+        # (festivos/vacaciones marcados, guardias, plantillas...).
+        import json
+        import tkinter as tk
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        root.withdraw()
+        core.guardar_config_valor("guardias", ["2026-07-06"])
+        core.guardar_config_valor("no_laborables", {"2026-12-25": "festivo"})
+        import configurar_gui
+        try:
+            with mock.patch.object(configurar_gui.messagebox, "showinfo",
+                                   lambda *a, **k: None), \
+                 mock.patch.object(configurar_gui, "escribir_lanzadores",
+                                   lambda: None):
+                w = configurar_gui.Wizard(root)
+                w.finalizar()  # destruye root al terminar
+            with open(core.CONFIG_PATH, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            self.assertEqual(cfg.get("guardias"), ["2026-07-06"])
+            self.assertEqual(cfg.get("no_laborables"), {"2026-12-25": "festivo"})
+            self.assertEqual(cfg.get("api_key"), "clave-de-prueba")
+        finally:
+            try:
+                root.destroy()
+            except tk.TclError:
+                pass
+            core.guardar_config_valor("guardias", [])
+            core.guardar_config_valor("no_laborables", {})
 
 
 if __name__ == "__main__":

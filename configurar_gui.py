@@ -48,14 +48,11 @@ def _lista_a_fecha(lst):
 
 
 def _num_jornada(txt):
-    """'4,5' o '7' -> numero (int si es entero); None si no vale o esta fuera de 0-24."""
-    try:
-        v = float(str(txt).replace(",", "."))
-    except (ValueError, TypeError):
+    """'4,5' o '7' -> numero valido de jornada (0-24); None si no vale."""
+    v = ccore.parsear_numero(txt)
+    if v is None or not 0 < v <= 24:
         return None
-    if not 0 < v <= 24:
-        return None
-    return int(v) if v == int(v) else v
+    return v
 
 
 def _fmt_jornada(v):
@@ -420,17 +417,23 @@ class Wizard:
 
     # ---------- guardar ----------
     def finalizar(self):
-        cfg = {
+        # Partir de la config existente: el wizard solo gestiona SUS claves.
+        # Volcar un dict fijo borraba todo lo demas (festivos/vacaciones
+        # marcados, guardias, teletrabajo, plantillas, comentarios...).
+        cfg = ccore.cargar_previa() or {}
+        cfg.update({
             "base_url": self.v["url"].get().strip().rstrip("/"),
             "api_key": self.v["key"].get().strip(),
-            "jornada_invierno": _num_jornada(self.v["jinv"].get()) or 7,
+            "jornada_invierno": _num_jornada(self.v["jinv"].get())
+                                or cfg.get("jornada_invierno", 7),
             "tiene_verano": bool(self.v["tver"].get()),
-            "jornada_verano": _num_jornada(self.v["jver"].get()) or 7,
+            "jornada_verano": _num_jornada(self.v["jver"].get())
+                              or cfg.get("jornada_verano", 5),
             "verano_inicio": _fecha_a_lista(self.v["vini"].get(), [6, 16]),
             "verano_fin": _fecha_a_lista(self.v["vfin"].get(), [9, 15]),
             "actividad_defecto": self.v["act"].get(),
             "favoritos": self.favoritos,
-        }
+        })
         try:
             with open(ccore.CONFIG_PATH, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)

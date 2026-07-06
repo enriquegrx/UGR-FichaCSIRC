@@ -326,36 +326,6 @@ class TestBuscarWp(unittest.TestCase):
             core.buscar_wp("prox")  # la GUI decide como avisar
 
 
-class TestFestivos(unittest.TestCase):
-    def test_importar_festivos(self):
-        festivos = {
-            "2026-01-01": "Año Nuevo",   # jueves: se importa
-            "2026-02-28": "Andalucía",   # sabado: se salta
-            "2026-12-25": "Navidad",     # viernes: se importa
-        }
-        with mock.patch.object(core, "NO_LABORABLES", {}), \
-             mock.patch.object(core, "FESTIVOS_CONOCIDOS", festivos), \
-             mock.patch.object(core, "guardar_config_valor") as m_g:
-            self.assertEqual(core.festivos_pendientes(),
-                             {"2026-01-01": "Año Nuevo",
-                              "2026-12-25": "Navidad"})
-            self.assertEqual(core.importar_festivos(), 2)
-            self.assertTrue(core.es_no_laborable("2026-01-01"))
-            self.assertFalse(core.es_no_laborable("2026-02-28"))
-            # idempotente: la segunda vez no hay nada que importar
-            self.assertEqual(core.importar_festivos(), 0)
-            m_g.assert_called_once()
-
-    def test_no_pisa_marcas_del_usuario(self):
-        with mock.patch.object(core, "NO_LABORABLES",
-                               {"2026-01-01": "vacaciones"}), \
-             mock.patch.object(core, "FESTIVOS_CONOCIDOS",
-                               {"2026-01-01": "Año Nuevo"}), \
-             mock.patch.object(core, "guardar_config_valor"):
-            self.assertEqual(core.importar_festivos(), 0)
-            self.assertEqual(core.motivo_no_laborable("2026-01-01"), "vacaciones")
-
-
 class TestRecordatorioMac(unittest.TestCase):
     def test_plist(self):
         import recordatorio
@@ -451,12 +421,54 @@ class TestFestivos(unittest.TestCase):
         finally:
             core.guardar_config_valor("festivos_locales_extra", [])
 
+    def test_traslados_de_domingo_a_lunes(self):
+        # 2026: Todos los Santos (dom 01/11) y La Constitución (dom 06/12)
+        # se trasladan al lunes, como hacía la tabla fija que se sustituyó.
+        f = core.festivos_del_anio(2026)
+        self.assertEqual(f["2026-11-02"][0], "Todos los Santos (traslado)")
+        self.assertEqual(f["2026-12-07"][0], "La Constitución (traslado)")
+        self.assertNotIn("2026-11-01", f)   # la fecha canónica no se duplica
+        self.assertNotIn("2026-12-06", f)
+        # 2027: Día de Andalucía cae en domingo 28/02 -> lunes 01/03
+        f27 = core.festivos_del_anio(2027)
+        self.assertEqual(f27["2027-03-01"][0], "Día de Andalucía (traslado)")
+
     def test_festivos_pendientes_salta_finde_y_marcados(self):
-        with mock.patch.object(core, "NO_LABORABLES", {"2026-12-25": "Navidad"}):
+        # _hoy fijado: sin él, el test dependería del reloj real y fallaría
+        # a partir de enero de 2027 (el catálogo cubre el año en curso).
+        with mock.patch.object(core, "_hoy", lambda: dt.date(2026, 7, 6)), \
+             mock.patch.object(core, "NO_LABORABLES", {"2026-12-25": "Navidad"}):
             pend = core.festivos_pendientes(ambitos=("nacional",), incluir_ugr=False)
         self.assertNotIn("2026-12-25", pend)          # ya marcado
         self.assertNotIn("2026-02-28", pend)          # sabado (y ambito fuera)
         self.assertIn("2026-01-06", pend)             # Reyes, laborable, sin marcar
+        self.assertNotIn("2027-01-06", pend)          # en julio no se ofrece 2027
+
+    def test_festivos_pendientes_incluye_el_anio_siguiente_en_noviembre(self):
+        with mock.patch.object(core, "_hoy", lambda: dt.date(2026, 11, 15)), \
+             mock.patch.object(core, "NO_LABORABLES", {}):
+            pend = core.festivos_pendientes(ambitos=("nacional",), incluir_ugr=False)
+        self.assertIn("2027-01-06", pend)             # enero preparado
+
+    def test_importar_festivos_idempotente(self):
+        with mock.patch.object(core, "_hoy", lambda: dt.date(2026, 7, 6)), \
+             mock.patch.object(core, "NO_LABORABLES", {}), \
+             mock.patch.object(core, "guardar_config_valor") as m_g:
+            n = core.importar_festivos(ambitos=("nacional",), incluir_ugr=False)
+            self.assertGreater(n, 0)
+            self.assertTrue(core.es_no_laborable("2026-12-25"))
+            self.assertFalse(core.es_no_laborable("2026-02-28"))  # sabado
+            # idempotente: la segunda vez no hay nada que importar
+            self.assertEqual(core.importar_festivos(("nacional",), False), 0)
+            m_g.assert_called_once()
+
+    def test_no_pisa_marcas_del_usuario(self):
+        with mock.patch.object(core, "_hoy", lambda: dt.date(2026, 7, 6)), \
+             mock.patch.object(core, "NO_LABORABLES",
+                               {"2026-12-25": "vacaciones"}), \
+             mock.patch.object(core, "guardar_config_valor"):
+            core.importar_festivos(("nacional",), False)
+            self.assertEqual(core.motivo_no_laborable("2026-12-25"), "vacaciones")
 
     def test_dias_ugr_desde_config(self):
         core.guardar_config_valor("dias_ugr", {"2026-05-18": "San Pascual"})
@@ -504,7 +516,43 @@ class TestVacacionesCupo(unittest.TestCase):
             self.assertFalse(core.es_vacaciones("2026-07-08"))
 
 
+class TestParseoNumeros(unittest.TestCase):
+    def test_parsear_numero(self):
+        import configurar
+        self.assertEqual(configurar.parsear_numero("4,5"), 4.5)
+        self.assertEqual(configurar.parsear_numero("4.5"), 4.5)
+        self.assertEqual(configurar.parsear_numero("7"), 7)
+        self.assertIsNone(configurar.parsear_numero("abc"))
+        # NaN esquivaba los checks de rango y reventaba en int(); inf igual
+        self.assertIsNone(configurar.parsear_numero("nan"))
+        self.assertIsNone(configurar.parsear_numero("inf"))
+        self.assertIsNone(configurar.parsear_numero("-inf"))
+        self.assertIsNone(configurar.parsear_numero(None))
+
+    def test_num_jornada_delega_y_limita(self):
+        import configurar_gui as wiz2
+        self.assertEqual(wiz2._num_jornada("4,5"), 4.5)
+        self.assertIsNone(wiz2._num_jornada("0"))
+        self.assertIsNone(wiz2._num_jornada("25"))
+        self.assertIsNone(wiz2._num_jornada("nan"))
+
+
 class TestConfigPersistente(unittest.TestCase):
+    def test_guardar_config_valores_en_lote(self):
+        core.guardar_config_valores({"clave_a": 1, "clave_b": 2})
+        try:
+            with open(core.CONFIG_PATH, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            self.assertEqual((cfg["clave_a"], cfg["clave_b"]), (1, 2))
+            self.assertEqual(cfg["api_key"], "clave-de-prueba")  # intacta
+        finally:
+            with open(core.CONFIG_PATH, encoding="utf-8") as fh:
+                cfg = json.load(fh)
+            cfg.pop("clave_a", None)
+            cfg.pop("clave_b", None)
+            with open(core.CONFIG_PATH, "w", encoding="utf-8") as fh:
+                json.dump(cfg, fh)
+
     def test_anadir_favorito_no_duplica(self):
         antes = len(core.FAVORITOS)
         try:
