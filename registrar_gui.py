@@ -41,6 +41,7 @@ except Exception as e:
     sys.exit(1)
 
 import dialogos
+import destinos
 import recordatorio
 from fichaui import (
     COLOR_APP_BG, COLOR_BORDER, COLOR_DANGER, COLOR_MUTED, COLOR_PANEL,
@@ -393,7 +394,12 @@ class App:
             pie.bind("<Button-1>", lambda _e: webbrowser.open(
                 f"https://github.com/{core.GITHUB_REPO}"))
             Tooltip(pie, "Abrir el repositorio en GitHub")
-        self.lbl_conn = ttk.Label(barra, text="● Comprobando conexión",
+        # Indicador de INARI (a la izquierda del de ProyectosTIC); solo se
+        # muestra si la integración está activa.
+        self.lbl_conn_inari = ttk.Label(barra, text="● INARI",
+                                        style="Status.TLabel", foreground=COLOR_MUTED)
+        Tooltip(self.lbl_conn_inari, "Estado de la última consulta a INARI")
+        self.lbl_conn = ttk.Label(barra, text="● ProyectosTIC",
                                   style="Status.TLabel", foreground=COLOR_MUTED)
         self.lbl_conn.pack(side="right")
         Tooltip(self.lbl_conn, "Estado de la última consulta a ProyectosTic")
@@ -407,14 +413,23 @@ class App:
             return f"{vals[2]}\n“{vals[4]}”"
         return ""
 
+    _COLORES_CONN = {"ok": COLOR_SUCCESS, "warn": COLOR_WARNING,
+                     "error": COLOR_DANGER, "checking": COLOR_MUTED}
+
     def _poner_conexion(self, estado, texto):
-        colores = {
-            "ok": COLOR_SUCCESS,
-            "warn": COLOR_WARNING,
-            "error": COLOR_DANGER,
-            "checking": COLOR_MUTED,
-        }
-        self.lbl_conn.config(text=texto, foreground=colores.get(estado, COLOR_MUTED))
+        self.lbl_conn.config(text=texto,
+                             foreground=self._COLORES_CONN.get(estado, COLOR_MUTED))
+
+    def _poner_conexion_inari(self, estado, texto=""):
+        """Segundo indicador. estado 'off' lo oculta (integración desactivada)."""
+        if estado == "off":
+            self.lbl_conn_inari.pack_forget()
+            return
+        if not self.lbl_conn_inari.winfo_ismapped():
+            self.lbl_conn_inari.pack(side="right", padx=(0, 10))
+        self.lbl_conn_inari.config(
+            text=texto or "● INARI",
+            foreground=self._COLORES_CONN.get(estado, COLOR_MUTED))
 
     def _menu(self):
         barra = tk.Menu(self.root)
@@ -628,12 +643,21 @@ class App:
                 except Exception:
                     cache[d.isoformat()] = None
                     fallos += 1
-            return cache, fallos, core.nombre_usuario()
+            # Ping ligero a INARI para el segundo indicador (solo si está activo).
+            inari_estado = "off"
+            if destinos.inari_activo():
+                try:
+                    destinos.probar_conexion()
+                    inari_estado = "ok"
+                except Exception:
+                    inari_estado = "error"
+            return cache, fallos, core.nombre_usuario(), inari_estado
 
         def al_terminar(res, err):
             if seq != self._refresco_seq:
                 return  # llego tarde: ya se pidio otra semana
-            cache, fallos, nombre = res if res else ({}, len(dias), "")
+            cache, fallos, nombre, inari_estado = res if res else ({}, len(dias), "", "off")
+            self._poner_conexion_inari(inari_estado)
             self._pintar_semana(dias, cache, fallos, nombre)
 
         self._en_hilo(trabajo, al_terminar)
