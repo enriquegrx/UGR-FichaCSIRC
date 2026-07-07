@@ -13,8 +13,8 @@ widget web de tiempo invertido cuando hay que imputar la jornada todos los días
 - Plataforma: Windows y macOS.
 - Interfaz: Python con Tkinter/ttk.
 - API: OpenProject REST v3.
-- Distribución: instalador Windows, ejecutables portables y paquetes macOS para
-  Apple Silicon e Intel.
+- Distribución: instalador Windows combinado y paquetes macOS para Apple Silicon
+  e Intel.
 - Última versión publicada: <https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest>
 
 La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES.md).
@@ -74,10 +74,7 @@ accesos directos necesarios. Si Windows muestra SmartScreen, hay que usar
 `Más información` y después `Ejecutar de todas formas`; la aplicación no está
 firmada con certificado comercial.
 
-También se publican versiones portables:
-
-- `FichaCSIRC.exe`
-- `FichaCSIRC-Configurar.exe`
+El instalador deja dos accesos: la aplicación de registro y el configurador.
 
 ### macOS
 
@@ -134,8 +131,6 @@ configuración.
 | `fichaui.py` | Utilidades visuales compartidas: estilos, tooltips, botones y ejecución en hilo. |
 | `recordatorio.py` | Aviso diario de fichaje mediante Programador de tareas o LaunchAgent. |
 | `instalador.iss` | Instalador Windows con Inno Setup. |
-| `build_exe.bat` | Compilación local de ejecutables Windows. |
-| `build_instalador.bat` | Compilación local del instalador Windows. |
 | `build_macos.sh` | Compilación local de apps macOS y ZIP. |
 | `.github/workflows/` | Tests y publicación automática de releases. |
 | `tests/` | Tests del motor y de flujos relevantes de la GUI. |
@@ -188,25 +183,25 @@ temporal mediante `FICHACSIRC_CONFIG`.
 
 ## Construcción y releases
 
-### Windows
+La publicación oficial se hace con GitHub Actions. El flujo genera el instalador
+combinado de Windows, los paquetes macOS y los sube a GitHub Releases.
 
-En Windows:
+Para publicar una versión:
 
-```bat
-build_exe.bat
-build_instalador.bat
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
-Artefactos generados:
+Antes de etiquetar hay que actualizar:
 
-- `dist\FichaCSIRC.exe`
-- `dist\FichaCSIRC-Configurar.exe`
-- `dist\FichaCSIRC-Instalador.exe`
+- `VERSION` en `rellenar_horas.py`
+- `version_info.txt` para los metadatos del ejecutable Windows
 
-El instalador cierra procesos de FichaCSIRC antes de reemplazar archivos, borra
-la tarea programada al desinstalar y usa instalación por usuario.
+El instalador Windows cierra procesos de FichaCSIRC antes de reemplazar archivos,
+borra la tarea programada al desinstalar y usa instalación por usuario.
 
-### macOS
+### Build local de macOS
 
 En macOS:
 
@@ -227,22 +222,8 @@ Tk anterior a 8.6. En Homebrew:
 brew install python@3.12 python-tk@3.12
 ```
 
-### Publicación automática
-
-Las releases se publican con GitHub Actions al subir una etiqueta:
-
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-El workflow ejecuta tests, construye Windows, genera el instalador, construye
-macOS `arm64` y `x64`, y sube todos los artefactos a GitHub Releases.
-
-Antes de etiquetar hay que actualizar:
-
-- `VERSION` en `rellenar_horas.py`
-- `version_info.txt` para los metadatos del `.exe`
+Los detalles de mantenimiento y scripts auxiliares están en
+[CONTEXTO_DESARROLLO.md](CONTEXTO_DESARROLLO.md).
 
 ## Decisiones técnicas relevantes
 
