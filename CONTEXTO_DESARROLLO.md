@@ -127,11 +127,17 @@ definición completa y el historial de decisiones.
 - Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
   (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.
-- Integración con INARI (Kanboard) para los días de teletrabajo en SisGes.
-  Diseño y decisiones en `MEJORAS_PENDIENTES.md`. **Fase 1 implementada** (sin
-  publicar): `inari.py` (cliente JSON-RPC de solo lectura, no importa el motor,
-  credenciales por argumento) + `dialogos.abrir_integraciones` en
-  Herramientas > Integraciones (probar conexión y descubrir proyecto/columna/
-  carril/categoría). Tests en `tests/test_inari.py` (red mockeada). **Pendiente**:
-  validar contra `inarifor.ugr.es` con token de formación, y la Fase 2 (escritura
-  de slots, selector de destino, indicadores de conexión, resumen).
+- v2.5.0 (jul 2026): **Integración con INARI (Kanboard) para los días de
+  teletrabajo en SisGes**, opt-in (`inari_activo`, por defecto false). Diseño en
+  `MEJORAS_PENDIENTES.md`. Piezas: `inari.py` (cliente JSON-RPC puro, credenciales
+  por argumento, lectura+escritura de tareas/slots), `destinos.py` (puente
+  config-aware ProyectosTIC/INARI), validación pura de franjas en
+  `rellenar_horas` (`parsear_hora`/`duracion_horas`/`validar_franjas`).
+  UI: `dialogos.abrir_integraciones` (Herramientas), `dialogos.abrir_slot_inari`
+  (registrar slot desde el botón derecho de un día de teletrabajo), dos
+  indicadores de conexión en el pie (`● ProyectosTIC / ● INARI`). Un día de
+  teletrabajo lee/cuenta las horas de INARI (tarjeta, tabla con `destino`,
+  resumen con dos cubos); el borrado enruta a INARI; editar un slot = borrarlo y
+  volver a registrarlo. Tests: `test_inari.py`, `test_destinos.py`, `TestFranjas`,
+  `TestGuiInari` (104 en total). **Nota**: las formas de escritura de Kanboard
+  (createTask/createSubtask) se basan en la doc estándar; validar en uso real.

@@ -425,7 +425,7 @@ class App:
         if estado == "off":
             self.lbl_conn_inari.pack_forget()
             return
-        if not self.lbl_conn_inari.winfo_ismapped():
+        if self.lbl_conn_inari.winfo_manager() != "pack":
             self.lbl_conn_inari.pack(side="right", padx=(0, 10))
         self.lbl_conn_inari.config(
             text=texto or "● INARI",
@@ -635,17 +635,29 @@ class App:
         seq = self._refresco_seq
         dias = self._dias_semana()
 
+        inari_cfg = destinos.configurado()
+
         def trabajo():
             cache, fallos = {}, 0
             for d in dias:
+                iso = d.isoformat()
                 try:
-                    cache[d.isoformat()] = core.entradas_dia(d.isoformat())
+                    if inari_cfg and core.es_teletrabajo(iso):
+                        # Dia de teletrabajo: las horas son las de INARI.
+                        tid, ss = destinos.slots_dia(iso)
+                        cache[iso] = [{"id": s["id"], "task_id": tid, "destino": "inari",
+                                       "horas": s["horas"], "wp_titulo": s["titulo"],
+                                       "actividad": "INARI · Teletrabajo",
+                                       "comentario": "", "wp_id": None} for s in ss]
+                    else:
+                        cache[iso] = [dict(a, destino="op")
+                                      for a in core.entradas_dia(iso)]
                 except Exception:
-                    cache[d.isoformat()] = None
+                    cache[iso] = None
                     fallos += 1
             # Ping ligero a INARI para el segundo indicador (solo si está activo).
             inari_estado = "off"
-            if destinos.inari_activo():
+            if inari_cfg:
                 try:
                     destinos.probar_conexion()
                     inari_estado = "ok"
@@ -844,7 +856,8 @@ class App:
                                  values=(f"{core.DIAS_ES[d.weekday()][:3]} {d.strftime('%d/%m')}",
                                          core._fmt(a["horas"]),
                                          a["wp_titulo"], a["actividad"], a["comentario"]),
-                                 tags=(str(a["id"]), d.isoformat(), zebra))
+                                 tags=(str(a["id"]), d.isoformat(), zebra,
+                                       a.get("destino", "op"), str(a.get("task_id") or "")))
                 idx += 1
         self.var_semana.set(bool(self.dia_vars)
                             and all(v.get() for v, _, _ in self.dia_vars))
@@ -932,6 +945,15 @@ class App:
         dialogos.abrir_exportar(self)
 
     def _editar(self, _e=None):
+        sel = self.tree.selection()
+        if sel:
+            tags = self.tree.item(sel[0], "tags")
+            if len(tags) > 3 and tags[3] == "inari":
+                messagebox.showinfo(
+                    "Editar slot de INARI",
+                    "Para corregir un slot de INARI, bórralo (Supr) y vuelve a\n"
+                    "registrarlo con las horas correctas.")
+                return
         dialogos.abrir_editar(self)
 
     def _resumen_mes(self):
@@ -979,6 +1001,11 @@ class App:
         else:
             menu.add_command(label="Marcar teletrabajo",
                              command=lambda: self._marcar_teletrabajo(d))
+        # --- Registro en INARI (solo dia de teletrabajo, con integracion lista) ---
+        if core.es_teletrabajo(fecha) and destinos.configurado():
+            menu.add_separator()
+            menu.add_command(label="Registrar slot en INARI...",
+                             command=lambda: dialogos.abrir_slot_inari(self, d))
         menu.tk_popup(evento.x_root, evento.y_root)
 
     def _marcar_teletrabajo(self, d):
@@ -1351,13 +1378,16 @@ class App:
                 continue
             entry_id = tags[0]
             fecha = tags[1] if len(tags) > 1 else ""
+            destino = tags[3] if len(tags) > 3 else "op"
             datos = None
-            for a in (self._cache_dia.get(fecha) or []):
-                if str(a["id"]) == str(entry_id):
-                    datos = {"fecha": fecha, "wp_id": a["wp_id"], "horas": a["horas"],
-                             "comentario": a["comentario"], "actividad": a["actividad"]}
-                    break
-            apuntes.append((entry_id, datos))
+            # Deshacer solo para ProyectosTIC (recrear un slot de INARI no es 1:1)
+            if destino == "op":
+                for a in (self._cache_dia.get(fecha) or []):
+                    if str(a["id"]) == str(entry_id):
+                        datos = {"fecha": fecha, "wp_id": a["wp_id"], "horas": a["horas"],
+                                 "comentario": a["comentario"], "actividad": a["actividad"]}
+                        break
+            apuntes.append((entry_id, destino, datos))
         if not apuntes:
             return
         pregunta = ("¿Seguro que quieres eliminar este apunte?" if len(apuntes) == 1
@@ -1368,9 +1398,12 @@ class App:
 
         def trabajo():
             eliminados, errores, ultimo = [], 0, ""
-            for entry_id, datos in apuntes:
+            for entry_id, destino, datos in apuntes:
                 try:
-                    core.eliminar_entrada(entry_id)
+                    if destino == "inari":
+                        destinos.borrar(entry_id)
+                    else:
+                        core.eliminar_entrada(entry_id)
                     if datos:
                         eliminados.append(datos)
                 except Exception as ex:

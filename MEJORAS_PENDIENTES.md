@@ -6,12 +6,13 @@ configuracion local.
 
 ## Integracion con INARI (destino de los dias de teletrabajo en SisGes)
 
-> Estado: diseño consolidado (decisiones de julio 2026). **Fase 1 implementada**
-> (cliente `inari.py` de solo lectura + config en Herramientas > Integraciones),
-> pendiente de validar en `inarifor.ugr.es`. **Fase 2 pendiente** (escritura de
-> slots). Este documento manda sobre el mockup `mockup_inari_slot.svg`, que
-> ilustra un alcance mas amplio (destino general, estado "Pendiente/Sincronizado")
-> del que finalmente se acordo.
+> Estado: **implementado y publicado en v2.5.0** (opt-in, `inari_activo` false por
+> defecto). Fase 1 (cliente de solo lectura + config) y Fase 2 (escritura de
+> slots, selector por día de teletrabajo, dos indicadores, resumen con cubos)
+> completas. Pendiente: validar las formas de escritura de Kanboard en uso real
+> de SisGes / `inarifor`. Este documento manda sobre el mockup
+> `mockup_inari_slot.svg`, que ilustra un alcance mas amplio (destino general,
+> estado "Pendiente/Sincronizado") del que finalmente se acordo.
 
 ### Alcance acordado
 

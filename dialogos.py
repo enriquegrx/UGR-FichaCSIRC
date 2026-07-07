@@ -158,6 +158,7 @@ def abrir_resumen_mes(app):
 
     lbl_estado = ttk.Label(frm, text="", font=("TkDefaultFont", 11, "bold"))
     lbl_estado.pack(anchor="w", pady=(10, 0))
+    lbl_tt = ttk.Label(frm, text="", foreground=COLOR_MUTED)  # cubo teletrabajo INARI
 
     lbl_inc = ttk.Label(frm, text="Días incompletos (doble clic para ir):",
                         foreground=COLOR_MUTED)
@@ -196,20 +197,32 @@ def abrir_resumen_mes(app):
         hoy = dt.date.today()
 
         def trabajo():
+            import destinos
+            inari_cfg = destinos.configurado()
             total = obj_hasta_hoy = obj_mes = 0.0
+            tt_horas, tt_dias = 0.0, 0
             incompletos = []
             for d in dias:
                 if d.weekday() >= 5:
                     continue
                 obj = core.objetivo_de(d)
                 obj_mes += obj
-                reg = sum(a["horas"] for a in core.entradas_dia(d.isoformat()))
+                iso = d.isoformat()
+                # En un dia de teletrabajo las horas son las de INARI (no las de
+                # ProyectosTIC): cubos disjuntos, sin doble conteo.
+                if inari_cfg and core.es_teletrabajo(iso):
+                    reg = destinos.horas_dia(iso)
+                    if reg:
+                        tt_horas += reg
+                        tt_dias += 1
+                else:
+                    reg = sum(a["horas"] for a in core.entradas_dia(iso))
                 total += reg
                 if d <= hoy:
                     obj_hasta_hoy += obj
                     if obj and reg < obj - 0.001:
                         incompletos.append((d, reg, obj))
-            return total, obj_hasta_hoy, obj_mes, incompletos
+            return total, obj_hasta_hoy, obj_mes, incompletos, tt_horas, tt_dias
 
         def al_terminar(res, err):
             if not top.winfo_exists() or seq != estado["seq"]:
@@ -218,10 +231,16 @@ def abrir_resumen_mes(app):
                 lbl_estado.config(text=f"No se pudo consultar el mes: {err}",
                                   foreground=COLOR_DANGER)
                 return
-            total, obj_hoy, obj_mes, incompletos = res
+            total, obj_hoy, obj_mes, incompletos, tt_horas, tt_dias = res
             v_reg.config(text=core._fmt(total))
             v_hoy.config(text=core._fmt(obj_hoy))
             v_mes.config(text=core._fmt(obj_mes))
+            if tt_dias:
+                lbl_tt.config(text=f"Incluye teletrabajo en INARI: "
+                                   f"{core._fmt(tt_horas)} en {tt_dias} día(s)")
+                lbl_tt.pack(anchor="w", before=lbl_inc if lbl_inc.winfo_ismapped() else btns)
+            else:
+                lbl_tt.pack_forget()
             al_dia = total >= obj_hoy - 0.001
             if al_dia:
                 lbl_estado.config(text="Al día ✔", foreground=COLOR_SUCCESS)
@@ -941,3 +960,73 @@ def abrir_integraciones(app):
     # Si ya había credenciales guardadas, intenta poblar los desplegables al abrir.
     if core.config_valor("inari_usuario") and core.config_valor("inari_token"):
         probar()
+
+
+def abrir_slot_inari(app, dia):
+    """Registrar un slot de teletrabajo en INARI para 'dia' (date).
+    Escribe de inmediato (crea/reutiliza la tarea diaria + subtarea)."""
+    import destinos
+    fecha = dia.isoformat()
+    top = tk.Toplevel(app.root)
+    top.title("Registrar slot en INARI")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+    frm.columnconfigure(1, weight=1)
+
+    ttk.Label(frm, text=f"{core.DIAS_ES[dia.weekday()]} {dia.strftime('%d/%m/%Y')} · teletrabajo",
+              font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, columnspan=3,
+                                                       sticky="w", pady=(0, 8))
+
+    ttk.Label(frm, text="Inicio (HH:MM):").grid(row=1, column=0, sticky="w", pady=3)
+    e_ini = ttk.Entry(frm, width=8)
+    e_ini.grid(row=1, column=1, sticky="w", padx=6)
+    ttk.Label(frm, text="Fin (HH:MM):").grid(row=2, column=0, sticky="w", pady=3)
+    e_fin = ttk.Entry(frm, width=8)
+    e_fin.grid(row=2, column=1, sticky="w", padx=6)
+    lbl_dur = ttk.Label(frm, text="", foreground=COLOR_MUTED)
+    lbl_dur.grid(row=2, column=2, sticky="w")
+    ttk.Label(frm, text="Descripción:").grid(row=3, column=0, sticky="w", pady=3)
+    e_desc = ttk.Entry(frm, width=42)
+    e_desc.grid(row=3, column=1, columnspan=2, sticky="we", padx=6)
+    lbl_msg = ttk.Label(frm, text="", foreground=COLOR_MUTED)
+    lbl_msg.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+    def _dur(_e=None):
+        h = core.duracion_horas(e_ini.get().strip(), e_fin.get().strip())
+        lbl_dur.config(text=(f"= {core._fmt(h)}" if h else ""))
+    e_ini.bind("<KeyRelease>", _dur)
+    e_fin.bind("<KeyRelease>", _dur)
+
+    def registrar():
+        ini, fin, desc = (e_ini.get().strip(), e_fin.get().strip(),
+                          e_desc.get().strip())
+        if core.duracion_horas(ini, fin) is None:
+            messagebox.showwarning(
+                "Franja no válida",
+                "Escribe inicio y fin como HH:MM, con el fin posterior al inicio.",
+                parent=top)
+            return
+        b_reg.config(state="disabled")
+        lbl_msg.config(text="Registrando en INARI...", foreground=COLOR_MUTED)
+
+        def al_terminar(res, err):
+            if not top.winfo_exists():
+                return
+            b_reg.config(state="normal")
+            if err:
+                lbl_msg.config(text=str(err), foreground=COLOR_DANGER)
+                return
+            top.destroy()
+            app._msg_pendiente = "Slot registrado en INARI."
+            app.refrescar()
+
+        en_hilo(app.root, lambda: destinos.registrar(fecha, ini, fin, desc), al_terminar)
+
+    e_desc.bind("<Return>", lambda _e: registrar())
+    btns = ttk.Frame(frm)
+    btns.grid(row=5, column=0, columnspan=3, sticky="e", pady=(12, 0))
+    b_reg = ttk.Button(btns, text="Registrar", command=registrar)
+    b_reg.pack(side="right", padx=4)
+    ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")

@@ -161,6 +161,61 @@ class TestGuiAcciones(unittest.TestCase):
             top.destroy()
 
 
+class TestGuiInari(unittest.TestCase):
+    """Un dia de teletrabajo con INARI activo lee/borra en INARI, no en OpenProject."""
+
+    def setUp(self):
+        import tkinter as tk
+        try:
+            self.root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        self.root.withdraw()
+        self.addCleanup(self.root.destroy)
+        h = dt.date.today()
+        self.lunes = (h - dt.timedelta(days=h.weekday())).isoformat()
+
+        import registrar_gui, destinos
+        self.gui = registrar_gui
+        parches = [
+            mock.patch.object(core, "entradas_dia", lambda f: []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles", lambda wp: {"soporte": "/x"}),
+            mock.patch.object(core, "FAVORITOS", []),
+            mock.patch.object(core, "GITHUB_REPO", ""),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(core, "TELETRABAJO", {self.lunes}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+            mock.patch.object(destinos, "configurado", lambda: True),
+            mock.patch.object(destinos, "probar_conexion", lambda: {"username": "E"}),
+            mock.patch.object(destinos, "slots_dia",
+                              lambda iso: (77, [{"id": 100, "titulo": "09:00-10:30 - x",
+                                                 "horas": 1.5}])),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.destinos = destinos
+        self.app = registrar_gui.App(self.root)
+
+    def test_dia_teletrabajo_lee_inari(self):
+        c = self.app._cache_dia.get(self.lunes)
+        self.assertTrue(c and c[0]["destino"] == "inari" and c[0]["horas"] == 1.5)
+
+    def test_borrar_enruta_a_inari(self):
+        self.app.dia_vars[0][0].set(True)
+        self.app._recargar_tree()
+        it = self.app.tree.get_children()[0]
+        self.assertEqual(self.app.tree.item(it, "tags")[3], "inari")
+        self.app.tree.selection_set(it)
+        with mock.patch.object(self.destinos, "borrar", return_value=True) as m_b, \
+             mock.patch.object(core, "eliminar_entrada") as m_op, \
+             mock.patch.object(self.gui.messagebox, "askyesno", lambda *a, **k: True):
+            self.app._eliminar()
+        m_b.assert_called_once_with("100")
+        m_op.assert_not_called()
+
+
 class TestWizardConfig(unittest.TestCase):
     def test_finalizar_preserva_claves_ajenas(self):
         # Re-ejecutar el asistente NO debe borrar lo que el wizard no gestiona
