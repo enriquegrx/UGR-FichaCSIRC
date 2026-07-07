@@ -114,6 +114,9 @@ definición completa y el historial de decisiones.
   año siguiente a partir de noviembre; tests nuevos de traslados, wizard y
   comentario de guardia (65 en total).
 
+- v2.4.2 (jul 2026): icono con fondo blanco redondeado (`fichacsirc.ico`/`.png`):
+  antes era transparente y no se veía en escritorios con fondo oscuro.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
   (duraciones ISO, jornada/verano, parsing/paginación de la API, payloads, pendientes)
