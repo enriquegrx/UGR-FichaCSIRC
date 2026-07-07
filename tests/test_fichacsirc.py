@@ -516,6 +516,41 @@ class TestVacacionesCupo(unittest.TestCase):
             self.assertFalse(core.es_vacaciones("2026-07-08"))
 
 
+class TestFranjas(unittest.TestCase):
+    def test_parsear_hora(self):
+        self.assertEqual(core.parsear_hora("09:30"), 570)
+        self.assertEqual(core.parsear_hora("9:5"), 545)
+        self.assertIsNone(core.parsear_hora("25:00"))
+        self.assertIsNone(core.parsear_hora("09:70"))
+        self.assertIsNone(core.parsear_hora("nueve"))
+        self.assertIsNone(core.parsear_hora(""))
+
+    def test_duracion_horas(self):
+        self.assertEqual(core.duracion_horas("09:00", "10:30"), 1.5)
+        self.assertEqual(core.duracion_horas("08:00", "13:00"), 5.0)
+        self.assertIsNone(core.duracion_horas("10:00", "09:00"))  # fin <= inicio
+        self.assertIsNone(core.duracion_horas("10:00", "10:00"))
+        self.assertIsNone(core.duracion_horas("x", "10:00"))
+
+    def test_validar_franjas_ok(self):
+        self.assertEqual(core.validar_franjas([("09:00", "10:30"),
+                                               ("11:00", "13:00")]), [])
+
+    def test_validar_franjas_solape(self):
+        probs = core.validar_franjas([("09:00", "11:00"), ("10:30", "12:00")])
+        self.assertEqual(len(probs), 1)
+        self.assertIn("solapan", probs[0])
+
+    def test_validar_franjas_formato_y_orden(self):
+        probs = core.validar_franjas([("09:00", "08:00"), ("aa", "10:00")])
+        self.assertEqual(len(probs), 2)
+
+    def test_validar_franjas_adyacentes_no_solapan(self):
+        # fin de una == inicio de la siguiente: valido
+        self.assertEqual(core.validar_franjas([("09:00", "10:00"),
+                                               ("10:00", "11:00")]), [])
+
+
 class TestParseoNumeros(unittest.TestCase):
     def test_parsear_numero(self):
         import configurar

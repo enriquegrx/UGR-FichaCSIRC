@@ -139,5 +139,78 @@ class TestLecturas(unittest.TestCase):
             self.assertEqual(m.call_args.kwargs["json"]["method"], "getAllCategories")
 
 
+class TestEscritura(unittest.TestCase):
+    def test_buscar_tarea_titulo_exacto(self):
+        r = _resp(body={"result": [{"id": 1, "title": "Otra"},
+                                   {"id": 7, "title": "Teletrabajo 2026-07-06"}]})
+        with mock.patch.object(inari.requests, "post", return_value=r):
+            self.assertEqual(
+                inari.buscar_tarea("u", "us", "tk", 5, "Teletrabajo 2026-07-06"), 7)
+        # sin coincidencia exacta -> None
+        r = _resp(body={"result": [{"id": 1, "title": "Teletrabajo 2026-07-06 (algo)"}]})
+        with mock.patch.object(inari.requests, "post", return_value=r):
+            self.assertIsNone(
+                inari.buscar_tarea("u", "us", "tk", 5, "Teletrabajo 2026-07-06"))
+
+    def test_crear_tarea_payload(self):
+        r = _resp(body={"result": 42})
+        with mock.patch.object(inari.requests, "post", return_value=r) as m:
+            tid = inari.crear_tarea("u", "us", "tk", 5, "Teletrabajo 2026-07-06",
+                                    column_id=2, swimlane_id=3, category_id=4)
+        self.assertEqual(tid, 42)
+        p = m.call_args.kwargs["json"]
+        self.assertEqual(p["method"], "createTask")
+        self.assertEqual(p["params"], {"project_id": 5, "title": "Teletrabajo 2026-07-06",
+                                       "column_id": 2, "swimlane_id": 3, "category_id": 4})
+
+    def test_crear_tarea_error_si_false(self):
+        with mock.patch.object(inari.requests, "post", return_value=_resp(body={"result": False})):
+            with self.assertRaises(inari.InariError):
+                inari.crear_tarea("u", "us", "tk", 5, "X")
+
+    def test_tarea_del_dia_reutiliza(self):
+        # existe -> no crea
+        r = _resp(body={"result": [{"id": 9, "title": "Teletrabajo 2026-07-06"}]})
+        with mock.patch.object(inari.requests, "post", return_value=r):
+            self.assertEqual(inari.tarea_del_dia("u", "us", "tk", 5,
+                                                 "Teletrabajo 2026-07-06"), 9)
+
+    def test_tarea_del_dia_crea_si_no_existe(self):
+        respuestas = [_resp(body={"result": []}),        # searchTasks: nada
+                      _resp(body={"result": 11})]        # createTask: id
+        with mock.patch.object(inari.requests, "post", side_effect=respuestas):
+            self.assertEqual(inari.tarea_del_dia("u", "us", "tk", 5,
+                                                 "Teletrabajo 2026-07-06"), 11)
+
+    def test_crear_slot_time_spent(self):
+        r = _resp(body={"result": 100})
+        with mock.patch.object(inari.requests, "post", return_value=r) as m:
+            sid = inari.crear_slot("u", "us", "tk", 7, "09:00-10:30 - Copias", 1.5)
+        self.assertEqual(sid, 100)
+        p = m.call_args.kwargs["json"]
+        self.assertEqual(p["method"], "createSubtask")
+        self.assertEqual(p["params"]["task_id"], 7)
+        self.assertEqual(p["params"]["time_spent"], 1.5)
+        self.assertEqual(p["params"]["title"], "09:00-10:30 - Copias")
+
+    def test_slots_normaliza(self):
+        r = _resp(body={"result": [{"id": "1", "title": "a", "time_spent": "1.5"},
+                                   {"id": 2, "title": "b", "time_spent": None}]})
+        with mock.patch.object(inari.requests, "post", return_value=r):
+            self.assertEqual(inari.slots("u", "us", "tk", 7),
+                             [{"id": 1, "titulo": "a", "horas": 1.5},
+                              {"id": 2, "titulo": "b", "horas": 0.0}])
+
+    def test_actualizar_y_borrar(self):
+        with mock.patch.object(inari.requests, "post", return_value=_resp(body={"result": True})) as m:
+            self.assertTrue(inari.actualizar_slot("u", "us", "tk", 100, 7, horas=2.0))
+            self.assertEqual(m.call_args.kwargs["json"]["method"], "updateSubtask")
+            self.assertTrue(inari.borrar_slot("u", "us", "tk", 100))
+            self.assertEqual(m.call_args.kwargs["json"]["method"], "removeSubtask")
+        with mock.patch.object(inari.requests, "post", return_value=_resp(body={"result": False})):
+            with self.assertRaises(inari.InariError):
+                inari.borrar_slot("u", "us", "tk", 100)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

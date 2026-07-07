@@ -769,6 +769,48 @@ def teletrabajo_en_semana(lunes):
     return len(TELETRABAJO & dias)
 
 
+# ----------------------- franjas horarias (slots de INARI) -----------------------
+# Funciones puras (sin red): validan los slots de tiempo que se registran en
+# INARI. OpenProject no usa franjas; esto es solo para el destino INARI.
+
+def parsear_hora(txt):
+    """'9:30' o '09:30' -> minutos desde medianoche (int); None si no vale."""
+    try:
+        h, m = (int(x) for x in str(txt).strip().split(":"))
+    except (ValueError, AttributeError):
+        return None
+    if 0 <= h < 24 and 0 <= m < 60:
+        return h * 60 + m
+    return None
+
+
+def duracion_horas(inicio, fin):
+    """Horas (float, 2 decimales) entre dos 'HH:MM' con fin > inicio; None si no."""
+    a, b = parsear_hora(inicio), parsear_hora(fin)
+    if a is None or b is None or b <= a:
+        return None
+    return round((b - a) / 60, 2)
+
+
+def validar_franjas(franjas):
+    """franjas: lista de (inicio, fin) en 'HH:MM'. Devuelve una lista de mensajes
+    de error (vacia si todo correcto): formato, fin>inicio y ausencia de solapes."""
+    problemas = []
+    intervalos = []
+    for i, (ini, fin) in enumerate(franjas, 1):
+        a, b = parsear_hora(ini), parsear_hora(fin)
+        if a is None or b is None:
+            problemas.append(f"Franja {i}: hora no valida ({ini}-{fin}).")
+        elif b <= a:
+            problemas.append(f"Franja {i}: el fin ({fin}) no es posterior al inicio ({ini}).")
+        else:
+            intervalos.append((a, b, i))
+    for (a1, b1, i1), (a2, b2, i2) in zip(sorted(intervalos), sorted(intervalos)[1:]):
+        if a2 < b1:
+            problemas.append(f"Las franjas {i1} y {i2} se solapan.")
+    return problemas
+
+
 def dias_pendientes_semana(referencia=None, incluir_futuros=False):
     """Dias laborables de la semana de 'referencia' que aun no llegan a su
     jornada. Devuelve lista de (dia, registrado, objetivo), o None si no hay
