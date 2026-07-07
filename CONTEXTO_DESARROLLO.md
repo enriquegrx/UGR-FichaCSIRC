@@ -124,5 +124,6 @@ definición completa y el historial de decisiones.
 - Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
   (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.
-- Integración con INARI como destino de registro por API Kanboard.
-  Ver `MEJORAS_PENDIENTES.md`.
+- Integración con INARI (Kanboard) para los días de teletrabajo en SisGes.
+  Diseño consolidado y decisiones tomadas en `MEJORAS_PENDIENTES.md`; pendiente
+  de implementar (Fase 1: `inari.py` de solo lectura + config en Herramientas).

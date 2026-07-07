@@ -4,84 +4,71 @@ Este documento recoge mejoras candidatas que conviene diseñar antes de
 implementarlas. No debe incluir credenciales, tokens ni datos personales de
 configuracion local.
 
-## Integracion con INARI como destino de registro
+## Integracion con INARI (destino de los dias de teletrabajo en SisGes)
 
-### Contexto
+> Estado: diseño consolidado (decisiones de julio 2026). Pendiente de
+> implementar. Este documento manda sobre el mockup `mockup_inari_slot.svg`,
+> que ilustra un alcance mas amplio (destino general, estado
+> "Pendiente/Sincronizado") del que finalmente se acordo.
 
-INARI se usa en algunos servicios como sistema de gestion de tareas. En
-Sistemas de Gestion, los dias de teletrabajo deben registrarse en INARI, no en
-ProyectosTIC/OpenProject. En otros servicios, como Microinformatica, INARI puede
-usarse tambien en dias presenciales, de forma indistinta con ProyectosTIC.
+### Alcance acordado
 
-Por tanto, INARI no debe modelarse como una consecuencia fija del teletrabajo,
-sino como un segundo destino de registro configurable por el usuario. El
-teletrabajo solo puede servir como sugerencia de destino cuando asi se active
-en preferencias.
+- La integracion es **solo para SisGes** (Sistemas de Gestion), no un segundo
+  destino general para todos los servicios.
+- INARI es el destino de los **dias marcados como teletrabajo**. En dias normales
+  la app sigue registrando en ProyectosTIC como hasta ahora; INARI no aparece.
+- Fuera de alcance ahora (posible extension futura): otros servicios, como
+  Microinformatica, podrian querer INARI tambien en dias presenciales.
 
-### Descubrimiento API
+### Modelo de dias y destinos
 
-INARI esta desplegado sobre Kanboard y expone la API JSON-RPC estandar:
+- **Dia normal**: ProyectosTIC. Sin cambios respecto a hoy.
+- **Dia de teletrabajo** (con INARI activo): la app ofrece elegir destino
+  **INARI o ProyectosTIC, uno solo, nunca los dos**. Sugerencia por defecto:
+  INARI.
+- Como cada dia de teletrabajo va a un unico sistema, ningun dia tiene horas en
+  ambos: **no hay duplicacion de horas por construccion**.
+- Guardarrail: si un dia de teletrabajo ya tiene horas en un sistema y se intenta
+  añadir en el otro, la app **avisa** (no bloquea, coherente con el resto).
+- Nota de estado actual: marcar teletrabajo hoy es solo una etiqueta local
+  (`TELETRABAJO` en config); no escribe horas en ningun sitio. Las horas de un
+  dia de teletrabajo seran los slots que se creen en INARI.
 
-- Produccion: `https://inari.ugr.es/kanboard/jsonrpc.php`
-- Version observada: Kanboard `1.2.50`
-- Autenticacion: HTTP Basic con `usuario:token_personal`
-- El entorno de formacion usa otra autenticacion/token; un token de produccion
-  no sirve en `inarifor.ugr.es`.
+### Jornada y computo de horas
 
-Metodos Kanboard relevantes:
+- Un dia de teletrabajo mantiene su **jornada normal segun temporada** (p. ej. 5h
+  verano / 7h invierno), que se cubre con las horas de INARI.
+- El computo de jornada **nunca suma** ProyectosTIC + INARI. Cuenta el destino
+  que tiene las horas ese dia (INARI en teletrabajo, ProyectosTIC en el resto).
+- Afecta a: barra y "faltan Xh" de la semana, aviso diario de fichaje y resumen
+  del mes. En dias de teletrabajo, esos calculos leen las horas de INARI
+  (`time_spent` de las subtareas del dia).
 
-- `getMe`: validar credenciales y obtener el usuario actual.
-- `getMyProjects`: listar proyectos visibles para el usuario.
-- `getColumns`: obtener columnas del tablero.
-- `getActiveSwimlanes`: obtener carriles/swimlanes.
-- `getAllCategories`: obtener categorias.
-- `searchTasks`: localizar tareas existentes.
-- `createTask`: crear una tarea.
-- `updateTask`: actualizar una tarea.
-- `createSubtask`: crear una subtarea.
-- `updateSubtask`: asignar usuario, estado y `time_spent`.
-- `getAllSubtasks`: consultar subtareas de una tarea.
+### Resumen del mes
 
-No guardar IDs de proyecto, columna, swimlane o categoria en codigo. Deben
-descubrirse por API y persistirse en `config.json`, igual que la configuracion
-de OpenProject.
+Dos cubos disjuntos que suman (ningun dia esta en los dos):
 
-### Propuesta funcional
+```
+Registrado en ProyectosTIC ....... A h   (dias no teletrabajo)
+Teletrabajo en INARI ............. B h   (n dias teletrabajados)
+-------------------------------------------------
+Total ............................ A+B h
+Objetivo del mes ................. objetivo
+```
 
-La app mantendria el flujo actual de ProyectosTIC como camino rapido, y anadiria
-INARI como destino alternativo por apunte.
+Los dias de teletrabajo se evaluan contra sus horas de INARI: no aparecen como
+incompletos si INARI los cubre.
 
-Flujo propuesto:
+### Configuracion (Herramientas > Integraciones, NO en el wizard)
 
-1. El usuario selecciona uno o varios dias, igual que ahora.
-2. En el formulario inferior aparece un selector de destino:
-   `ProyectosTIC | INARI`, solo si INARI esta activado.
-3. Si el destino es ProyectosTIC, se muestra el formulario actual: tarea, horas,
-   actividad y comentario.
-4. Si el destino es INARI, se muestra un formulario de slot: hora inicio, hora
-   fin, descripcion/tarea, proyecto, columna, carril y categoria.
-5. La tabla de apuntes muestra el origen/destino de cada registro para evitar
-   confusiones.
-6. La app valida los slots INARI antes de sincronizar: horas positivas,
-   franjas sin solape y, si procede, total de jornada esperada.
+La configuracion de INARI va en un dialogo nuevo de `Herramientas >
+Integraciones`, fuera del configurador de primera vez (INARI lo usa una minoria;
+el arranque inicial debe seguir corto). El token se enmascara igual que la
+`api_key` de OpenProject y no se escribe en logs.
 
-El teletrabajo queda como una marca de modalidad del dia. Si la preferencia
-`inari_sugerir_en_teletrabajo` esta activa, al seleccionar un dia marcado como
-teletrabajo la app preselecciona INARI, pero el usuario puede cambiarlo si el
-selector esta visible.
-
-Modelo recomendado en INARI:
-
-- Crear una tarea diaria, por ejemplo: `Registro 2026-07-06` o
-  `Teletrabajo 2026-07-06` cuando aplique.
-- Crear una subtarea por slot de tiempo:
-  `09:00-10:30 - Revision de copias`
-- Guardar las horas del slot en `time_spent`.
-- Incluir la franja horaria en el titulo o descripcion de la subtarea, porque
-  Kanboard registra horas dedicadas pero no expone en la API estandar un
-  historico inicio-fin para slots pasados.
-
-### Configuracion nueva
+El dialogo permite: activar/desactivar, URL, usuario y token (con pegado rapido
+`usuario:token` que se separa solo), **Probar conexion**, y elegir por API el
+proyecto, la columna, el carril/swimlane y la categoria por defecto.
 
 Campos candidatos en `config.json`:
 
@@ -94,57 +81,109 @@ Campos candidatos en `config.json`:
   "inari_project_id": null,
   "inari_column_id": null,
   "inari_swimlane_id": null,
-  "inari_category_id": null,
-  "inari_por_defecto": false,
-  "inari_sugerir_en_teletrabajo": true,
-  "mostrar_selector_destino": true,
-  "recordar_ultimo_destino": true,
-  "ultimo_destino": "proyectostic"
+  "inari_category_id": null
 }
 ```
 
-El configurador inicial deberia incluir un paso opcional "INARI":
+Se descartan del borrador anterior `inari_por_defecto`, `inari_sugerir_en_teletrabajo`,
+`mostrar_selector_destino`, `recordar_ultimo_destino` y `ultimo_destino`: con el
+modelo por-dia (INARI = destino de teletrabajo) y el selector visible solo en
+dias de teletrabajo, dejan de tener sentido.
 
-- Activar/desactivar la integracion.
-- Introducir URL, usuario y token en campos separados.
-- Permitir pegado rapido `usuario@ugr.es:token`, separandolo automaticamente.
-- Probar conexion con INARI.
-- Elegir proyecto visible.
-- Elegir columna destino inicial.
-- Elegir swimlane/carril por defecto.
-- Elegir categoria por defecto.
-- Elegir preferencias con checks:
-  - Usar INARI como destino por defecto.
-  - En dias de teletrabajo, sugerir INARI.
-  - Mostrar selector de destino al anadir apuntes.
-  - Recordar ultimo destino usado.
+### Indicadores de conexion (pie de la ventana)
 
-Las mismas opciones deberian estar disponibles posteriormente en
-`Herramientas > Preferencias` o `Herramientas > Integraciones`.
+- La app ya tiene un indicador `● ...` de color (verde/ambar/rojo) para
+  ProyectosTIC (`_poner_conexion` / `lbl_conn` en `registrar_gui.py`).
+- Se añade un **gemelo para INARI**, con estado independiente, visible **solo si
+  `inari_activo`**. Diferenciados por nombre: `● ProyectosTIC` / `● INARI`.
+- INARI se comprueba con un `getMe` ligero en cada refresco (una llamada barata,
+  en el hilo de fondo que ya existe), para que el punto este siempre vivo.
 
-### Encaje con la app actual
+### API de INARI (Kanboard JSON-RPC)
 
-Piezas probables:
+- Produccion: `https://inari.ugr.es/kanboard/jsonrpc.php`
+- Version observada: Kanboard `1.2.50`
+- Autenticacion: HTTP Basic con `usuario:token_personal`.
+- El entorno de formacion (`inarifor.ugr.es`) usa otra autenticacion/token; un
+  token de produccion no sirve alli.
 
-- Nuevo modulo `inari.py` para aislar JSON-RPC, autenticacion y errores.
-- Extender `configurar_gui.py` con un paso opcional "INARI".
-- Extender `rellenar_horas.py` con funciones puras de validacion de franjas.
-- Extender `registrar_gui.py` con selector de destino y formulario INARI.
-- Tests unitarios del cliente INARI con red mockeada.
-- Tests de validacion de franjas: solapes, horas negativas, huecos y total de
-  jornada.
+Metodos Kanboard relevantes:
+
+- `getMe`: validar credenciales y obtener el usuario actual (tambien vale para el
+  indicador de conexion).
+- `getMyProjects`: listar proyectos visibles.
+- `getColumns`, `getActiveSwimlanes`, `getAllCategories`: descubrir opciones del
+  tablero.
+- `searchTasks`: localizar tareas existentes.
+- `createTask` / `updateTask`: crear/actualizar la tarea diaria.
+- `createSubtask` / `updateSubtask` / `getAllSubtasks`: gestionar los slots.
+- `removeSubtask`: borrar un slot.
+
+No guardar IDs de proyecto, columna, swimlane o categoria en codigo: descubrirlos
+por API y persistirlos en `config.json`, igual que la configuracion de
+OpenProject.
+
+**Modelo de tiempo confirmado** (docs.kanboard.org, jul 2026): `createSubtask` y
+`updateSubtask` exponen `time_spent` (horas acumuladas) pero NO parametros de
+inicio/fin de franja. Kanboard guarda `start`/`end` solo por cambios de estado en
+tiempo real (todo -> en progreso -> hecho), no sirve para registrar franjas
+pasadas. Por tanto la franja "09:00-10:30" va en el **titulo** de la subtarea y
+las horas en `time_spent`. (Revisar en inarifor el namespace
+`subtask_time_tracking` por si aportara algo mas fiel, sin contar con ello.)
+
+### Modelo del registro y de los apuntes
+
+- Una **tarea diaria** por dia de teletrabajo (p. ej. `Teletrabajo 2026-07-06`).
+- Una **subtarea por slot**: titulo `09:00-10:30 - <descripcion>`, horas en
+  `time_spent`.
+- En la tabla de la app, cada apunte lleva su **destino** (ProyectosTIC / INARI) y
+  su **id externo** (id de `time_entry` de OpenProject o id de subtarea de
+  Kanboard), para enrutar editar/borrar al sistema correcto (`updateSubtask` /
+  `removeSubtask` en INARI).
+
+### Formulario de slot INARI
+
+- En el dia a dia muestra solo **Inicio / Fin / Descripcion** (con la duracion
+  calculada). Proyecto / Columna / Carril / Categoria quedan plegados como
+  "avanzado", rellenados con los valores por defecto de config.
+- Validacion de slots como **funciones puras** (testeables como `_pascua`):
+  horas positivas, `duracion = fin - inicio`, sin solapes, y opcionalmente aviso
+  si el total del dia no llega a la jornada.
+
+### Fases
+
+1. **Fase 1 - solo lectura**: modulo `inari.py` (getMe, getMyProjects, getColumns,
+   getActiveSwimlanes, getAllCategories), dialogo de config en Herramientas,
+   "Probar conexion", descubrimiento y persistencia de IDs. No escribe nada.
+   Tests con red mockeada del cliente y de la validacion de franjas.
+2. **Fase 2 - escritura inmediata**: selector de destino en dias de teletrabajo,
+   formulario de slot, `createTask`/`createSubtask` + `time_spent`, tabla con
+   columna Destino y enrutado de editar/borrar, los dos indicadores de conexion,
+   resumen con los dos cubos y guardarrail de exclusividad.
+
+Se descarta la cola diferida y el estado "Pendiente/Sincronizado" del mockup: con
+escritura inmediata y el modelo exclusivo por dia no hace falta.
+
+### Decisiones tomadas
+
+- Solo SisGes; INARI = destino de los dias de teletrabajo.
+- En teletrabajo: INARI o ProyectosTIC, exclusivo por dia (nunca ambos).
+- Jornada de un dia de teletrabajo = jornada normal por temporada.
+- El computo nunca suma ambos destinos; el resumen usa dos cubos disjuntos.
+- Configuracion en Herramientas > Integraciones, no en el wizard.
+- Escritura inmediata (sin cola diferida).
+- Dos indicadores de conexion diferenciados; el de INARI solo si esta activo.
 
 ### Preguntas pendientes
 
-- Confirmar si INARI exige una tarea por dia o permite/espera tareas sueltas.
-- Confirmar si la franja horaria debe ser visible como texto o si existe algun
-  plugin/campo especifico no cubierto por la API estandar de Kanboard.
-- Decidir si se permite mezclar ProyectosTIC e INARI dentro del mismo dia o si
-  la app debe avisar cuando detecte ambos destinos.
-- Decidir como se corrige un registro ya enviado a INARI: editar subtarea,
-  borrar y recrear, o marcar una nueva version.
-- Confirmar si conviene probar primero en `inarifor.ugr.es` con un token propio
-  de formacion.
+- Confirmar la practica real de SisGes: la convencion tarea-diaria +
+  subtarea-por-slot la impone la app; Kanboard no la exige. Validar que encaja.
+- Revisar en inarifor el namespace `subtask_time_tracking` por si permitiera
+  registrar franjas de forma mas fiel que meterlas en el titulo.
+- Confirmar el flujo de correccion de un slot ya enviado (updateSubtask /
+  removeSubtask / recrear). Encaja con el editar/borrar actual de la app.
+- Hacer el descubrimiento de IDs y los tests primero en `inarifor` con un token
+  de formacion desechable.
 
 ### Seguridad
 
