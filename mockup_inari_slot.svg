@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="980" viewBox="0 0 1500 980">
+  <defs>
+    <style>
+      .bg { fill: #f3f5f7; }
+      .panel { fill: #ffffff; stroke: #e1e6eb; stroke-width: 1; }
+      .line { stroke: #d8dee6; stroke-width: 1; }
+      .text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #253040; }
+      .muted { fill: #687384; }
+      .strong { font-weight: 700; }
+      .label { font-size: 18px; fill: #344052; }
+      .small { font-size: 15px; fill: #687384; }
+      .title { font-size: 26px; font-weight: 700; }
+      .h1 { font-size: 32px; font-weight: 750; }
+      .btn { fill: #ffffff; stroke: #b8c0ca; stroke-width: 1.5; }
+      .btn-text { font-size: 18px; font-weight: 600; fill: #263241; }
+      .primary { fill: #0b66c3; stroke: #0b66c3; }
+      .primary-text { fill: #ffffff; font-size: 18px; font-weight: 700; }
+      .danger { fill: #ffffff; stroke: #d7aaa5; }
+      .danger-text { fill: #c93324; font-size: 17px; font-weight: 700; }
+      .input { fill: #ffffff; stroke: #c8d0da; stroke-width: 1.5; }
+      .chip { fill: #eef4fb; stroke: #bcd0e8; }
+      .chip-green { fill: #eaf7ef; stroke: #94d3a8; }
+      .chip-orange { fill: #fff5e6; stroke: #f0c57a; }
+      .inari { fill: #12385f; }
+      .op { fill: #208c4b; }
+      .row-alt { fill: #f7f9fb; }
+      .selected { fill: #e8f3ff; stroke: #0b66c3; stroke-width: 3; }
+      .day { fill: #ffffff; stroke: #d8dee6; stroke-width: 1.5; }
+      .bar { fill: #23894d; }
+      .status-ok { fill: #1f8a4c; }
+      .status-pending { fill: #b66a00; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1500" height="980"/>
+
+  <rect class="panel" x="0" y="0" width="1500" height="120"/>
+  <image href="logo_ugr.png" x="38" y="23" width="235" height="74" preserveAspectRatio="xMidYMid meet"/>
+  <text class="text strong" x="320" y="72" font-size="25">FichaCSIRC</text>
+  <text class="text muted strong" x="460" y="72" font-size="21">Registro de horas - ProyectosTIC / INARI</text>
+  <text class="text strong" x="1190" y="72" font-size="19">ENRIQUE VARGAS VEGA</text>
+
+  <rect class="panel" x="28" y="145" width="1444" height="84"/>
+  <rect class="btn" x="55" y="172" width="150" height="34" rx="5"/>
+  <text class="btn-text" x="92" y="195">← Semana</text>
+  <text class="text strong" x="590" y="194" font-size="20">Semana 29/06/2026 - 05/07/2026</text>
+  <rect class="btn" x="910" y="172" width="150" height="34" rx="5"/>
+  <text class="btn-text" x="950" y="195">Semana →</text>
+  <rect class="btn" x="1080" y="172" width="120" height="34" rx="5"/>
+  <text class="btn-text" x="1125" y="195">Hoy</text>
+  <rect class="btn" x="1215" y="172" width="160" height="34" rx="5"/>
+  <text class="btn-text" x="1260" y="195">Resumen</text>
+  <rect class="btn" x="1390" y="172" width="60" height="34" rx="5"/>
+  <text class="btn-text" x="1405" y="195">CSV</text>
+
+  <rect class="panel" x="28" y="245" width="1444" height="235"/>
+  <text class="text strong" x="55" y="286" font-size="21">Días</text>
+
+  <g transform="translate(55 310)">
+    <rect class="day" x="0" y="0" width="255" height="104"/>
+    <text class="text strong" x="22" y="36" font-size="20">Lunes 29/06</text>
+    <rect class="bar" x="22" y="58" width="210" height="8"/>
+    <text class="op" x="22" y="91" font-size="20" font-weight="700">5h / 5h ✓</text>
+  </g>
+  <g transform="translate(330 310)">
+    <rect class="day" x="0" y="0" width="255" height="104"/>
+    <text class="text strong" x="22" y="36" font-size="20">Martes 30/06</text>
+    <rect class="bar" x="22" y="58" width="210" height="8"/>
+    <text class="op" x="22" y="91" font-size="20" font-weight="700">5h / 5h ✓</text>
+  </g>
+  <g transform="translate(605 310)">
+    <rect class="day" x="0" y="0" width="255" height="104"/>
+    <text class="text strong" x="22" y="36" font-size="20">Miércoles 01/07</text>
+    <rect class="bar" x="22" y="58" width="210" height="8"/>
+    <text class="op" x="22" y="91" font-size="20" font-weight="700">5h / 5h ✓</text>
+  </g>
+  <g transform="translate(880 310)">
+    <rect class="day" x="0" y="0" width="255" height="104"/>
+    <text class="text strong" x="22" y="36" font-size="20">Jueves 02/07</text>
+    <rect class="bar" x="22" y="58" width="210" height="8"/>
+    <text class="op" x="22" y="91" font-size="20" font-weight="700">5h / 5h ✓</text>
+  </g>
+  <g transform="translate(1155 310)">
+    <rect class="selected" x="0" y="0" width="255" height="104"/>
+    <text class="text strong" x="22" y="36" font-size="20">Viernes 03/07 · hoy</text>
+    <rect class="bar" x="22" y="58" width="210" height="8"/>
+    <text class="op" x="22" y="91" font-size="20" font-weight="700">5h / 5h ✓</text>
+  </g>
+
+  <rect class="input" x="55" y="435" width="18" height="18" rx="3"/>
+  <text class="text" x="82" y="451" font-size="18">Toda la semana</text>
+  <rect class="btn" x="235" y="425" width="150" height="34" rx="5"/>
+  <text class="btn-text" x="280" y="448">Plantillas...</text>
+  <rect class="btn" x="940" y="425" width="210" height="34" rx="5"/>
+  <text class="btn-text" x="976" y="448">Copiar día anterior</text>
+  <rect class="btn" x="1170" y="425" width="240" height="34" rx="5"/>
+  <text class="btn-text" x="1203" y="448">Copiar semana anterior</text>
+
+  <rect class="panel" x="28" y="500" width="1444" height="215"/>
+  <text class="text strong" x="55" y="538" font-size="21">Añadir apunte</text>
+  <text class="label" x="55" y="581">Destino:</text>
+  <rect class="chip" x="150" y="557" width="135" height="38" rx="19"/>
+  <text class="text strong" x="178" y="582" font-size="17">ProyectosTIC</text>
+  <rect class="inari" x="293" y="557" width="95" height="38" rx="19"/>
+  <text class="primary-text" x="322" y="582">INARI</text>
+  <rect class="chip-orange" x="408" y="557" width="250" height="38" rx="19"/>
+  <text class="text strong" x="433" y="582" font-size="16">Sugerido por teletrabajo</text>
+
+  <text class="label" x="55" y="632">Inicio:</text>
+  <rect class="input" x="130" y="606" width="95" height="36" rx="3"/>
+  <text class="text" x="152" y="630" font-size="18">09:00</text>
+  <text class="label" x="250" y="632">Fin:</text>
+  <rect class="input" x="295" y="606" width="95" height="36" rx="3"/>
+  <text class="text" x="320" y="630" font-size="18">10:30</text>
+  <text class="small" x="410" y="630">Duración: 1,5h</text>
+
+  <text class="label" x="55" y="681">Descripción:</text>
+  <rect class="input" x="170" y="655" width="580" height="36" rx="3"/>
+  <text class="text" x="185" y="679" font-size="18">Revisión copias NetBackup y alertas</text>
+
+  <text class="label" x="795" y="632">Proyecto:</text>
+  <rect class="input" x="885" y="606" width="250" height="36" rx="3"/>
+  <text class="text" x="900" y="630" font-size="18">Sistemas de Gestión</text>
+  <text class="label" x="1160" y="632">Columna:</text>
+  <rect class="input" x="1250" y="606" width="160" height="36" rx="3"/>
+  <text class="text" x="1265" y="630" font-size="18">Finalizada</text>
+
+  <text class="label" x="795" y="681">Carril:</text>
+  <rect class="input" x="860" y="655" width="275" height="36" rx="3"/>
+  <text class="text" x="875" y="679" font-size="18">Copias de seguridad</text>
+  <text class="label" x="1160" y="681">Categoría:</text>
+  <rect class="input" x="1255" y="655" width="155" height="36" rx="3"/>
+  <text class="text" x="1270" y="679" font-size="18">Solicitud</text>
+
+  <rect class="primary" x="1165" y="520" width="245" height="42" rx="5"/>
+  <text class="primary-text" x="1218" y="547">Añadir slot INARI</text>
+
+  <rect class="panel" x="28" y="735" width="1444" height="195"/>
+  <text class="text strong" x="55" y="773" font-size="21">Registros del día marcado</text>
+  <rect class="danger" x="1255" y="746" width="185" height="34" rx="5"/>
+  <text class="danger-text" x="1292" y="769">Eliminar seleccionado</text>
+
+  <rect x="55" y="805" width="1385" height="36" fill="#eef1f4" stroke="#d8dee6"/>
+  <text class="text strong" x="75" y="829" font-size="17">Destino</text>
+  <text class="text strong" x="210" y="829" font-size="17">Día</text>
+  <text class="text strong" x="330" y="829" font-size="17">Horario / horas</text>
+  <text class="text strong" x="530" y="829" font-size="17">Registro</text>
+  <text class="text strong" x="1015" y="829" font-size="17">Detalle</text>
+  <text class="text strong" x="1285" y="829" font-size="17">Estado</text>
+
+  <rect x="55" y="841" width="1385" height="40" fill="#ffffff"/>
+  <text class="op" x="75" y="866" font-size="17" font-weight="700">ProyectosTIC</text>
+  <text class="text" x="210" y="866" font-size="17">Vie 03/07</text>
+  <text class="text" x="330" y="866" font-size="17">3h</text>
+  <text class="text" x="530" y="866" font-size="17">[2026_ASG] Mantenimientos</text>
+  <text class="text" x="1015" y="866" font-size="17">Actuaciones técnicas</text>
+  <text class="status-ok" x="1285" y="866" font-size="17" font-weight="700">Sincronizado</text>
+
+  <rect class="row-alt" x="55" y="881" width="1385" height="40"/>
+  <text class="inari" x="75" y="906" font-size="17" font-weight="700">INARI</text>
+  <text class="text" x="210" y="906" font-size="17">Vie 03/07</text>
+  <text class="text" x="330" y="906" font-size="17">09:00-10:30 · 1,5h</text>
+  <text class="text" x="530" y="906" font-size="17">Revisión copias NetBackup y alertas</text>
+  <text class="text" x="1015" y="906" font-size="17">Copias · Solicitud</text>
+  <text class="status-pending" x="1285" y="906" font-size="17" font-weight="700">Pendiente</text>
+
+  <rect x="0" y="940" width="1500" height="40" fill="#ffffff" stroke="#e1e6eb"/>
+  <text class="muted" x="18" y="965" font-size="16">Viernes 03/07: 4,5h/5h · INARI pendiente de sincronizar</text>
+  <text class="muted" x="1180" y="965" font-size="16">v2.5.0 · conexión ProyectosTIC OK · INARI OK</text>
+</svg>
