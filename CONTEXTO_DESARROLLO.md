@@ -128,5 +128,10 @@ definición completa y el historial de decisiones.
   (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.
 - Integración con INARI (Kanboard) para los días de teletrabajo en SisGes.
-  Diseño consolidado y decisiones tomadas en `MEJORAS_PENDIENTES.md`; pendiente
-  de implementar (Fase 1: `inari.py` de solo lectura + config en Herramientas).
+  Diseño y decisiones en `MEJORAS_PENDIENTES.md`. **Fase 1 implementada** (sin
+  publicar): `inari.py` (cliente JSON-RPC de solo lectura, no importa el motor,
+  credenciales por argumento) + `dialogos.abrir_integraciones` en
+  Herramientas > Integraciones (probar conexión y descubrir proyecto/columna/
+  carril/categoría). Tests en `tests/test_inari.py` (red mockeada). **Pendiente**:
+  validar contra `inarifor.ugr.es` con token de formación, y la Fase 2 (escritura
+  de slots, selector de destino, indicadores de conexión, resumen).

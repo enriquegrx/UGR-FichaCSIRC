@@ -782,3 +782,162 @@ def abrir_ajustes_dias(app):
     btns.grid(row=7, column=0, columnspan=2, sticky="e", pady=(12, 0))
     ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+
+
+def abrir_integraciones(app):
+    """Configura la integración con INARI (Kanboard). Fase 1: solo lectura —
+    activar, credenciales, probar conexión y descubrir proyecto/columna/carril/
+    categoría por defecto. No escribe nada en INARI todavía."""
+    import inari
+
+    top = tk.Toplevel(app.root)
+    top.title("Integraciones · INARI")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+    frm.columnconfigure(1, weight=1)
+
+    ttk.Label(frm, text="INARI (registro de días de teletrabajo en SisGes)",
+              font=("TkDefaultFont", 10, "bold")).grid(
+        row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+
+    v_activo = tk.BooleanVar(value=bool(core.config_valor("inari_activo", False)))
+    ttk.Checkbutton(frm, text="Activar la integración con INARI",
+                    variable=v_activo).grid(row=1, column=0, columnspan=3, sticky="w")
+
+    def _fila(r, etiqueta, valor, oculto=False):
+        ttk.Label(frm, text=etiqueta).grid(row=r, column=0, sticky="w", pady=3)
+        e = ttk.Entry(frm, show="*" if oculto else "")
+        e.insert(0, valor or "")
+        e.grid(row=r, column=1, columnspan=2, sticky="we", padx=6)
+        return e
+
+    e_url = _fila(2, "URL jsonrpc:", core.config_valor("inari_url", inari.URL_POR_DEFECTO))
+    e_usuario = _fila(3, "Usuario:", core.config_valor("inari_usuario", ""))
+    e_token = _fila(4, "Token:", core.config_valor("inari_token", ""), oculto=True)
+    ttk.Label(frm, text="Puedes pegar «usuario:token» en el campo Usuario.",
+              foreground=COLOR_MUTED).grid(row=5, column=1, columnspan=2, sticky="w")
+
+    lbl_test = ttk.Label(frm, text="")
+    lbl_test.grid(row=6, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+    # Desplegables de descubrimiento (se rellenan tras conectar)
+    cbo_proy = ttk.Combobox(frm, state="readonly")
+    cbo_col = ttk.Combobox(frm, state="readonly")
+    cbo_car = ttk.Combobox(frm, state="readonly")
+    cbo_cat = ttk.Combobox(frm, state="readonly")
+    for r, txt, cbo in ((7, "Proyecto:", cbo_proy), (8, "Columna:", cbo_col),
+                        (9, "Carril:", cbo_car), (10, "Categoría:", cbo_cat)):
+        ttk.Label(frm, text=txt).grid(row=r, column=0, sticky="w", pady=3)
+        cbo.grid(row=r, column=1, columnspan=2, sticky="we", padx=6)
+
+    datos = {"proyectos": [], "columnas": [], "carriles": [], "categorias": []}
+
+    def _leer_creds():
+        # Aplica el pegado "usuario:token" si el token está vacío.
+        usuario, token = e_usuario.get().strip(), e_token.get().strip()
+        if not token:
+            u2, t2 = inari.separar_credencial(usuario)
+            if t2:
+                usuario, token = u2, t2
+                e_usuario.delete(0, "end"); e_usuario.insert(0, usuario)
+                e_token.delete(0, "end"); e_token.insert(0, token)
+        return e_url.get().strip(), usuario, token
+
+    def _poblar(cbo, items, id_guardado, clave):
+        datos[clave] = items
+        cbo["values"] = [f"{i['id']} - {i['nombre']}" for i in items]
+        idx = next((n for n, i in enumerate(items) if str(i["id"]) == str(id_guardado)), 0)
+        if items:
+            cbo.current(idx)
+
+    def _sel_id(cbo, clave):
+        i = cbo.current()
+        return datos[clave][i]["id"] if 0 <= i < len(datos[clave]) else None
+
+    def cargar_tablero(_e=None):
+        url, usuario, token = _leer_creds()
+        pid = _sel_id(cbo_proy, "proyectos")
+        if pid is None:
+            return
+        lbl_test.config(text="Cargando columnas, carriles y categorías...",
+                        foreground=COLOR_MUTED)
+
+        def trabajo():
+            return (inari.columnas(url, usuario, token, pid),
+                    inari.carriles(url, usuario, token, pid),
+                    inari.categorias(url, usuario, token, pid))
+
+        def al_terminar(res, err):
+            if not top.winfo_exists():
+                return
+            if err:
+                lbl_test.config(text=str(err), foreground=COLOR_DANGER)
+                return
+            cols, cars, cats = res
+            _poblar(cbo_col, cols, core.config_valor("inari_column_id"), "columnas")
+            _poblar(cbo_car, cars, core.config_valor("inari_swimlane_id"), "carriles")
+            _poblar(cbo_cat, cats, core.config_valor("inari_category_id"), "categorias")
+            lbl_test.config(text="Tablero cargado. Elige los valores por defecto.",
+                            foreground=COLOR_SUCCESS)
+
+        en_hilo(app.root, trabajo, al_terminar)
+
+    cbo_proy.bind("<<ComboboxSelected>>", cargar_tablero)
+
+    def probar():
+        url, usuario, token = _leer_creds()
+        if not (url and usuario and token):
+            lbl_test.config(text="Escribe URL, usuario y token.", foreground=COLOR_WARNING)
+            return
+        lbl_test.config(text="Probando conexión...", foreground=COLOR_MUTED)
+
+        def al_terminar(res, err):
+            if not top.winfo_exists():
+                return
+            if err:
+                lbl_test.config(text=str(err), foreground=COLOR_DANGER)
+                return
+            nombre = (res or {}).get("name") or (res or {}).get("username") or "usuario"
+            lbl_test.config(text=f"Conexión correcta. Hola, {nombre}. Cargando proyectos...",
+                            foreground=COLOR_SUCCESS)
+
+            def proy_ok(res2, err2):
+                if not top.winfo_exists():
+                    return
+                if err2:
+                    lbl_test.config(text=str(err2), foreground=COLOR_DANGER)
+                    return
+                _poblar(cbo_proy, res2, core.config_valor("inari_project_id"), "proyectos")
+                if res2:
+                    cargar_tablero()
+
+            en_hilo(app.root, lambda: inari.proyectos(url, usuario, token), proy_ok)
+
+        en_hilo(app.root, lambda: inari.probar_conexion(url, usuario, token), al_terminar)
+
+    def guardar():
+        url, usuario, token = _leer_creds()
+        core.guardar_config_valores({
+            "inari_activo": bool(v_activo.get()),
+            "inari_url": url or inari.URL_POR_DEFECTO,
+            "inari_usuario": usuario,
+            "inari_token": token,
+            "inari_project_id": _sel_id(cbo_proy, "proyectos"),
+            "inari_column_id": _sel_id(cbo_col, "columnas"),
+            "inari_swimlane_id": _sel_id(cbo_car, "carriles"),
+            "inari_category_id": _sel_id(cbo_cat, "categorias"),
+        })
+        top.destroy()
+        app.status.config(text="Configuración de INARI guardada.")
+
+    btns = ttk.Frame(frm)
+    btns.grid(row=11, column=0, columnspan=3, sticky="e", pady=(12, 0))
+    ttk.Button(btns, text="Probar conexión", command=probar).pack(side="left")
+    ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
+    ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+
+    # Si ya había credenciales guardadas, intenta poblar los desplegables al abrir.
+    if core.config_valor("inari_usuario") and core.config_valor("inari_token"):
+        probar()

@@ -431,6 +431,8 @@ class App:
                            command=lambda: dialogos.abrir_importar_festivos(self))
         m_herr.add_command(label="Vacaciones y teletrabajo...",
                            command=lambda: dialogos.abrir_ajustes_dias(self))
+        m_herr.add_command(label="Integraciones (INARI)...",
+                           command=lambda: dialogos.abrir_integraciones(self))
         if recordatorio.recordatorios_soportados():
             m_herr.add_command(label="Aviso diario de fichaje...",
                                command=self._config_recordatorio)

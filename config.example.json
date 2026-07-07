@@ -16,5 +16,13 @@
   "cupo_vacaciones": 22,
   "teletrabajo_por_semana": 1,
   "festivos_locales_extra": [],
-  "dias_ugr": {}
+  "dias_ugr": {},
+  "inari_activo": false,
+  "inari_url": "https://inari.ugr.es/kanboard/jsonrpc.php",
+  "inari_usuario": "",
+  "inari_token": "",
+  "inari_project_id": null,
+  "inari_column_id": null,
+  "inari_swimlane_id": null,
+  "inari_category_id": null
 }

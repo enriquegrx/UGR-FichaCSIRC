@@ -6,10 +6,12 @@ configuracion local.
 
 ## Integracion con INARI (destino de los dias de teletrabajo en SisGes)
 
-> Estado: diseño consolidado (decisiones de julio 2026). Pendiente de
-> implementar. Este documento manda sobre el mockup `mockup_inari_slot.svg`,
-> que ilustra un alcance mas amplio (destino general, estado
-> "Pendiente/Sincronizado") del que finalmente se acordo.
+> Estado: diseño consolidado (decisiones de julio 2026). **Fase 1 implementada**
+> (cliente `inari.py` de solo lectura + config en Herramientas > Integraciones),
+> pendiente de validar en `inarifor.ugr.es`. **Fase 2 pendiente** (escritura de
+> slots). Este documento manda sobre el mockup `mockup_inari_slot.svg`, que
+> ilustra un alcance mas amplio (destino general, estado "Pendiente/Sincronizado")
+> del que finalmente se acordo.
 
 ### Alcance acordado
 
