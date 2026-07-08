@@ -236,7 +236,10 @@ class App:
             except Exception:
                 self._logo_img = None
         ttk.Label(header, text="FichaCSIRC", style="Title.TLabel").pack(side="left")
-        ttk.Label(header, text="Registro de horas - OpenProject",
+        subt = "Registro de horas - ProyectosTIC"
+        if destinos.inari_activo():
+            subt += " e INARI"
+        ttk.Label(header, text=subt,
                   style="Subtitle.TLabel").pack(side="left", padx=16)
         self.lbl_user = ttk.Label(header, text="", style="Header.TLabel",
                                   font=("TkDefaultFont", 10, "bold"))
@@ -416,8 +419,10 @@ class App:
     _COLORES_CONN = {"ok": COLOR_SUCCESS, "warn": COLOR_WARNING,
                      "error": COLOR_DANGER, "checking": COLOR_MUTED}
 
-    def _poner_conexion(self, estado, texto):
-        self.lbl_conn.config(text=texto,
+    def _poner_conexion(self, estado, texto=""):
+        """Indicador de ProyectosTIC. Muestra siempre el nombre (● ProyectosTIC),
+        igual que el de INARI; el estado se refleja solo con el color."""
+        self.lbl_conn.config(text="● ProyectosTIC",
                              foreground=self._COLORES_CONN.get(estado, COLOR_MUTED))
 
     def _poner_conexion_inari(self, estado, texto=""):
@@ -630,7 +635,7 @@ class App:
         self.dia_vars = []
         self._cache_dia = {}
         self.status.config(text="Cargando semana...")
-        self._poner_conexion("checking", "● Comprobando conexión")
+        self._poner_conexion("checking")
         self._refresco_seq += 1
         seq = self._refresco_seq
         dias = self._dias_semana()
@@ -798,13 +803,13 @@ class App:
                     "Comprueba tu red/VPN y la configuración\n"
                     "(FichaCSIRC - Configurar).")
             self.status.config(text="Sin conexión con ProyectosTic.")
-            self._poner_conexion("error", "● Sin conexión")
+            self._poner_conexion("error")
         else:
             self._aviso_con = False
             if fallos:
-                self._poner_conexion("warn", "● Conexión parcial")
+                self._poner_conexion("warn")
             else:
-                self._poner_conexion("ok", "● Conectado")
+                self._poner_conexion("ok")
             if nombre and not self.lbl_user.cget("text"):
                 self.lbl_user.config(text=nombre)
         if self._msg_pendiente:

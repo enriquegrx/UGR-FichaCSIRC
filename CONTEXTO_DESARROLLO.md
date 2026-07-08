@@ -160,3 +160,15 @@ definición completa y el historial de decisiones.
   columna/carril/categoría como **valor por defecto**; el diálogo de registrar
   slot añade esos tres desplegables, prerrellenados con el último usado
   (`inari_last_*`) o el de config. Tests adaptados (105 en total).
+- v2.6.1 (jul 2026): **la actualización vuelve a abrir la app**. El instalador
+  no relanzaba `FichaCSIRC.exe` al terminar una actualización (la app se cierra
+  para poder actualizarse y quedaba sin abrir). Nueva entrada en `[Run]` de
+  `instalador.iss` sin `postinstall` (se ejecuta al final de la copia, no es una
+  casilla) con `Check: EsActualizacion` y `runasoriginaluser` (no la abre
+  elevada si el instalador se lanzó como admin); en instalación nueva no se
+  relanza (aún hay que configurar). **Indicador del pie**: el de ProyectosTIC
+  mostraba el estado como texto ("Conectado"/"Sin conexión"); ahora muestra
+  siempre el nombre `● ProyectosTIC` y refleja el estado solo con el color, igual
+  que el de `● INARI` (`_poner_conexion`). **Cabecera**: el subtítulo pasa de
+  "Registro de horas - OpenProject" a "- ProyectosTIC", y añade " e INARI" cuando
+  la integración está activa (`destinos.inari_activo()`).
