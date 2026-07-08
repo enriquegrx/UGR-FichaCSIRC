@@ -35,8 +35,8 @@ class TestConfigurado(unittest.TestCase):
 
 
 class TestTitulos(unittest.TestCase):
-    def test_titulo_dia(self):
-        self.assertEqual(destinos.titulo_dia("2026-07-06"), "Teletrabajo 2026-07-06")
+    def test_ref_dia(self):
+        self.assertEqual(destinos.ref_dia("2026-07-06"), "TT-2026-07-06")
 
     def test_titulo_slot(self):
         self.assertEqual(destinos.titulo_slot("09:00", "10:30", "Copias"),
@@ -46,56 +46,67 @@ class TestTitulos(unittest.TestCase):
 
 class TestLectura(unittest.TestCase):
     def test_slots_y_horas_dia(self):
+        slots = [{"id": 1, "titulo": "a", "horas": 1.5, "column_id": 2,
+                  "swimlane_id": 3, "category_id": 4},
+                 {"id": 2, "titulo": "b", "horas": 3.0, "column_id": 2,
+                  "swimlane_id": 3, "category_id": 4}]
         with mock.patch.object(core, "config_valor", _cfg()), \
-             mock.patch.object(destinos.inari, "buscar_tarea", return_value=7), \
-             mock.patch.object(destinos.inari, "slots",
-                               return_value=[{"id": 1, "titulo": "a", "horas": 1.5},
-                                             {"id": 2, "titulo": "b", "horas": 3.0}]):
-            tid, ss = destinos.slots_dia("2026-07-06")
-            self.assertEqual(tid, 7)
+             mock.patch.object(destinos.inari, "slots_dia", return_value=slots) as m:
+            ss = destinos.slots_dia("2026-07-06")
             self.assertEqual(len(ss), 2)
             self.assertEqual(destinos.horas_dia("2026-07-06"), 4.5)
+        # agrupa por reference "TT-AAAA-MM-DD"
+        self.assertEqual(m.call_args.args[4], "TT-2026-07-06")
 
-    def test_dia_sin_tarea(self):
+    def test_dia_sin_slots(self):
         with mock.patch.object(core, "config_valor", _cfg()), \
-             mock.patch.object(destinos.inari, "buscar_tarea", return_value=None), \
-             mock.patch.object(destinos.inari, "slots") as m_slots:
-            self.assertEqual(destinos.slots_dia("2026-07-06"), (None, []))
+             mock.patch.object(destinos.inari, "slots_dia", return_value=[]):
+            self.assertEqual(destinos.slots_dia("2026-07-06"), [])
             self.assertEqual(destinos.horas_dia("2026-07-06"), 0)
-            m_slots.assert_not_called()
 
 
 class TestEscritura(unittest.TestCase):
-    def test_registrar_crea_tarea_y_slot(self):
+    def test_registrar_crea_slot_tarea(self):
         with mock.patch.object(core, "config_valor", _cfg()), \
-             mock.patch.object(destinos.inari, "tarea_del_dia", return_value=7) as m_t, \
              mock.patch.object(destinos.inari, "crear_slot", return_value=99) as m_s:
             sid = destinos.registrar("2026-07-06", "09:00", "10:30", "Copias")
         self.assertEqual(sid, 99)
-        # tarea del dia: args = (url, usuario, token, project_id, titulo)
-        self.assertEqual(m_t.call_args.args[3], 5)                      # project_id
-        self.assertEqual(m_t.call_args.args[4], "Teletrabajo 2026-07-06")
-        self.assertEqual(m_t.call_args.kwargs,
-                         {"column_id": 2, "swimlane_id": 3, "category_id": 4})
-        # slot con titulo de franja y horas calculadas
-        self.assertEqual(m_s.call_args.args[4], "09:00-10:30 - Copias")
-        self.assertEqual(m_s.call_args.args[5], 1.5)
+        # crear_slot: args = (url, usuario, token, project_id, titulo, horas, reference)
+        a, kw = m_s.call_args.args, m_s.call_args.kwargs
+        self.assertEqual(a[3], 5)                       # project_id
+        self.assertEqual(a[4], "09:00-10:30 - Copias")  # titulo de franja
+        self.assertEqual(a[5], 1.5)                     # horas
+        self.assertEqual(a[6], "TT-2026-07-06")         # reference de dia
+        # clasificacion por defecto de config cuando no se pasa por slot
+        self.assertEqual((kw["column_id"], kw["swimlane_id"], kw["category_id"]), (2, 3, 4))
+
+    def test_registrar_clasificacion_por_slot_manda(self):
+        with mock.patch.object(core, "config_valor", _cfg()), \
+             mock.patch.object(destinos.inari, "crear_slot", return_value=1) as m_s:
+            destinos.registrar("2026-07-06", "09:00", "10:00", "x",
+                               column_id=8, swimlane_id=9, category_id=10)
+        kw = m_s.call_args.kwargs
+        self.assertEqual((kw["column_id"], kw["swimlane_id"], kw["category_id"]), (8, 9, 10))
 
     def test_registrar_franja_invalida_no_toca_red(self):
         with mock.patch.object(core, "config_valor", _cfg()), \
-             mock.patch.object(destinos.inari, "tarea_del_dia") as m_t:
+             mock.patch.object(destinos.inari, "crear_slot") as m_s:
             with self.assertRaises(ValueError):
                 destinos.registrar("2026-07-06", "10:00", "09:00", "x")  # fin<inicio
-            m_t.assert_not_called()
+            m_s.assert_not_called()
 
-    def test_editar_y_borrar(self):
+    def test_editar_borrar_mover(self):
         with mock.patch.object(core, "config_valor", _cfg()), \
-             mock.patch.object(destinos.inari, "actualizar_slot", return_value=True) as m_u, \
-             mock.patch.object(destinos.inari, "borrar_slot", return_value=True) as m_b:
-            self.assertTrue(destinos.editar(99, 7, "09:00", "11:00", "Copias"))
+             mock.patch.object(destinos.inari, "editar_slot", return_value=True) as m_u, \
+             mock.patch.object(destinos.inari, "borrar_slot", return_value=True) as m_b, \
+             mock.patch.object(destinos.inari, "mover_slot", return_value=True) as m_m:
+            self.assertTrue(destinos.editar(99, "09:00", "11:00", "Copias"))
             self.assertEqual(m_u.call_args.kwargs["horas"], 2.0)
+            self.assertEqual(m_u.call_args.args[3], 99)   # task_id
             self.assertTrue(destinos.borrar(99))
             self.assertEqual(m_b.call_args.args[3], 99)
+            self.assertTrue(destinos.mover(99, 8, swimlane_id=9))
+            self.assertEqual(m_m.call_args.args[4], 99)   # task_id (tras project_id)
 
 
 if __name__ == "__main__":

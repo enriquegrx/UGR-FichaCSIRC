@@ -189,8 +189,9 @@ class TestGuiInari(unittest.TestCase):
             mock.patch.object(destinos, "configurado", lambda: True),
             mock.patch.object(destinos, "probar_conexion", lambda: {"username": "E"}),
             mock.patch.object(destinos, "slots_dia",
-                              lambda iso: (77, [{"id": 100, "titulo": "09:00-10:30 - x",
-                                                 "horas": 1.5}])),
+                              lambda iso: [{"id": 100, "titulo": "09:00-10:30 - x",
+                                            "horas": 1.5, "column_id": 2,
+                                            "swimlane_id": 3, "category_id": 4}]),
         ]
         for p in parches:
             p.start()

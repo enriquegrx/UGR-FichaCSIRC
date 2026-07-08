@@ -141,3 +141,22 @@ definición completa y el historial de decisiones.
   volver a registrarlo. Tests: `test_inari.py`, `test_destinos.py`, `TestFranjas`,
   `TestGuiInari` (104 en total). **Nota**: las formas de escritura de Kanboard
   (createTask/createSubtask) se basan en la doc estándar; validar en uso real.
+- v2.6.0 (jul 2026): **INARI cambia a modelo "tarea por slot"**. El problema del
+  modelo anterior (tarea diaria + subtareas) era que columna/carril/categoría
+  eran globales de config, pero pueden variar por día e incluso por slot. Ahora
+  **cada slot es una tarea independiente** de Kanboard con su columna/carril/
+  categoría y un marcador de día en `reference` = `TT-AAAA-MM-DD`; las horas van
+  en `time_spent` **de la tarea** (nunca en subtareas: `SubtaskTimeTrackingModel`
+  sobreescribiría el `time_spent` de la tarea). El modelo de escritura se
+  **verificó contra el código fuente de Kanboard v1.2.50** (workflow de 4
+  agentes): `createTask` con params NOMBRADOS (`time_spent` es el posicional 21),
+  lectura por `searchTasks` `ref:<marcador> status:open`, edición con `updateTask`
+  (clave `id`), mover columna/carril con `moveTaskPosition` (clave `task_id`),
+  borrado con `removeTask`. En `inari.py`: `crear_slot`/`slots_dia`/`editar_slot`/
+  `mover_slot`/`borrar_slot` (se retiran `buscar_tarea`/`crear_tarea`/
+  `tarea_del_dia`/`slots`/`actualizar_slot` y las subtareas). `destinos.py`:
+  `ref_dia`, `slots_dia` devuelve lista (ya no `(tid, ss)`), `registrar`/`editar`
+  aceptan clasificación por slot. La config de Herramientas > Integraciones deja
+  columna/carril/categoría como **valor por defecto**; el diálogo de registrar
+  slot añade esos tres desplegables, prerrellenados con el último usado
+  (`inari_last_*`) o el de config. Tests adaptados (105 en total).

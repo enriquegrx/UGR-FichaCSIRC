@@ -11,8 +11,10 @@ mes y el aviso de fichaje, para que un dia de teletrabajo cuente sus horas de
 INARI en vez de las de ProyectosTIC.
 
 Modelo (solo SisGes): en un dia de teletrabajo se registra en INARI *o* en
-ProyectosTIC, nunca en los dos. Una tarea diaria por dia ("Teletrabajo
-AAAA-MM-DD") y una subtarea por slot ("HH:MM-HH:MM - descripcion").
+ProyectosTIC, nunca en los dos. Cada slot es una TAREA independiente de INARI,
+con su columna/carril/categoria propias y un marcador de dia en `reference`
+("TT-AAAA-MM-DD") para agruparlos. La columna/carril/categoria por defecto de
+config son solo semillas; el diccionario de valores real se elige por slot.
 """
 
 import rellenar_horas as core
@@ -47,8 +49,10 @@ def configurado():
     return bool(inari_activo() and url and usuario and token and _proyecto())
 
 
-def titulo_dia(fecha_iso):
-    return f"Teletrabajo {fecha_iso}"
+def ref_dia(fecha_iso):
+    """Marcador de dia (Kanboard `reference`) para agrupar los slots de un dia.
+    Igualdad exacta; determinista e independiente de zona horaria."""
+    return f"TT-{fecha_iso}"
 
 
 def titulo_slot(inicio, fin, descripcion):
@@ -56,47 +60,65 @@ def titulo_slot(inicio, fin, descripcion):
     return f"{base} - {descripcion}".strip() if descripcion else base
 
 
+def _o(valor, defecto):
+    """valor si no es None; si no, el defecto de config."""
+    return defecto if valor is None else valor
+
+
 def slots_dia(fecha_iso):
-    """(task_id | None, [ {id, titulo, horas} ]) del dia en INARI."""
+    """Lista de slots del dia en INARI: [{id, titulo, horas, column_id,
+    swimlane_id, category_id}] (cada slot es una tarea; `id` es su task_id)."""
     url, usuario, token = _creds()
-    tid = inari.buscar_tarea(url, usuario, token, _proyecto(), titulo_dia(fecha_iso))
-    if tid is None:
-        return None, []
-    return tid, inari.slots(url, usuario, token, tid)
+    return inari.slots_dia(url, usuario, token, _proyecto(), ref_dia(fecha_iso))
 
 
 def horas_dia(fecha_iso):
     """Horas registradas en INARI ese dia (suma de time_spent de los slots)."""
-    _tid, ss = slots_dia(fecha_iso)
-    return sum(s["horas"] for s in ss)
+    return sum(s["horas"] for s in slots_dia(fecha_iso))
 
 
-def registrar(fecha_iso, inicio, fin, descripcion):
-    """Crea (o reutiliza) la tarea del dia y añade un slot. Devuelve el id del
-    slot. Valida la franja antes de tocar la red."""
+def registrar(fecha_iso, inicio, fin, descripcion,
+              column_id=None, swimlane_id=None, category_id=None):
+    """Crea un slot (una tarea) en INARI para ese dia. Devuelve su id (task_id).
+    Valida la franja antes de tocar la red. La columna/carril/categoria pueden
+    darse por slot; si faltan, se toman los valores por defecto de config."""
+    horas = core.duracion_horas(inicio, fin)
+    if horas is None:
+        raise ValueError("Franja horaria no valida (revisa inicio y fin).")
+    d = _defaults()
+    url, usuario, token = _creds()
+    return inari.crear_slot(
+        url, usuario, token, _proyecto(),
+        titulo_slot(inicio, fin, descripcion), horas, ref_dia(fecha_iso),
+        column_id=_o(column_id, d["column_id"]),
+        swimlane_id=_o(swimlane_id, d["swimlane_id"]),
+        category_id=_o(category_id, d["category_id"]),
+        descripcion=(descripcion or None),
+        date_started=f"{fecha_iso} 00:00")
+
+
+def editar(task_id, inicio, fin, descripcion, category_id=None):
+    """Actualiza un slot (updateTask). No mueve columna/carril (usar mover)."""
     horas = core.duracion_horas(inicio, fin)
     if horas is None:
         raise ValueError("Franja horaria no valida (revisa inicio y fin).")
     url, usuario, token = _creds()
-    tid = inari.tarea_del_dia(url, usuario, token, _proyecto(),
-                              titulo_dia(fecha_iso), **_defaults())
-    return inari.crear_slot(url, usuario, token, tid,
-                            titulo_slot(inicio, fin, descripcion), horas)
+    return inari.editar_slot(url, usuario, token, task_id,
+                             titulo=titulo_slot(inicio, fin, descripcion),
+                             horas=horas, descripcion=(descripcion or None),
+                             category_id=category_id)
 
 
-def editar(subtask_id, task_id, inicio, fin, descripcion):
-    horas = core.duracion_horas(inicio, fin)
-    if horas is None:
-        raise ValueError("Franja horaria no valida (revisa inicio y fin).")
+def mover(task_id, column_id, swimlane_id=None):
+    """Mueve un slot de columna/carril (moveTaskPosition)."""
     url, usuario, token = _creds()
-    return inari.actualizar_slot(url, usuario, token, subtask_id, task_id,
-                                 titulo=titulo_slot(inicio, fin, descripcion),
-                                 horas=horas)
+    return inari.mover_slot(url, usuario, token, _proyecto(), task_id,
+                            column_id, swimlane_id=swimlane_id)
 
 
-def borrar(subtask_id):
+def borrar(task_id):
     url, usuario, token = _creds()
-    return inari.borrar_slot(url, usuario, token, subtask_id)
+    return inari.borrar_slot(url, usuario, token, task_id)
 
 
 def probar_conexion():

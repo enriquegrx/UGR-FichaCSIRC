@@ -45,7 +45,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.5.0"
+VERSION = "2.6.0"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"

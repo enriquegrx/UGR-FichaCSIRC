@@ -846,10 +846,16 @@ def abrir_integraciones(app):
     cbo_col = ttk.Combobox(frm, state="readonly")
     cbo_car = ttk.Combobox(frm, state="readonly")
     cbo_cat = ttk.Combobox(frm, state="readonly")
-    for r, txt, cbo in ((7, "Proyecto:", cbo_proy), (8, "Columna:", cbo_col),
-                        (9, "Carril:", cbo_car), (10, "Categoría:", cbo_cat)):
+    for r, txt, cbo in ((7, "Proyecto:", cbo_proy),
+                        (8, "Columna (por defecto):", cbo_col),
+                        (9, "Carril (por defecto):", cbo_car),
+                        (10, "Categoría (por defecto):", cbo_cat)):
         ttk.Label(frm, text=txt).grid(row=r, column=0, sticky="w", pady=3)
         cbo.grid(row=r, column=1, columnspan=2, sticky="we", padx=6)
+    ttk.Label(frm, text="Columna, carril y categoría son solo el valor inicial: "
+                        "al registrar cada slot puedes cambiarlos.",
+              foreground=COLOR_MUTED, wraplength=360, justify="left").grid(
+        row=11, column=0, columnspan=3, sticky="w", pady=(2, 0))
 
     datos = {"proyectos": [], "columnas": [], "carriles": [], "categorias": []}
 
@@ -952,7 +958,7 @@ def abrir_integraciones(app):
         app.status.config(text="Configuración de INARI guardada.")
 
     btns = ttk.Frame(frm)
-    btns.grid(row=11, column=0, columnspan=3, sticky="e", pady=(12, 0))
+    btns.grid(row=12, column=0, columnspan=3, sticky="e", pady=(12, 0))
     ttk.Button(btns, text="Probar conexión", command=probar).pack(side="left")
     ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
@@ -964,9 +970,16 @@ def abrir_integraciones(app):
 
 def abrir_slot_inari(app, dia):
     """Registrar un slot de teletrabajo en INARI para 'dia' (date).
-    Escribe de inmediato (crea/reutiliza la tarea diaria + subtarea)."""
+
+    Cada slot es una tarea independiente de INARI, con su columna/carril/
+    categoría propias (se eligen aquí, prerrellenadas con el último valor usado
+    o el de por defecto). Escribe de inmediato."""
     import destinos
+    import inari
     fecha = dia.isoformat()
+    url, usuario, token = destinos._creds()
+    pid = destinos._proyecto()
+
     top = tk.Toplevel(app.root)
     top.title("Registrar slot en INARI")
     top.transient(app.root)
@@ -990,8 +1003,62 @@ def abrir_slot_inari(app, dia):
     ttk.Label(frm, text="Descripción:").grid(row=3, column=0, sticky="w", pady=3)
     e_desc = ttk.Entry(frm, width=42)
     e_desc.grid(row=3, column=1, columnspan=2, sticky="we", padx=6)
-    lbl_msg = ttk.Label(frm, text="", foreground=COLOR_MUTED)
-    lbl_msg.grid(row=4, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+    # Clasificación por slot: columna / carril / categoría.
+    cbo_col = ttk.Combobox(frm, state="readonly")
+    cbo_car = ttk.Combobox(frm, state="readonly")
+    cbo_cat = ttk.Combobox(frm, state="readonly")
+    for r, txt, cbo in ((4, "Columna:", cbo_col), (5, "Carril:", cbo_car),
+                        (6, "Categoría:", cbo_cat)):
+        ttk.Label(frm, text=txt).grid(row=r, column=0, sticky="w", pady=3)
+        cbo.grid(row=r, column=1, columnspan=2, sticky="we", padx=6)
+
+    lbl_msg = ttk.Label(frm, text="Cargando opciones del tablero...",
+                        foreground=COLOR_MUTED, wraplength=380, justify="left")
+    lbl_msg.grid(row=7, column=0, columnspan=3, sticky="w", pady=(6, 0))
+
+    datos = {"columnas": [], "carriles": [], "categorias": []}
+
+    def _poblar(cbo, items, id_pref, clave):
+        datos[clave] = items
+        cbo["values"] = [f"{i['nombre']}" for i in items]
+        idx = next((n for n, i in enumerate(items) if str(i["id"]) == str(id_pref)), 0)
+        if items:
+            cbo.current(idx)
+
+    def _sel_id(cbo, clave):
+        i = cbo.current()
+        return datos[clave][i]["id"] if 0 <= i < len(datos[clave]) else None
+
+    # Preferencia: último valor usado; si no, el de por defecto de config.
+    def _pref(clave):
+        return (core.config_valor(f"inari_last_{clave}")
+                or core.config_valor(f"inari_{clave}"))
+
+    def cargar_tablero():
+        def trabajo():
+            return (inari.columnas(url, usuario, token, pid),
+                    inari.carriles(url, usuario, token, pid),
+                    inari.categorias(url, usuario, token, pid))
+
+        def al_terminar(res, err):
+            if not top.winfo_exists():
+                return
+            if err:
+                # Sin opciones: se registrará con los valores por defecto de config.
+                for c in (cbo_col, cbo_car, cbo_cat):
+                    c.config(state="disabled")
+                lbl_msg.config(
+                    text="No se pudieron cargar las opciones; se usarán los valores "
+                         "por defecto. " + str(err), foreground=COLOR_WARNING)
+                return
+            cols, cars, cats = res
+            _poblar(cbo_col, cols, _pref("column_id"), "columnas")
+            _poblar(cbo_car, cars, _pref("swimlane_id"), "carriles")
+            _poblar(cbo_cat, cats, _pref("category_id"), "categorias")
+            lbl_msg.config(text="", foreground=COLOR_MUTED)
+
+        en_hilo(app.root, trabajo, al_terminar)
 
     def _dur(_e=None):
         h = core.duracion_horas(e_ini.get().strip(), e_fin.get().strip())
@@ -1008,6 +1075,13 @@ def abrir_slot_inari(app, dia):
                 "Escribe inicio y fin como HH:MM, con el fin posterior al inicio.",
                 parent=top)
             return
+        col = _sel_id(cbo_col, "columnas")
+        car = _sel_id(cbo_car, "carriles")
+        cat = _sel_id(cbo_cat, "categorias")
+        # Recordar la última clasificación usada para el próximo slot.
+        core.guardar_config_valores({k: v for k, v in (
+            ("inari_last_column_id", col), ("inari_last_swimlane_id", car),
+            ("inari_last_category_id", cat)) if v is not None})
         b_reg.config(state="disabled")
         lbl_msg.config(text="Registrando en INARI...", foreground=COLOR_MUTED)
 
@@ -1022,11 +1096,15 @@ def abrir_slot_inari(app, dia):
             app._msg_pendiente = "Slot registrado en INARI."
             app.refrescar()
 
-        en_hilo(app.root, lambda: destinos.registrar(fecha, ini, fin, desc), al_terminar)
+        en_hilo(app.root,
+                lambda: destinos.registrar(fecha, ini, fin, desc, col, car, cat),
+                al_terminar)
 
     e_desc.bind("<Return>", lambda _e: registrar())
     btns = ttk.Frame(frm)
-    btns.grid(row=5, column=0, columnspan=3, sticky="e", pady=(12, 0))
+    btns.grid(row=8, column=0, columnspan=3, sticky="e", pady=(12, 0))
     b_reg = ttk.Button(btns, text="Registrar", command=registrar)
     b_reg.pack(side="right", padx=4)
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+
+    cargar_tablero()

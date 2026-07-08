@@ -6,13 +6,17 @@ configuracion local.
 
 ## Integracion con INARI (destino de los dias de teletrabajo en SisGes)
 
-> Estado: **implementado y publicado en v2.5.0** (opt-in, `inari_activo` false por
-> defecto). Fase 1 (cliente de solo lectura + config) y Fase 2 (escritura de
-> slots, selector por día de teletrabajo, dos indicadores, resumen con cubos)
-> completas. Pendiente: validar las formas de escritura de Kanboard en uso real
-> de SisGes / `inarifor`. Este documento manda sobre el mockup
-> `mockup_inari_slot.svg`, que ilustra un alcance mas amplio (destino general,
-> estado "Pendiente/Sincronizado") del que finalmente se acordo.
+> Estado: **implementado y publicado** (opt-in, `inari_activo` false por
+> defecto). v2.5.0 introdujo la integración; **v2.6.0 cambió el modelo a
+> "tarea por slot"**: cada slot es una tarea independiente de Kanboard con su
+> columna/carril/categoría y un marcador de día en `reference` ("TT-AAAA-MM-DD"),
+> y la clasificación se elige al registrar el slot (los valores de config son
+> solo el valor inicial). El modelo de escritura se verificó contra el código
+> fuente de Kanboard v1.2.50 (createTask con `time_spent` y `reference`, params
+> nombrados; searchTasks por `ref:`; updateTask/moveTaskPosition/removeTask).
+> Pendiente: validar la escritura en uso real de SisGes / `inarifor`. Este
+> documento manda sobre el mockup `mockup_inari_slot.svg`, que ilustra un alcance
+> más amplio (destino general, estado "Pendiente/Sincronizado") del acordado.
 
 ### Alcance acordado
 
@@ -71,9 +75,11 @@ el arranque inicial debe seguir corto). El token se enmascara igual que la
 
 El dialogo permite: activar/desactivar, URL, usuario y token (con pegado rapido
 `usuario:token` que se separa solo), **Probar conexion**, y elegir por API el
-proyecto, la columna, el carril/swimlane y la categoria por defecto.
+proyecto y los valores **por defecto** de columna, carril/swimlane y categoria.
+Desde v2.6.0 esos tres son solo la semilla: la clasificacion real se elige al
+registrar cada slot (ver "Formulario de slot INARI").
 
-Campos candidatos en `config.json`:
+Campos en `config.json`:
 
 ```json
 {
@@ -87,6 +93,10 @@ Campos candidatos en `config.json`:
   "inari_category_id": null
 }
 ```
+
+`inari_column_id`/`swimlane_id`/`category_id` son los valores por defecto. La
+app recuerda ademas el ultimo usado por slot en `inari_last_column_id`,
+`inari_last_swimlane_id` e `inari_last_category_id` (opt-in, se crean solos).
 
 Se descartan del borrador anterior `inari_por_defecto`, `inari_sugerir_en_teletrabajo`,
 `mostrar_selector_destino`, `recordar_ultimo_destino` y `ultimo_destino`: con el
@@ -117,38 +127,46 @@ Metodos Kanboard relevantes:
 - `getMyProjects`: listar proyectos visibles.
 - `getColumns`, `getActiveSwimlanes`, `getAllCategories`: descubrir opciones del
   tablero.
-- `searchTasks`: localizar tareas existentes.
-- `createTask` / `updateTask`: crear/actualizar la tarea diaria.
-- `createSubtask` / `updateSubtask` / `getAllSubtasks`: gestionar los slots.
-- `removeSubtask`: borrar un slot.
+- `createTask`: crear un slot (tarea) con `time_spent`, `reference` y
+  column/swimlane/category. **Params nombrados** (`time_spent` es posicional 21).
+  Devuelve el id entero (o `false`).
+- `searchTasks`: leer los slots de un dia por `ref:TT-AAAA-MM-DD status:open`.
+- `updateTask` (clave `id`): editar titulo/descripcion/categoria/`time_spent`.
+- `moveTaskPosition` (clave `task_id`): mover de columna/carril (updateTask no
+  puede).
+- `removeTask` (clave `task_id`): borrar un slot.
 
 No guardar IDs de proyecto, columna, swimlane o categoria en codigo: descubrirlos
 por API y persistirlos en `config.json`, igual que la configuracion de
 OpenProject.
 
-**Modelo de tiempo confirmado** (docs.kanboard.org, jul 2026): `createSubtask` y
-`updateSubtask` exponen `time_spent` (horas acumuladas) pero NO parametros de
-inicio/fin de franja. Kanboard guarda `start`/`end` solo por cambios de estado en
-tiempo real (todo -> en progreso -> hecho), no sirve para registrar franjas
-pasadas. Por tanto la franja "09:00-10:30" va en el **titulo** de la subtarea y
-las horas en `time_spent`. (Revisar en inarifor el namespace
-`subtask_time_tracking` por si aportara algo mas fiel, sin contar con ello.)
+**Modelo de tiempo confirmado** (codigo fuente Kanboard v1.2.50): la tabla
+`tasks` tiene columnas propias `time_spent`/`time_estimated`; `createTask` y
+`updateTask` las escriben directamente. Las horas del slot van en `time_spent`
+de **la tarea**, NO en subtareas: una subtarea con `time_spent` dispararia
+`SubtaskTimeTrackingModel`, que sobreescribe el `time_spent` de la tarea con la
+suma de sus subtareas (doble fuente de verdad). La franja "09:00-10:30" va en el
+**titulo** de la tarea; el dia se marca en `reference` = "TT-AAAA-MM-DD"
+(agrupacion determinista, independiente de zona horaria).
 
 ### Modelo del registro y de los apuntes
 
-- Una **tarea diaria** por dia de teletrabajo (p. ej. `Teletrabajo 2026-07-06`).
-- Una **subtarea por slot**: titulo `09:00-10:30 - <descripcion>`, horas en
-  `time_spent`.
+- **Cada slot es una TAREA independiente** de Kanboard (no hay tarea diaria ni
+  subtareas). Titulo `09:00-10:30 - <descripcion>`, horas en `time_spent`,
+  columna/carril/categoria propias, y `reference` = "TT-AAAA-MM-DD" como
+  marcador de dia para agrupar los slots.
+- Un dia de teletrabajo puede tener varios slots en **distinta** columna/carril/
+  categoria (era justo el motivo del cambio de modelo).
 - En la tabla de la app, cada apunte lleva su **destino** (ProyectosTIC / INARI) y
-  su **id externo** (id de `time_entry` de OpenProject o id de subtarea de
-  Kanboard), para enrutar editar/borrar al sistema correcto (`updateSubtask` /
-  `removeSubtask` en INARI).
+  su **id externo** (id de `time_entry` de OpenProject o `task_id` de Kanboard),
+  para enrutar editar/borrar al sistema correcto (`removeTask` en INARI).
 
 ### Formulario de slot INARI
 
-- En el dia a dia muestra solo **Inicio / Fin / Descripcion** (con la duracion
-  calculada). Proyecto / Columna / Carril / Categoria quedan plegados como
-  "avanzado", rellenados con los valores por defecto de config.
+- Muestra **Inicio / Fin / Descripcion** (con la duracion calculada) y, ademas,
+  **Columna / Carril / Categoria** por slot, prerrellenados con el ultimo valor
+  usado (o el de por defecto de config). Cargar las opciones del tablero es una
+  llamada en segundo plano al abrir; si falla, se usan los valores por defecto.
 - Validacion de slots como **funciones puras** (testeables como `_pascua`):
   horas positivas, `duracion = fin - inicio`, sin solapes, y opcionalmente aviso
   si el total del dia no llega a la jornada.

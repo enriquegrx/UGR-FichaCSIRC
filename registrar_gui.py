@@ -643,9 +643,10 @@ class App:
                 iso = d.isoformat()
                 try:
                     if inari_cfg and core.es_teletrabajo(iso):
-                        # Dia de teletrabajo: las horas son las de INARI.
-                        tid, ss = destinos.slots_dia(iso)
-                        cache[iso] = [{"id": s["id"], "task_id": tid, "destino": "inari",
+                        # Dia de teletrabajo: las horas son las de INARI. Cada
+                        # slot es una tarea; su id es su propio task_id.
+                        ss = destinos.slots_dia(iso)
+                        cache[iso] = [{"id": s["id"], "task_id": s["id"], "destino": "inari",
                                        "horas": s["horas"], "wp_titulo": s["titulo"],
                                        "actividad": "INARI · Teletrabajo",
                                        "comentario": "", "wp_id": None} for s in ss]
