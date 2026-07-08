@@ -57,13 +57,14 @@ Name: "{group}\Desinstalar FichaCSIRC"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: desktopicon
 
 [Run]
-; Tras una ACTUALIZACION, volver a abrir la app automaticamente: se cerro sola
-; para poder actualizarse, y si no se relanza el usuario se queda sin ella
-; abierta. Sin 'postinstall' se ejecuta al final de la copia (no es una casilla
-; que el usuario pueda dejar sin marcar); 'runasoriginaluser' evita abrirla con
-; privilegios elevados si el instalador se lanzo como administrador. En una
-; instalacion nueva no se relanza (aun hay que configurar: ver la casilla de abajo).
-Filename: "{app}\FichaCSIRC.exe"; Flags: nowait runasoriginaluser; Check: EsActualizacion
+; Tras una ACTUALIZACION, ofrecer reabrir la app (casilla MARCADA por defecto en
+; la pantalla de Finalizar). La app se cerro para actualizarse; al pulsar
+; Finalizar se vuelve a abrir sola.
+; OJO: se lanza en el contexto NORMAL del usuario. NO usar 'runasoriginaluser':
+; re-spawnea el proceso y rompe el traspaso del directorio temporal _MEI del .exe
+; onefile de PyInstaller ("Failed to load Python DLL ..._MEIxxxx\python3XX.dll").
+; En instalacion nueva no se ofrece (aun hay que configurar: ver la casilla de abajo).
+Filename: "{app}\FichaCSIRC.exe"; Description: "Abrir FichaCSIRC al terminar"; Flags: nowait postinstall skipifsilent; Check: EsActualizacion
 ; Ofrecer el configurador SOLO en una instalacion nueva (si ya hay config.json
 ; es una actualizacion y no hay que reconfigurar: la casilla ni aparece).
 Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion

@@ -172,3 +172,13 @@ definición completa y el historial de decisiones.
   que el de `● INARI` (`_poner_conexion`). **Cabecera**: el subtítulo pasa de
   "Registro de horas - OpenProject" a "- ProyectosTIC", y añade " e INARI" cuando
   la integración está activa (`destinos.inari_activo()`).
+- v2.6.2 (jul 2026): **arreglado el relanzado tras actualizar** que introdujo la
+  2.6.1. La entrada `[Run]` usaba `nowait runasoriginaluser` (sin `postinstall`):
+  `runasoriginaluser` re-spawnea el proceso y rompe el traspaso del temporal
+  `_MEI` del `.exe` onefile de PyInstaller → "Failed to load Python DLL
+  ...\_MEIxxxx\python312.dll. LoadLibrary: no se encuentra el módulo". El .exe en
+  sí estaba bien (abría por icono); solo fallaba el auto-lanzado del instalador.
+  Ahora es una casilla `postinstall skipifsilent` MARCADA por defecto ("Abrir
+  FichaCSIRC al terminar"), lanzada en el contexto normal del usuario, con
+  `Check: EsActualizacion` (solo en actualizaciones). Regla: **nunca**
+  `runasoriginaluser` con exes onefile de PyInstaller.
