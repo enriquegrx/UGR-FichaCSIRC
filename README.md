@@ -1,14 +1,17 @@
-# FichaCSIRC
+# FichaCSIRC 🕐
 
 FichaCSIRC es una aplicación de escritorio para registrar horas de trabajo en
 OpenProject, en la instancia ProyectosTic de la Universidad de Granada. Está
 pensada para el uso diario: abrir, elegir el día, seleccionar la tarea, indicar
-horas y guardar.
+horas y guardar. ✅
 
 El objetivo no es sustituir OpenProject, sino evitar el trabajo repetitivo del
 widget web de tiempo invertido cuando hay que imputar la jornada todos los días.
 
-## Estado del proyecto
+Para el servicio de **SisGes** incluye además, de forma **opcional**, una
+integración con **INARI (Kanboard)** para fichar los días de teletrabajo. 🏡
+
+## 📌 Estado del proyecto
 
 - Plataforma: Windows y macOS.
 - Interfaz: Python con Tkinter/ttk.
@@ -19,30 +22,33 @@ widget web de tiempo invertido cuando hay que imputar la jornada todos los días
 
 La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES.md).
 
-## Qué permite hacer
+## ✨ Qué permite hacer
 
-- Ver la semana laboral de un vistazo, con el progreso de cada día y el total
+- 🗂️ Ver la semana laboral de un vistazo, con el progreso de cada día y el total
   semanal.
-- Añadir apuntes de horas a uno o varios días a la vez.
-- Usar tareas favoritas, buscar tareas por proyecto o buscar en todos los
+- ➕ Añadir apuntes de horas a uno o varios días a la vez.
+- 🔎 Usar tareas favoritas, buscar tareas por proyecto o buscar en todos los
   proyectos accesibles.
-- Recordar la actividad y el comentario habitual de cada tarea.
-- Editar apuntes con doble clic y borrar varios apuntes seleccionados con
+- 💬 Recordar la actividad y el comentario habitual de cada tarea.
+- ✏️ Editar apuntes con doble clic y borrar varios apuntes seleccionados con
   posibilidad de deshacer.
-- Copiar el día anterior, copiar la semana anterior o aplicar plantillas de día
+- 🔄 Copiar el día anterior, copiar la semana anterior o aplicar plantillas de día
   típico.
-- Marcar festivos, vacaciones u otros días no laborables (nunca bloquean el fichaje).
-- Importar festivos por ámbito (nacional, Andalucía, Granada) calculados para cada
+- 🏖️ Marcar festivos, vacaciones u otros días no laborables (nunca bloquean el fichaje).
+- 📅 Importar festivos por ámbito (nacional, Andalucía, Granada) calculados para cada
   año, más un preset de días propios de la UGR.
-- Marcar guardias (con comentario "Servicio de Guardia" automático) y teletrabajo,
+- 🛎️ Marcar guardias (con comentario "Servicio de Guardia" automático) y teletrabajo,
   con contador semanal; llevar la cuenta del cupo de vacaciones.
-- Consultar un resumen mensual con objetivo, horas registradas y días
+- 🏡 **Solo SisGes (opcional):** fichar los días de teletrabajo en **INARI (Kanboard)**
+  en vez de en ProyectosTIC, con clasificación por franja (columna, carril,
+  categoría) e indicador de conexión propio en el pie.
+- 📊 Consultar un resumen mensual con objetivo, horas registradas y días
   incompletos.
-- Exportar horas a CSV.
-- Activar un aviso diario de fichaje en Windows y macOS.
-- Comprobar actualizaciones y, en Windows, descargar y lanzar el instalador.
+- 📤 Exportar horas a CSV.
+- ⏰ Activar un aviso diario de fichaje en Windows y macOS.
+- 🔔 Comprobar actualizaciones y, en Windows, descargar y lanzar el instalador.
 
-## Cómo se usa
+## 🚀 Cómo se usa
 
 La aplicación trabaja con el mismo modelo que OpenProject: cada apunte tiene una
 fecha, una tarea, una duración, una actividad y un comentario. No registra horas
@@ -61,7 +67,27 @@ La app evita duplicados básicos al aplicar un apunte a varios días, avisa si s
 supera la jornada configurada y mantiene la interfaz activa mientras consulta la
 API en segundo plano.
 
-## Instalación
+## 🏡 Integración con INARI (solo SisGes, opcional)
+
+Pensada para el flujo del servicio de **SisGes**: los **días de teletrabajo** se
+imputan en **INARI** (la instancia de Kanboard del servicio) en lugar de en
+ProyectosTIC. Viene **desactivada por defecto**, así que no afecta a quien no la
+use.
+
+- Se activa y configura en **Herramientas → Integraciones** (URL, usuario y token
+  personal de INARI; el token se enmascara y nunca se registra en logs).
+- En un día marcado como teletrabajo, cada franja se registra como una **tarea
+  independiente en INARI**, con su **columna, carril y categoría** (elegibles por
+  franja) y un marcador de día para agruparlas.
+- El pie de la ventana muestra **dos indicadores de conexión** diferenciados
+  (`● ProyectosTIC` y `● INARI`).
+- El **resumen del mes** cuenta esos días como teletrabajo y suma sus horas de
+  INARI. Un día de teletrabajo va a un único sistema (INARI *o* ProyectosTIC),
+  así que no se duplican horas.
+
+Guía de uso paso a paso en [INSTRUCCIONES.md](INSTRUCCIONES.md), sección 5.
+
+## 💾 Instalación
 
 ### Windows
 
@@ -96,7 +122,7 @@ la descarga con cuarentena y no permite abrirla, se puede limpiar desde Terminal
 xattr -dr com.apple.quarantine FichaCSIRC.app FichaCSIRC-Configurar.app
 ```
 
-## Configuración y datos locales
+## 🗂️ Configuración y datos locales
 
 La configuración se guarda en `config.json`. Contiene la URL, la API key, la
 jornada, favoritos, no laborables, plantillas y preferencias de ventana.
@@ -119,7 +145,7 @@ personal. Existe [config.example.json](config.example.json) como plantilla.
 La aplicación escribe un log de diagnóstico en `fichacsirc.log`, junto a la
 configuración.
 
-## Estructura del repositorio
+## 🧱 Estructura del repositorio
 
 | Ruta | Descripción |
 |---|---|
@@ -143,7 +169,7 @@ Otros documentos:
 - [revision_ux.md](revision_ux.md) y [revision_ui.md](revision_ui.md): prompts
   usados para revisar usabilidad y diseño visual.
 
-## Desarrollo local
+## 🧑‍💻 Desarrollo local
 
 Los usuarios que descargan una release no necesitan instalar Python. Esta sección
 es solo para desarrollo, pruebas o empaquetado local.
@@ -181,7 +207,7 @@ python -m unittest discover -s tests -t .
 Los tests no usan la red real: simulan la API y escriben una configuración
 temporal mediante `FICHACSIRC_CONFIG`.
 
-## Construcción y releases
+## 📦 Construcción y releases
 
 La publicación oficial se hace con GitHub Actions. El flujo genera el instalador
 combinado de Windows, los paquetes macOS y los sube a GitHub Releases.
@@ -225,7 +251,7 @@ brew install python@3.12 python-tk@3.12
 Los detalles de mantenimiento y scripts auxiliares están en
 [CONTEXTO_DESARROLLO.md](CONTEXTO_DESARROLLO.md).
 
-## Decisiones técnicas relevantes
+## 🔧 Decisiones técnicas relevantes
 
 - La autenticación con OpenProject usa Basic Auth con usuario `apikey`.
 - Las duraciones se envían en formato ISO 8601 (`PT7H`, `PT3H30M`, etc.).
@@ -238,8 +264,14 @@ Los detalles de mantenimiento y scripts auxiliares están en
 - La GUI ejecuta llamadas de red en hilos de fondo y cachea datos de la semana.
 - El aviso diario tiene autocierre para no dejar procesos bloqueando una futura
   actualización.
+- La integración con INARI usa la API JSON-RPC 2.0 de Kanboard (Basic Auth
+  `usuario:token`); cada franja de teletrabajo es una tarea con las horas en
+  `time_spent` y un marcador de día en `reference`. Es opcional y solo para SisGes.
+- Los ejecutables de Windows se empaquetan en modo carpeta (PyInstaller
+  `--onedir`): el `.exe` carga sus DLL desde su carpeta contigua, sin extraer nada
+  a `%TEMP%`, lo que evita errores de carga al lanzarlo recién instalado.
 
-## Limitaciones
+## ⚠️ Limitaciones
 
 - Solo se muestran tareas y proyectos a los que el usuario tiene acceso.
 - Windows y macOS pueden mostrar avisos de seguridad porque los binarios no
@@ -248,7 +280,7 @@ Los detalles de mantenimiento y scripts auxiliares están en
 - La interfaz está hecha en Tkinter: se ha cuidado el diseño, pero se mantiene
   dentro de los límites de una herramienta interna ligera.
 
-## Licencia
+## 📄 Licencia
 
 Ver [LICENSE](LICENSE).
 
