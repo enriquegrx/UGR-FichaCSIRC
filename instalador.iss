@@ -57,14 +57,13 @@ Name: "{group}\Desinstalar FichaCSIRC"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: desktopicon
 
 [Run]
-; Tras una ACTUALIZACION, ofrecer reabrir la app (casilla MARCADA por defecto en
-; la pantalla de Finalizar). La app se cerro para actualizarse; al pulsar
-; Finalizar se vuelve a abrir sola.
-; OJO: se lanza en el contexto NORMAL del usuario. NO usar 'runasoriginaluser':
-; re-spawnea el proceso y rompe el traspaso del directorio temporal _MEI del .exe
-; onefile de PyInstaller ("Failed to load Python DLL ..._MEIxxxx\python3XX.dll").
-; En instalacion nueva no se ofrece (aun hay que configurar: ver la casilla de abajo).
-Filename: "{app}\FichaCSIRC.exe"; Description: "Abrir FichaCSIRC al terminar"; Flags: nowait postinstall skipifsilent; Check: EsActualizacion
+; NO se auto-lanza FichaCSIRC.exe al terminar el instalador. Se probo en 2.6.1/2.6.2
+; y daba "Failed to load Python DLL ..._MEIxxxx\python312.dll": lanzar el .exe onefile
+; recien instalado y sin firmar, justo al acabar el instalador, hace que la DLL
+; extraida al temporal _MEI no cargue (tipicamente el antivirus la bloquea en esa
+; secuencia). El .exe funciona bien abierto por su icono. Tras actualizar, el usuario
+; abre la app desde el acceso directo. (Si se quisiera reabrir sola, la via robusta
+; seria empaquetar en modo carpeta --onedir, que evita la extraccion a %TEMP%.)
 ; Ofrecer el configurador SOLO en una instalacion nueva (si ya hay config.json
 ; es una actualizacion y no hay que reconfigurar: la casilla ni aparece).
 Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion

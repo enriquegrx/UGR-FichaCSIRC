@@ -182,3 +182,14 @@ definición completa y el historial de decisiones.
   FichaCSIRC al terminar"), lanzada en el contexto normal del usuario, con
   `Check: EsActualizacion` (solo en actualizaciones). Regla: **nunca**
   `runasoriginaluser` con exes onefile de PyInstaller.
+- v2.6.3 (jul 2026): **retirado el auto-lanzado de la app tras actualizar**. La
+  casilla de 2.6.2 (sin `runasoriginaluser`) seguía dando "Failed to load Python
+  DLL ...\_MEIxxxx\python312.dll" al abrir el `.exe` onefile **recién instalado y
+  sin firmar justo al terminar el instalador**: la DLL extraída al temporal `_MEI`
+  no carga (típicamente el antivirus la bloquea en esa secuencia). El `.exe`
+  funciona bien abierto por su icono; el problema era solo ese contexto de
+  lanzamiento. Se elimina la entrada `[Run]` de relanzado; tras actualizar, el
+  usuario abre la app desde el acceso directo. Vía robusta pendiente si se
+  quisiera reabrir sola: empaquetar en `--onedir` (evita la extracción a `%TEMP%`
+  y toda esta familia de errores). Diagnóstico apoyado en un workflow de
+  investigación (UPX/antivirus/onedir/dependencias).
