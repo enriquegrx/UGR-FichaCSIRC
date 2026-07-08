@@ -15,7 +15,8 @@ definición completa y el historial de decisiones.
   programada de Windows (`schtasks`). La app lo lanza con `--recordatorio`.
 - `configurar_gui.py` — asistente gráfico (wizard); importa `configurar`.
 - Lanzadores `.bat` (detectan Python, evitan el alias de la Microsoft Store).
-- `build_exe.bat` — empaqueta Windows con PyInstaller (`--onefile`); CI en `.github/workflows`.
+- `build_exe.bat` — empaqueta Windows con PyInstaller (`--onedir --noupx`, modo
+  carpeta: el `.exe` + su `_internal`); CI en `.github/workflows`.
 - `build_macos.sh` — empaqueta macOS como `.app` y ZIP; CI genera artefactos `arm64` y `x64`.
 - `instalador.iss` + `build_instalador.bat` — instalador único (Inno Setup); la CI
   lo genera y publica junto a los `.exe` en cada Release.
@@ -193,3 +194,20 @@ definición completa y el historial de decisiones.
   quisiera reabrir sola: empaquetar en `--onedir` (evita la extracción a `%TEMP%`
   y toda esta familia de errores). Diagnóstico apoyado en un workflow de
   investigación (UPX/antivirus/onedir/dependencias).
+- v2.6.4 (jul 2026): **build en modo carpeta (`--onedir`)** para las dos apps, que
+  **elimina de raíz** el error "Failed to load Python DLL ...\_MEIxxxx\python312.dll".
+  Con onedir el `.exe` carga su `python312.dll` (y `VCRUNTIME140*.dll`) desde su
+  carpeta `_internal` contigua, **sin extraer nada a `%TEMP%\_MEI`**, que era el
+  paso que el antivirus bloqueaba al lanzar el `.exe` recién instalado. Verificado
+  **en local** (misma máquina/AV): ambos `.exe` arrancan y abren su ventana.
+  `release.yml`: `--onefile`→`--onedir --noupx` en los dos builds, `pyinstaller`
+  fijado a `==6.21.0` (reproducible), y se publica solo el instalador (ya no hay
+  `.exe` sueltos: el exe necesita su `_internal` al lado). `instalador.iss`:
+  `[Files]` copia recursiva de `dist\FichaCSIRC\*` y `dist\FichaCSIRC-Configurar\*`
+  a `{app}\<App>\`, `[Icons]`/`UninstallDisplayIcon`/`[Run]` apuntan al exe dentro
+  de su carpeta con `WorkingDir`, e `[InstallDelete]` borra los `.exe` sueltos de
+  instalaciones onefile viejas. Como onedir ya es seguro, **se recupera el
+  "abrir FichaCSIRC al terminar"** tras actualizar (casilla marcada). `build_exe.bat`
+  actualizado a onedir. Regla: para apps distribuidas por instalador, **preferir
+  `--onedir`** (sin extracción a temporal, sin esta clase de fallos, arranque más
+  rápido); onefile solo para binario portable suelto.

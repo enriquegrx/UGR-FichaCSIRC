@@ -32,7 +32,7 @@ PrivilegesRequired=lowest
 OutputDir=dist
 OutputBaseFilename=FichaCSIRC-Instalador
 SetupIconFile=fichacsirc.ico
-UninstallDisplayIcon={app}\FichaCSIRC.exe
+UninstallDisplayIcon={app}\FichaCSIRC\FichaCSIRC.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -45,28 +45,35 @@ Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
 
+; Al pasar de --onefile a --onedir, borrar los .exe sueltos de una instalacion
+; vieja (ahora cada app vive en su carpeta {app}\<App>\ con su _internal).
+[InstallDelete]
+Type: files; Name: "{app}\FichaCSIRC.exe"
+Type: files; Name: "{app}\FichaCSIRC-Configurar.exe"
+
+; Cada app es una CARPETA (--onedir): el .exe + su _internal (python3XX.dll,
+; runtime VC, tcl/tk...). Se copian recursivas a subcarpetas separadas.
 [Files]
-Source: "dist\FichaCSIRC.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "dist\FichaCSIRC-Configurar.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\FichaCSIRC\*"; DestDir: "{app}\FichaCSIRC"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "dist\FichaCSIRC-Configurar\*"; DestDir: "{app}\FichaCSIRC-Configurar"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "INSTRUCCIONES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\FichaCSIRC (Registrar horas)"; Filename: "{app}\FichaCSIRC.exe"
-Name: "{group}\FichaCSIRC - Configurar"; Filename: "{app}\FichaCSIRC-Configurar.exe"
+Name: "{group}\FichaCSIRC (Registrar horas)"; Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"
+Name: "{group}\FichaCSIRC - Configurar"; Filename: "{app}\FichaCSIRC-Configurar\FichaCSIRC-Configurar.exe"; WorkingDir: "{app}\FichaCSIRC-Configurar"
 Name: "{group}\Desinstalar FichaCSIRC"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC.exe"; Tasks: desktopicon
+Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"; Tasks: desktopicon
 
 [Run]
-; NO se auto-lanza FichaCSIRC.exe al terminar el instalador. Se probo en 2.6.1/2.6.2
-; y daba "Failed to load Python DLL ..._MEIxxxx\python312.dll": lanzar el .exe onefile
-; recien instalado y sin firmar, justo al acabar el instalador, hace que la DLL
-; extraida al temporal _MEI no cargue (tipicamente el antivirus la bloquea en esa
-; secuencia). El .exe funciona bien abierto por su icono. Tras actualizar, el usuario
-; abre la app desde el acceso directo. (Si se quisiera reabrir sola, la via robusta
-; seria empaquetar en modo carpeta --onedir, que evita la extraccion a %TEMP%.)
+; Tras una ACTUALIZACION, ofrecer reabrir la app (casilla MARCADA por defecto).
+; La app se cerro para actualizarse; al pulsar Finalizar se vuelve a abrir.
+; Con --onedir esto YA es seguro: el .exe carga su python3XX.dll desde su carpeta
+; _internal, no extrae nada a %TEMP%\_MEI, y desaparece el "Failed to load Python
+; DLL" que daban 2.6.1/2.6.2 (que eran --onefile). WorkingDir apunta a su carpeta.
+Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"; Description: "Abrir FichaCSIRC al terminar"; Flags: nowait postinstall skipifsilent; Check: EsActualizacion
 ; Ofrecer el configurador SOLO en una instalacion nueva (si ya hay config.json
 ; es una actualizacion y no hay que reconfigurar: la casilla ni aparece).
-Filename: "{app}\FichaCSIRC-Configurar.exe"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion
+Filename: "{app}\FichaCSIRC-Configurar\FichaCSIRC-Configurar.exe"; WorkingDir: "{app}\FichaCSIRC-Configurar"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion
 ; Y ofrecer las instrucciones en la web (renderizadas), en vez de un .txt suelto
 Filename: "{#MyUrl}/blob/main/INSTRUCCIONES.md"; Description: "Ver las instrucciones de uso (web)"; Flags: postinstall shellexec skipifsilent unchecked
 

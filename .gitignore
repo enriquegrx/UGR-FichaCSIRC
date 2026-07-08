@@ -17,6 +17,8 @@ venv/
 # ---- PyInstaller ----
 build/
 dist/
+build_test/
+dist_test/
 *.spec
 
 # ---- Lanzadores generados automaticamente por el configurador ----

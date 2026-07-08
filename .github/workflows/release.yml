@@ -23,22 +23,28 @@ jobs:
           python-version: "3.12"
 
       - name: Instalar dependencias
-        run: pip install requests pyinstaller
+        # PyInstaller fijado: evita que un bootloader nuevo cambie el manejo del
+        # empaquetado sin avisar (build reproducible).
+        run: pip install requests pyinstaller==6.21.0
 
       - name: Ejecutar tests
         run: python -m unittest discover -s tests -t . -v
 
-      - name: Construir FichaCSIRC.exe
+      # Modo CARPETA (--onedir), no --onefile: el .exe se ejecuta junto a su
+      # carpeta _internal (con python3XX.dll y el runtime VC) y NO se extrae nada
+      # a %TEMP%\_MEI. Asi se evita el error "Failed to load Python DLL" al lanzar
+      # el .exe recien instalado desde el instalador. --noupx como blindaje extra.
+      - name: Construir FichaCSIRC (carpeta)
         run: >
-          pyinstaller --noconfirm --clean --onefile --windowed
+          pyinstaller --noconfirm --clean --onedir --windowed --noupx
           --name "FichaCSIRC" --icon "fichacsirc.ico"
           --version-file "version_info.txt"
           --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
           registrar_gui.py
 
-      - name: Construir FichaCSIRC-Configurar.exe
+      - name: Construir FichaCSIRC-Configurar (carpeta)
         run: >
-          pyinstaller --noconfirm --clean --onefile --windowed
+          pyinstaller --noconfirm --clean --onedir --windowed --noupx
           --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico"
           --version-file "version_info.txt"
           --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
@@ -53,13 +59,14 @@ jobs:
           $v = "${{ github.ref_name }}".TrimStart('v')
           iscc /DMyAppVersion=$v instalador.iss
 
-      - name: Publicar release con el instalador y los .exe
+      # Con --onedir ya no hay .exe suelto portable (el exe necesita su carpeta
+      # _internal al lado). Se publica solo el instalador, que empaqueta ambas
+      # carpetas; es tambien lo que descarga el autoactualizador.
+      - name: Publicar release con el instalador
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/FichaCSIRC-Instalador.exe
-            dist/FichaCSIRC.exe
-            dist/FichaCSIRC-Configurar.exe
           generate_release_notes: true
 
   build-macos:
