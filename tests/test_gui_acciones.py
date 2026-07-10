@@ -160,6 +160,20 @@ class TestGuiAcciones(unittest.TestCase):
         finally:
             top.destroy()
 
+    def test_dialogo_permisos_calcula_usadas_y_disponibles(self):
+        import dialogos
+        anio = dt.date.today().year
+        with mock.patch.object(core, "PERMISOS",
+                               {f"{anio}-01-05": [{"tipo": "conciliacion", "horas": 4.0}]}):
+            top = dialogos.abrir_permisos(self.app)
+        try:
+            filas = {f["id"]: f for f in top._filas}
+            self.assertEqual(filas["conciliacion"]["usadas"], 4.0)
+            self.assertEqual(filas["conciliacion"]["disponibles"], 26.0)   # 30 - 4
+            self.assertEqual(filas["asuntos_particulares"]["disponibles"], 70.0)
+        finally:
+            top.destroy()
+
 
 class TestGuiInari(unittest.TestCase):
     """Un dia de teletrabajo con INARI activo lee/borra en INARI, no en OpenProject."""

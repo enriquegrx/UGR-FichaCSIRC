@@ -5,7 +5,7 @@ trabajo en ProyectosTIC (OpenProject)** sin pelearte con la web: marcas el día,
 eliges la tarea, pones las horas y listo. ✅
 
 Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INARI**
-(ver la sección 5). El resto de mortales puede ignorar tranquilamente esa parte. 😉
+(ver la sección 6). El resto de mortales puede ignorar tranquilamente esa parte. 😉
 
 ---
 
@@ -119,7 +119,8 @@ Abre **FichaCSIRC (Registrar horas)**:
 - 🧩 **Plantillas…**: guarda tu «día típico» y aplícalo con un clic.
 - ✏️ **Doble clic** en un apunte lo edita; **Supr** lo borra (con botón *Deshacer* 🔙).
 - 🖱️ **Botón derecho** sobre un día: marcarlo como festivo, vacaciones, guardia o
-  teletrabajo (los colores y etiquetas te lo recuerdan de un vistazo).
+  teletrabajo, o **añadir un permiso por horas** (los colores y etiquetas te lo
+  recuerdan de un vistazo).
 - 🏖️ **Importar festivos** (*Herramientas*): marca de golpe los festivos del año
   (nacionales, de Andalucía y de Granada), calculados solos, para que no te los pida.
 - 📊 **Resumen del mes**: cuántas horas llevas, tu objetivo y qué días te faltan.
@@ -129,7 +130,45 @@ Abre **FichaCSIRC (Registrar horas)**:
 
 ---
 
-## 5. 🏡 Teletrabajo con INARI (solo SisGes)
+## 5. 🕐 Permisos por horas
+
+Casi todos los permisos del portal de personal se miden **en horas**, no en días
+enteros: asuntos particulares, conciliación de la vida laboral y familiar, o la
+compensación por servicios mínimos. FichaCSIRC lo tiene en cuenta.
+
+**Cómo se usa:** botón derecho sobre el día → **Añadir permiso por horas…**,
+eliges el tipo y las horas (por ejemplo `3:00`). Ese día el objetivo baja solo:
+si tu jornada es de 7 h y coges 3 h de permiso, la app solo te pedirá **4 h**. Si
+metes la jornada entera, el día queda a 0 y no te reclama nada. 👌
+
+**Las horas las pones tú**, copiándolas de tu portal de personal (no hay forma de
+leerlas automáticamente). Ve a **Herramientas → Permisos (horas)**.
+
+Ojo, porque esto es importante: las horas de un permiso **no son un cupo fijo**.
+Te las van **concediendo** (por ejemplo, por servicios extraordinarios), y cada
+concesión puede traer **su propia fecha de caducidad**. Por eso cada tipo tiene
+una lista de **concesiones**, y el total es su suma:
+
+```
+Compensación por servicios mínimos     Total 56:00 · Usadas 38:00 · Disponibles 18:00
+    28:00   caduca 2027-01-07
+    28:00   caduca 2027-04-06
+    ＋ Añadir concesión
+```
+
+- **＋ Añadir concesión** 🎁: cuando te concedan horas nuevas, las añades ahí con
+  su fecha límite (déjala vacía si no caduca). Se guarda al momento.
+- **Usadas** se calculan solas con los permisos que marcas en los días.
+- **Disponibles** = total − usadas. En rojo si te pasas.
+- ⏳ La app **avisa** cuando una concesión está a punto de caducar, y ⚠️ marca las
+  ya caducadas — pero **no te resta horas sola**: tú decides qué hacer.
+
+> 💡 Las **vacaciones** siguen contándose **en días** (su cupo está en
+> *Herramientas → Vacaciones y teletrabajo*), porque así las mide el portal.
+
+---
+
+## 6. 🏡 Teletrabajo con INARI (solo SisGes)
 
 > 🏢 **Esto es solo para el servicio de SisGes.** Si no eres de Sistemas de
 > Gestión, sáltate esta sección tan tranquilo: no te afecta en nada y la
@@ -174,7 +213,7 @@ para que no tengas que saltar de una herramienta a otra.
 
 ---
 
-## 6. 🆘 Si algo no va
+## 7. 🆘 Si algo no va
 
 | Problema | Solución |
 |---|---|

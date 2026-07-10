@@ -15,6 +15,7 @@ import re
 import sys
 import json
 import csv
+import math
 import time
 import logging
 import logging.handlers
@@ -192,6 +193,9 @@ VERANO_FIN = tuple(_cfg.get("verano_fin", [9, 15]))
 FAVORITOS = _cfg.get("favoritos", [])
 NO_LABORABLES = dict(_cfg.get("no_laborables", {}))  # "AAAA-MM-DD" -> motivo
 PLANTILLAS = list(_cfg.get("plantillas", []))
+# Permisos por horas: "AAAA-MM-DD" -> [{"tipo": id, "horas": float}]. A diferencia
+# de un dia no laborable (objetivo 0), un permiso RESTA horas al objetivo del dia.
+PERMISOS = dict(_cfg.get("permisos", {}))
 # Modalidades de trabajo (NO son dias no laborables: se trabaja igual). Cada
 # una es un conjunto de fechas "AAAA-MM-DD".
 GUARDIAS = set(_cfg.get("guardias", []))
@@ -682,11 +686,13 @@ def importar_festivos(ambitos=AMBITOS, incluir_ugr=True):
 
 
 def objetivo_de(dia):
-    """Jornada objetivo del dia, contando los dias marcados como no laborables.
+    """Jornada objetivo del dia, descontando dias no laborables y permisos.
+    - Dia no laborable (festivo, vacaciones, baja...): objetivo 0.
+    - Permiso por horas (asuntos particulares, conciliacion...): resta esas horas.
     Guardia y teletrabajo NO cambian el objetivo (se trabaja igual)."""
     if es_no_laborable(dia.isoformat()):
         return 0
-    return jornada_de(dia)
+    return max(0, round(jornada_de(dia) - horas_permiso(dia.isoformat()), 2))
 
 
 # ----------------------- vacaciones (cupo anual) -----------------------
@@ -718,6 +724,273 @@ def vacaciones_usadas(anio):
         if d.year == anio and d.weekday() < 5:
             n += 1
     return n
+
+
+# ----------------------- permisos por horas -----------------------
+#
+# El portal de personal mide casi todos los permisos EN HORAS (asuntos
+# particulares, conciliacion, compensacion por servicios minimos), no en dias
+# completos. Aqui un permiso consume horas de un cupo anual y RESTA esas horas al
+# objetivo del dia (ver objetivo_de). Un dia entero = meter las horas de tu
+# jornada. Las vacaciones siguen contandose en DIAS (ver cupo_vacaciones).
+#
+# Los cupos se copian a mano del portal: no hay API que los exponga.
+
+# Catalogo por defecto; "permisos_tipos" en config lo sobrescribe.
+#
+# Las horas de un tipo NO son un cupo fijo: se conceden en "bolsas" (concesiones),
+# cada una con sus horas y su fecha limite. Los servicios extraordinarios van
+# sumando concesiones nuevas. El total del tipo es la suma de sus concesiones.
+# La caducidad solo AVISA: no descuenta horas sola (decision de producto).
+PERMISOS_TIPOS_DEFECTO = [
+    {"id": "asuntos_particulares", "nombre": "Asuntos particulares por horas",
+     "concesiones": [{"horas": 70.0, "fecha_limite": ""}]},
+    {"id": "servicios_minimos", "nombre": "Compensación por servicios mínimos",
+     "concesiones": [{"horas": 56.0, "fecha_limite": ""}]},
+    {"id": "conciliacion", "nombre": "Conciliación vida laboral y familiar",
+     "concesiones": [{"horas": 30.0, "fecha_limite": ""}]},
+]
+
+# Aviso cuando a una concesion le quedan <= estos dias para caducar.
+DIAS_AVISO_CADUCIDAD = 30
+
+
+def parsear_horas(txt):
+    """'3:30', '3,5' o '3.5' -> 3.5 (horas, float). None si no vale.
+
+    Admite HH:MM sin tope de 24 h (los cupos son '70:00')."""
+    s = str(txt).strip().replace(",", ".")
+    if not s:
+        return None
+    if ":" in s:
+        try:
+            hh, mm = s.split(":", 1)
+            h, m = int(hh), int(mm)
+        except ValueError:
+            return None
+        if h < 0 or not 0 <= m < 60:
+            return None
+        return round(h + m / 60, 2)
+    try:
+        h = float(s)
+    except ValueError:
+        return None
+    if not math.isfinite(h) or h < 0:
+        return None
+    return round(h, 2)
+
+
+def fmt_horas_hhmm(horas):
+    """3.5 -> '3:30' (el formato del portal de permisos)."""
+    total = int(round(float(horas) * 60))
+    signo = "-" if total < 0 else ""
+    total = abs(total)
+    return f"{signo}{total // 60}:{total % 60:02d}"
+
+
+def permisos_tipos():
+    """Catalogo de tipos de permiso. La config manda sobre el de por defecto."""
+    tipos = config_valor("permisos_tipos") or PERMISOS_TIPOS_DEFECTO
+    return [dict(t) for t in tipos]
+
+
+def tipo_permiso(tipo_id):
+    """El dict del tipo, o None si no existe."""
+    return next((t for t in permisos_tipos() if t.get("id") == tipo_id), None)
+
+
+def permisos_dia(fecha_iso):
+    """[{'tipo': id, 'horas': float}] de ese dia (vacia si no hay)."""
+    return [dict(p) for p in PERMISOS.get(fecha_iso, [])]
+
+
+def horas_permiso(fecha_iso):
+    """Horas de permiso de ese dia (suma de todos sus permisos)."""
+    total = 0.0
+    for p in PERMISOS.get(fecha_iso, []):
+        try:
+            total += float(p.get("horas") or 0)
+        except (TypeError, ValueError):
+            continue
+    return round(total, 2)
+
+
+def anadir_permiso(fecha_iso, tipo_id, horas):
+    """Añade un permiso de 'horas' al dia. Lanza ValueError si no es valido.
+
+    Las horas de permiso de un dia nunca pueden pasar de su jornada: un dia
+    entero de permiso deja el objetivo en 0, no en negativo."""
+    h = parsear_horas(horas)
+    if not h or h <= 0:
+        raise ValueError("Las horas del permiso deben ser un número positivo.")
+    if tipo_permiso(tipo_id) is None:
+        raise ValueError("Tipo de permiso desconocido.")
+    try:
+        dia = dt.date.fromisoformat(fecha_iso)
+    except ValueError:
+        raise ValueError("Fecha no válida.")
+    tope = jornada_de(dia)
+    if horas_permiso(fecha_iso) + h > tope + 1e-9:
+        raise ValueError(
+            f"Las horas de permiso del día no pueden superar la jornada ({_fmt(tope)}).")
+    PERMISOS.setdefault(fecha_iso, []).append({"tipo": tipo_id, "horas": h})
+    guardar_config_valor("permisos", PERMISOS)
+    return h
+
+
+def quitar_permiso(fecha_iso, indice):
+    """Quita el permiso 'indice' de ese dia. True si quito algo."""
+    ps = PERMISOS.get(fecha_iso) or []
+    if not 0 <= indice < len(ps):
+        return False
+    ps.pop(indice)
+    if ps:
+        PERMISOS[fecha_iso] = ps
+    else:
+        PERMISOS.pop(fecha_iso, None)
+    guardar_config_valor("permisos", PERMISOS)
+    return True
+
+
+def permiso_usadas(tipo_id, anio):
+    """Horas de ese tipo consumidas en el año."""
+    total = 0.0
+    for fecha, ps in PERMISOS.items():
+        try:
+            if dt.date.fromisoformat(fecha).year != anio:
+                continue
+        except ValueError:
+            continue
+        for p in ps:
+            if p.get("tipo") == tipo_id:
+                try:
+                    total += float(p.get("horas") or 0)
+                except (TypeError, ValueError):
+                    continue
+    return round(total, 2)
+
+
+def concesiones(tipo_id):
+    """Bolsas de horas concedidas de ese tipo: [{'horas': float, 'fecha_limite': str}].
+
+    Tolera el modelo antiguo de un solo 'cupo' (lo convierte en una concesion)."""
+    t = tipo_permiso(tipo_id)
+    if not t:
+        return []
+    cs = t.get("concesiones")
+    if cs is None:  # compat con configs viejas: {"cupo": 70, "fecha_limite": ...}
+        cupo = parsear_horas(t.get("cupo") or 0) or 0.0
+        if not cupo:
+            return []
+        return [{"horas": cupo, "fecha_limite": (t.get("fecha_limite") or "").strip()}]
+    out = []
+    for c in cs:
+        h = parsear_horas(c.get("horas") or 0) or 0.0
+        if h <= 0:
+            continue
+        out.append({"horas": h, "fecha_limite": (c.get("fecha_limite") or "").strip()})
+    return out
+
+
+def cupo_total(tipo_id):
+    """Horas totales concedidas de ese tipo (suma de sus concesiones)."""
+    return round(sum(c["horas"] for c in concesiones(tipo_id)), 2)
+
+
+def _limite(concesion):
+    """La fecha limite como date, o None si no tiene o no es valida."""
+    f = concesion.get("fecha_limite") or ""
+    try:
+        return dt.date.fromisoformat(f) if f else None
+    except ValueError:
+        return None
+
+
+def concesiones_caducadas(tipo_id, hoy=None):
+    """Concesiones cuya fecha limite ya paso. Solo informan: no descuentan."""
+    hoy = hoy or _hoy()
+    return [c for c in concesiones(tipo_id)
+            if (_limite(c) is not None and _limite(c) < hoy)]
+
+
+def concesiones_por_caducar(tipo_id, dias=DIAS_AVISO_CADUCIDAD, hoy=None):
+    """Concesiones que caducan dentro de 'dias' (aun vigentes)."""
+    hoy = hoy or _hoy()
+    out = []
+    for c in concesiones(tipo_id):
+        lim = _limite(c)
+        if lim is not None and hoy <= lim <= hoy + dt.timedelta(days=dias):
+            out.append(c)
+    return out
+
+
+def anadir_concesion(tipo_id, horas, fecha_limite=""):
+    """Suma una bolsa de horas concedidas (p. ej. por servicios extraordinarios)."""
+    h = parsear_horas(horas)
+    if not h or h <= 0:
+        raise ValueError("Las horas concedidas deben ser un número positivo.")
+    fecha_limite = (fecha_limite or "").strip()
+    if fecha_limite:
+        try:
+            dt.date.fromisoformat(fecha_limite)
+        except ValueError:
+            raise ValueError("La fecha límite debe ser AAAA-MM-DD.")
+    if tipo_permiso(tipo_id) is None:
+        raise ValueError("Tipo de permiso desconocido.")
+    _guardar_tipos({tipo_id: concesiones(tipo_id) +
+                    [{"horas": h, "fecha_limite": fecha_limite}]})
+    return h
+
+
+def quitar_concesion(tipo_id, indice):
+    """Quita la concesion 'indice' de ese tipo. True si quito algo."""
+    cs = concesiones(tipo_id)
+    if not 0 <= indice < len(cs):
+        return False
+    cs.pop(indice)
+    _guardar_tipos({tipo_id: cs})
+    return True
+
+
+def _guardar_tipos(cambios):
+    """Reescribe 'permisos_tipos' cambiando las concesiones de los tipos dados.
+
+    Normaliza todos los tipos al modelo de concesiones (migra el 'cupo' viejo)."""
+    nuevos = []
+    for t in permisos_tipos():
+        t = dict(t)
+        cs = cambios.get(t["id"], concesiones(t["id"]))
+        t.pop("cupo", None)          # el modelo viejo ya no manda
+        t.pop("fecha_limite", None)
+        t["concesiones"] = [dict(c) for c in cs]
+        nuevos.append(t)
+    guardar_config_valor("permisos_tipos", nuevos)
+
+
+def permiso_disponible(tipo_id, anio):
+    """Horas que te quedan de ese tipo en el año (total concedido - usadas).
+
+    Las concesiones caducadas siguen sumando: la caducidad solo avisa."""
+    if tipo_permiso(tipo_id) is None:
+        return 0.0
+    return round(cupo_total(tipo_id) - permiso_usadas(tipo_id, anio), 2)
+
+
+def resumen_permisos(anio, hoy=None):
+    """Tabla del año, como el portal:
+    [{id, nombre, cupo, usadas, disponibles, concesiones, caducadas, por_caducar}]"""
+    filas = []
+    for t in permisos_tipos():
+        tid = t["id"]
+        usadas = permiso_usadas(tid, anio)
+        cupo = cupo_total(tid)
+        filas.append({"id": tid, "nombre": t.get("nombre", tid),
+                      "cupo": cupo, "usadas": usadas,
+                      "disponibles": round(cupo - usadas, 2),
+                      "concesiones": concesiones(tid),
+                      "caducadas": concesiones_caducadas(tid, hoy),
+                      "por_caducar": concesiones_por_caducar(tid, hoy=hoy)})
+    return filas
 
 
 # ----------------------- guardias (modalidad) -----------------------

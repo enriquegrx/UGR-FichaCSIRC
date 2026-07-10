@@ -17,6 +17,16 @@
   "teletrabajo_por_semana": 1,
   "festivos_locales_extra": [],
   "dias_ugr": {},
+  "permisos": {},
+  "permisos_tipos": [
+    {"id": "asuntos_particulares", "nombre": "Asuntos particulares por horas",
+     "concesiones": [{"horas": 70, "fecha_limite": ""}]},
+    {"id": "servicios_minimos", "nombre": "Compensación por servicios mínimos",
+     "concesiones": [{"horas": 28, "fecha_limite": "2027-01-07"},
+                     {"horas": 28, "fecha_limite": "2027-04-06"}]},
+    {"id": "conciliacion", "nombre": "Conciliación vida laboral y familiar",
+     "concesiones": [{"horas": 30, "fecha_limite": ""}]}
+  ],
   "inari_activo": false,
   "inari_url": "https://inari.ugr.es/kanboard/jsonrpc.php",
   "inari_usuario": "",

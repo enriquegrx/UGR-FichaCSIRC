@@ -39,6 +39,12 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
   año, más un preset de días propios de la UGR.
 - 🛎️ Marcar guardias (con comentario "Servicio de Guardia" automático) y teletrabajo,
   con contador semanal; llevar la cuenta del cupo de vacaciones.
+- 🕐 Registrar **permisos por horas** (asuntos particulares, conciliación,
+  compensación por servicios mínimos): restan horas al objetivo de ese día. Cada
+  tipo se nutre de **concesiones** (bolsas de horas con su fecha límite, que se
+  van añadiendo, p. ej. por servicios extraordinarios); el total es su suma y las
+  usadas se calculan solas. La caducidad avisa, pero no descuenta sola. Se
+  introducen a mano: el portal de personal no las expone por API.
 - 🏡 **Solo SisGes (opcional):** fichar los días de teletrabajo en **INARI (Kanboard)**
   en vez de en ProyectosTIC, con clasificación por franja (columna, carril,
   categoría) e indicador de conexión propio en el pie.

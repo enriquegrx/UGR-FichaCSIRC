@@ -211,3 +211,33 @@ definición completa y el historial de decisiones.
   actualizado a onedir. Regla: para apps distribuidas por instalador, **preferir
   `--onedir`** (sin extracción a temporal, sin esta clase de fallos, arranque más
   rápido); onefile solo para binario portable suelto.
+- v2.7.0 (jul 2026, **sin publicar**): **permisos por horas**. El portal de
+  personal mide casi todos los permisos en HORAS (asuntos particulares 70:00,
+  compensación por servicios mínimos 56:00, conciliación 30:00), no en días; la
+  app solo sabía marcar el día entero. Ahora un permiso **resta horas al objetivo
+  del día**: `objetivo_de` = `max(0, jornada - horas_permiso(fecha))` (un día no
+  laborable sigue mandando y da 0). Motor: `PERMISOS` (config `permisos`:
+  fecha → `[{tipo, horas}]`), `PERMISOS_TIPOS_DEFECTO` sobrescribible por config
+  `permisos_tipos`, `parsear_horas` (admite `3:30`,
+  `3,5` y totales > 24 h como `70:00`), `fmt_horas_hhmm`, `anadir_permiso` (valida
+  que el total del día no pase de la jornada), `quitar_permiso`, `permiso_usadas`,
+  `permiso_disponible`, `resumen_permisos`.
+  **Las horas de un tipo NO son un cupo fijo**: se conceden en bolsas
+  (`concesiones`: `[{horas, fecha_limite}]`), porque los servicios extraordinarios
+  van sumando horas y cada bolsa caduca por su cuenta (el portal las muestra como
+  subfilas). `cupo_total` = suma de concesiones; `anadir_concesion` /
+  `quitar_concesion` / `_guardar_tipos` (migra el modelo viejo de `cupo` único, que
+  `concesiones()` sigue leyendo). `concesiones_caducadas` y
+  `concesiones_por_caducar` (`DIAS_AVISO_CADUCIDAD`) **solo avisan: la caducidad
+  nunca descuenta horas sola** (decisión de producto). UI: menú contextual del día
+  «Añadir permiso por horas…» / «Quitar permiso», chip ámbar `🕐 Permiso H:MM` en
+  la tarjeta (con tooltip por tipo) y en la leyenda, y diálogo
+  `dialogos.abrir_permisos` (Herramientas > Permisos): una caja por tipo con sus
+  concesiones, «＋ Añadir concesión» (`_pedir_concesion`) y «Quitar»; guardan al
+  momento. No hay API que exponga estos saldos: se teclean.
+  **Cambio de comportamiento**: «asuntos propios» desaparece del submenú de días
+  no laborables (ahora es un permiso por horas, para que descuente del cupo de
+  70:00); en su lugar el submenú ofrece «apertura de curso». Los días ya marcados
+  como «asuntos propios» en `no_laborables` siguen funcionando. Las **vacaciones
+  siguen en días** (`cupo_vacaciones`). Tests: `TestPermisos` (12) + test del
+  diálogo (118 en total).

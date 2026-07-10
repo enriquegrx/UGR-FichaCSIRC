@@ -47,7 +47,7 @@ from fichaui import (
     COLOR_APP_BG, COLOR_BORDER, COLOR_DANGER, COLOR_MUTED, COLOR_PANEL,
     COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING,
     COLOR_VACACIONES, COLOR_GUARDIA_BG, COLOR_GUARDIA_FG, COLOR_TELE_BG,
-    COLOR_TELE_FG, Tooltip,
+    COLOR_TELE_FG, COLOR_PERMISO_BG, COLOR_PERMISO_FG, Tooltip,
     TooltipFilas, aplicar_estilo, boton_peligro, boton_primario, chip_modalidad,
     en_hilo, recurso, carpeta_app,
 )
@@ -451,6 +451,8 @@ class App:
                            command=lambda: dialogos.abrir_importar_festivos(self))
         m_herr.add_command(label="Vacaciones y teletrabajo...",
                            command=lambda: dialogos.abrir_ajustes_dias(self))
+        m_herr.add_command(label="Permisos (horas)...",
+                           command=lambda: dialogos.abrir_permisos(self))
         m_herr.add_command(label="Integraciones (INARI)...",
                            command=lambda: dialogos.abrir_integraciones(self))
         if recordatorio.recordatorios_soportados():
@@ -493,6 +495,7 @@ class App:
         swatch(COLOR_VACACIONES, "Vacaciones")
         chip(COLOR_GUARDIA_BG, COLOR_GUARDIA_FG, "⚙ Guardia")
         chip(COLOR_TELE_BG, COLOR_TELE_FG, "⌂ Teletrabajo")
+        chip(COLOR_PERMISO_BG, COLOR_PERMISO_FG, "🕐 Permiso")
 
     def _acerca_de(self):
         messagebox.showinfo(
@@ -718,6 +721,8 @@ class App:
             reg = sum(a["horas"] for a in apuntes) if apuntes else 0
             obj = core.objetivo_de(d)
             nolab = core.es_no_laborable(iso)
+            # Horas de permiso del dia (ya descontadas en `obj` por objetivo_de).
+            h_permiso = 0 if nolab else core.horas_permiso(iso)
             hay_guardia = core.es_guardia(iso)
             hay_tt = core.es_teletrabajo(iso)
             es_hoy = (d == hoy)
@@ -750,6 +755,12 @@ class App:
                     texto2 = f"{core._fmt(reg)} · {texto2}"
             elif apuntes is None:
                 frac, color, texto2 = 0.0, COLOR_DANGER, "sin conexión"
+            elif h_permiso and obj == 0:
+                # El permiso cubre la jornada entera: no hay nada que fichar.
+                frac, color = 1.0, COLOR_MUTED
+                texto2 = "Permiso (día completo)"
+                if reg:
+                    texto2 = f"{core._fmt(reg)} · {texto2}"
             elif reg > obj + 0.001:
                 frac, color = 1.0, COLOR_DANGER
                 texto2 = f"{core._fmt(reg)} / {obj}h  (te pasas)"
@@ -764,7 +775,8 @@ class App:
                 texto2 = f"0h / {obj}h"
             lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 12, "bold"),
                             fg=color, bg=COLOR_PANEL, anchor="w")
-            lbl2.pack(fill="x", padx=12, pady=(7, 6 if (hay_guardia or hay_tt) else 10))
+            lbl2.pack(fill="x", padx=12,
+                      pady=(7, 6 if (hay_guardia or hay_tt or h_permiso) else 10))
             clicables += [lbl1, cv, lbl2]
 
             # Chips de modalidad (guardia / teletrabajo): mismo helper que la
@@ -778,6 +790,16 @@ class App:
                 chip = chip_modalidad(card, "⌂ Teletrabajo",
                                       COLOR_TELE_BG, COLOR_TELE_FG)
                 chip.pack(anchor="w", padx=12, pady=(0, 6))
+                clicables.append(chip)
+            if h_permiso:
+                # Explica por que el objetivo del dia es menor de lo normal.
+                chip = chip_modalidad(card, f"🕐 Permiso {core.fmt_horas_hhmm(h_permiso)}",
+                                      COLOR_PERMISO_BG, COLOR_PERMISO_FG)
+                chip.pack(anchor="w", padx=12, pady=(0, 6))
+                Tooltip(chip, "\n".join(
+                    f"{(core.tipo_permiso(p.get('tipo')) or {}).get('nombre', p.get('tipo'))}:"
+                    f" {core.fmt_horas_hhmm(p.get('horas') or 0)}"
+                    for p in core.permisos_dia(iso)))
                 clicables.append(chip)
 
             def dibujar(_e=None, cv=cv, frac=frac, color=color):
@@ -984,12 +1006,27 @@ class App:
         else:
             sub = tk.Menu(menu, tearoff=0)
             for motivo in ("festivo", core.MOTIVO_VACACIONES,
-                           "asuntos propios", "baja"):
+                           "apertura de curso", "baja"):
                 sub.add_command(
                     label=motivo.capitalize(),
                     command=lambda m=motivo: (core.marcar_no_laborable(fecha, m),
                                               self.repintar_local()))
             menu.add_cascade(label="Marcar como no laborable", menu=sub)
+            # --- Permisos por horas (solo tienen sentido en un dia laborable) ---
+            menu.add_command(
+                label="Añadir permiso por horas...",
+                command=lambda: dialogos.abrir_permiso_dia(self, d))
+            ps = core.permisos_dia(fecha)
+            if ps:
+                sub_p = tk.Menu(menu, tearoff=0)
+                for i, p in enumerate(ps):
+                    t = core.tipo_permiso(p.get("tipo"))
+                    nombre = t["nombre"] if t else p.get("tipo", "?")
+                    sub_p.add_command(
+                        label=f"{nombre} ({core.fmt_horas_hhmm(p.get('horas') or 0)})",
+                        command=lambda i=i: (core.quitar_permiso(fecha, i),
+                                             self.repintar_local()))
+                menu.add_cascade(label="Quitar permiso", menu=sub_p)
         menu.add_separator()
         # --- Modalidad de trabajo (se trabaja igual) ---
         if core.es_guardia(fecha):

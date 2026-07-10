@@ -1108,3 +1108,234 @@ def abrir_slot_inari(app, dia):
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
 
     cargar_tablero()
+
+
+# ----------------------- permisos por horas -----------------------
+
+def abrir_permiso_dia(app, dia):
+    """Añade un permiso por horas a 'dia' (date). Resta esas horas al objetivo."""
+    fecha = dia.isoformat()
+    tipos = core.permisos_tipos()
+    if not tipos:
+        messagebox.showinfo("Permisos",
+                            "No hay tipos de permiso configurados.\n"
+                            "Revisa Herramientas > Permisos (horas).")
+        return
+    anio = dia.year
+    jornada = core.jornada_de(dia)
+    ya = core.horas_permiso(fecha)
+    libre = round(jornada - ya, 2)
+    if libre <= 0:
+        messagebox.showinfo(
+            "Permisos",
+            f"Ese día ya tiene {core.fmt_horas_hhmm(ya)} de permiso,\n"
+            f"que cubren toda la jornada ({core.fmt_horas_hhmm(jornada)}).")
+        return
+
+    top = tk.Toplevel(app.root)
+    top.title("Añadir permiso por horas")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+    frm.columnconfigure(1, weight=1)
+
+    ttk.Label(frm, text=f"{core.DIAS_ES[dia.weekday()]} {dia.strftime('%d/%m/%Y')}",
+              font=("TkDefaultFont", 10, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+
+    ttk.Label(frm, text="Tipo:").grid(row=1, column=0, sticky="w", pady=3)
+    cbo = ttk.Combobox(frm, state="readonly", width=38,
+                       values=[t.get("nombre", t["id"]) for t in tipos])
+    cbo.current(0)
+    cbo.grid(row=1, column=1, sticky="we", padx=6)
+
+    ttk.Label(frm, text="Horas (H:MM):").grid(row=2, column=0, sticky="w", pady=3)
+    e_horas = ttk.Entry(frm, width=10)
+    e_horas.grid(row=2, column=1, sticky="w", padx=6)
+
+    lbl_info = ttk.Label(frm, text="", foreground=COLOR_MUTED,
+                         wraplength=360, justify="left")
+    lbl_info.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+    def _refrescar_info(_e=None):
+        t = tipos[cbo.current()] if 0 <= cbo.current() < len(tipos) else None
+        if not t:
+            return
+        disp = core.permiso_disponible(t["id"], anio)
+        txt = (f"Disponible en {anio}: {core.fmt_horas_hhmm(disp)}   ·   "
+               f"Máximo hoy: {core.fmt_horas_hhmm(libre)} "
+               f"(jornada {core.fmt_horas_hhmm(jornada)})")
+        color = COLOR_MUTED
+        caducadas = core.concesiones_caducadas(t["id"])
+        proximas = core.concesiones_por_caducar(t["id"])
+        if caducadas:
+            txt += (f"\n⚠ Tienes {len(caducadas)} concesión(es) caducada(s) de este "
+                    f"permiso (siguen sumando; revísalas en Herramientas > Permisos).")
+            color = COLOR_WARNING
+        elif proximas:
+            pronto = min(c["fecha_limite"] for c in proximas)
+            txt += f"\n⏳ Una concesión de este permiso caduca el {pronto}."
+            color = COLOR_WARNING
+        lbl_info.config(text=txt, foreground=color)
+    cbo.bind("<<ComboboxSelected>>", _refrescar_info)
+    _refrescar_info()
+
+    def guardar():
+        i = cbo.current()
+        if not 0 <= i < len(tipos):
+            return
+        t = tipos[i]
+        h = core.parsear_horas(e_horas.get())
+        if not h or h <= 0:
+            messagebox.showwarning("Horas no válidas",
+                                   "Escribe las horas como 3:00 o 3,5.", parent=top)
+            return
+        disp = core.permiso_disponible(t["id"], anio)
+        if h > disp and not messagebox.askyesno(
+                "Sin cupo suficiente",
+                f"Te quedan {core.fmt_horas_hhmm(disp)} de «{t.get('nombre')}» "
+                f"en {anio} y vas a usar {core.fmt_horas_hhmm(h)}.\n\n¿Continuar?",
+                parent=top):
+            return
+        try:
+            core.anadir_permiso(fecha, t["id"], h)
+        except ValueError as e:
+            messagebox.showwarning("No se pudo añadir", str(e), parent=top)
+            return
+        top.destroy()
+        app.status.config(text=f"Permiso añadido: {core.fmt_horas_hhmm(h)}.")
+        app.repintar_local()
+
+    e_horas.bind("<Return>", lambda _e: guardar())
+    btns = ttk.Frame(frm)
+    btns.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
+    ttk.Button(btns, text="Añadir", command=guardar).pack(side="right", padx=4)
+    ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+    e_horas.focus_set()
+    return top
+
+
+def _pedir_concesion(padre, nombre_tipo):
+    """Mini-dialogo modal: horas + fecha limite. Devuelve (horas, fecha) o None."""
+    dlg = tk.Toplevel(padre)
+    dlg.title("Añadir concesión")
+    dlg.transient(padre)
+    dlg.grab_set()
+    frm = ttk.Frame(dlg, padding=14)
+    frm.pack(fill="both", expand=True)
+    ttk.Label(frm, text=nombre_tipo, font=("TkDefaultFont", 10, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+    ttk.Label(frm, text="Horas concedidas (H:MM):").grid(row=1, column=0, sticky="w", pady=3)
+    e_h = ttk.Entry(frm, width=10)
+    e_h.grid(row=1, column=1, sticky="w", padx=6)
+    ttk.Label(frm, text="Fecha límite (AAAA-MM-DD):").grid(row=2, column=0, sticky="w", pady=3)
+    e_f = ttk.Entry(frm, width=14)
+    e_f.grid(row=2, column=1, sticky="w", padx=6)
+    ttk.Label(frm, text="Déjala vacía si no caduca.", foreground=COLOR_MUTED).grid(
+        row=3, column=1, sticky="w")
+    res = {}
+
+    def aceptar():
+        res["horas"], res["fecha"] = e_h.get().strip(), e_f.get().strip()
+        dlg.destroy()
+
+    e_h.bind("<Return>", lambda _e: aceptar())
+    e_f.bind("<Return>", lambda _e: aceptar())
+    btns = ttk.Frame(frm)
+    btns.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
+    ttk.Button(btns, text="Añadir", command=aceptar).pack(side="right", padx=4)
+    ttk.Button(btns, text="Cancelar", command=dlg.destroy).pack(side="right")
+    e_h.focus_set()
+    padre.wait_window(dlg)
+    return (res.get("horas"), res.get("fecha")) if res else None
+
+
+def abrir_permisos(app):
+    """Permisos del año, como el portal: cada tipo con sus CONCESIONES.
+
+    Las horas no son un cupo fijo: se van concediendo en bolsas (p. ej. por
+    servicios extraordinarios), cada una con su fecha límite. Se teclean a mano:
+    el portal de personal no las expone por API. Añadir/quitar guarda al momento.
+    La caducidad solo avisa; nunca descuenta horas sola."""
+    top = tk.Toplevel(app.root)
+    top.title("Permisos (horas)")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+
+    anio = dt.date.today().year
+    ttk.Label(frm, text=f"Permisos por horas · {anio}",
+              font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(0, 2))
+    ttk.Label(frm, text="Cada tipo suma las horas de sus concesiones. Las usadas se "
+                        "calculan solas con los permisos que marcas en los días.",
+              foreground=COLOR_MUTED, wraplength=560, justify="left").pack(
+        anchor="w", pady=(0, 10))
+
+    cuerpo = ttk.Frame(frm)
+    cuerpo.pack(fill="both", expand=True)
+
+    def _pintar():
+        for w in cuerpo.winfo_children():
+            w.destroy()
+        top._filas = core.resumen_permisos(anio)
+        for f in top._filas:
+            caja = ttk.LabelFrame(cuerpo, text=f["nombre"], padding=8)
+            caja.pack(fill="x", pady=(0, 8))
+            disp_col = COLOR_DANGER if f["disponibles"] < 0 else COLOR_SUCCESS
+            cab = ttk.Frame(caja)
+            cab.pack(fill="x")
+            ttk.Label(cab, text=f"Total {core.fmt_horas_hhmm(f['cupo'])}").pack(side="left")
+            ttk.Label(cab, text=f"   ·   Usadas {core.fmt_horas_hhmm(f['usadas'])}",
+                      foreground=COLOR_MUTED).pack(side="left")
+            ttk.Label(cab, text=f"   ·   Disponibles {core.fmt_horas_hhmm(f['disponibles'])}",
+                      foreground=disp_col).pack(side="left")
+
+            for i, c in enumerate(f["concesiones"]):
+                fila = ttk.Frame(caja)
+                fila.pack(fill="x", pady=1)
+                ttk.Label(fila, text=core.fmt_horas_hhmm(c["horas"]), width=8,
+                          anchor="e").pack(side="left")
+                lim = c["fecha_limite"]
+                txt = f"caduca {lim}" if lim else "sin caducidad"
+                col = COLOR_MUTED
+                if c in f["caducadas"]:
+                    txt, col = f"⚠ caducada el {lim}", COLOR_DANGER
+                elif c in f["por_caducar"]:
+                    txt, col = f"⏳ caduca pronto ({lim})", COLOR_WARNING
+                ttk.Label(fila, text="  " + txt, foreground=col).pack(side="left")
+                ttk.Button(fila, text="Quitar", width=7,
+                           command=lambda t=f["id"], i=i: _quitar(t, i)).pack(side="right")
+
+            ttk.Button(caja, text="＋ Añadir concesión",
+                       command=lambda t=f["id"], n=f["nombre"]: _anadir(t, n)).pack(
+                anchor="w", pady=(6, 0))
+
+    def _anadir(tipo_id, nombre):
+        pedido = _pedir_concesion(top, nombre)
+        if not pedido:
+            return
+        horas, fecha = pedido
+        try:
+            core.anadir_concesion(tipo_id, horas, fecha)
+        except ValueError as e:
+            messagebox.showwarning("No se pudo añadir", str(e), parent=top)
+            return
+        _pintar()
+        app.repintar_local()
+
+    def _quitar(tipo_id, indice):
+        if not messagebox.askyesno("Quitar concesión",
+                                   "¿Seguro que quieres quitar esta concesión?",
+                                   parent=top):
+            return
+        core.quitar_concesion(tipo_id, indice)
+        _pintar()
+        app.repintar_local()
+
+    _pintar()
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", pady=(12, 0))
+    ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
+    return top

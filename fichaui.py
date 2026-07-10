@@ -34,6 +34,8 @@ COLOR_GUARDIA_BG = "#e6f1fb"       # chip guardia (fondo azul claro)
 COLOR_GUARDIA_FG = "#0c447c"       # chip guardia (texto azul oscuro)
 COLOR_TELE_BG = "#eceff3"          # chip teletrabajo (fondo gris)
 COLOR_TELE_FG = "#44484f"          # chip teletrabajo (texto gris)
+COLOR_PERMISO_BG = "#fdf3e3"       # chip permiso por horas (fondo ambar suave)
+COLOR_PERMISO_FG = "#8a5a12"       # chip permiso por horas (texto ambar oscuro)
 
 
 def recurso(carpeta, nombre):

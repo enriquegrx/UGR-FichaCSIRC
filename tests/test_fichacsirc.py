@@ -355,6 +355,179 @@ class TestNoLaborables(unittest.TestCase):
         self.assertEqual(core.objetivo_de(dt.date(2026, 7, 6)), 5)  # verano
 
 
+class TestPermisos(unittest.TestCase):
+    """Permisos por horas: restan horas al objetivo del dia y consumen cupo."""
+
+    # 2026-07-06 es lunes de verano -> jornada 5h en la config de test.
+    LUNES = "2026-07-06"
+    D_LUNES = dt.date(2026, 7, 6)
+
+    def test_parsear_horas(self):
+        self.assertEqual(core.parsear_horas("3:30"), 3.5)
+        self.assertEqual(core.parsear_horas("70:00"), 70.0)  # cupos pasan de 24h
+        self.assertEqual(core.parsear_horas("3,5"), 3.5)
+        self.assertEqual(core.parsear_horas("3.5"), 3.5)
+        for malo in ("", "abc", "3:99", None, "-1", "-1:30", "nan", "inf"):
+            self.assertIsNone(core.parsear_horas(malo), f"deberia ser None: {malo!r}")
+
+    def test_fmt_horas_hhmm(self):
+        self.assertEqual(core.fmt_horas_hhmm(3.5), "3:30")
+        self.assertEqual(core.fmt_horas_hhmm(70), "70:00")
+        self.assertEqual(core.fmt_horas_hhmm(0), "0:00")
+
+    def test_objetivo_resta_las_horas_de_permiso(self):
+        with mock.patch.object(core, "NO_LABORABLES", {}), \
+             mock.patch.object(core, "PERMISOS",
+                               {self.LUNES: [{"tipo": "conciliacion", "horas": 2.0}]}):
+            self.assertEqual(core.horas_permiso(self.LUNES), 2.0)
+            self.assertEqual(core.objetivo_de(self.D_LUNES), 3.0)  # 5h - 2h
+
+    def test_dia_no_laborable_manda_sobre_el_permiso(self):
+        with mock.patch.object(core, "NO_LABORABLES", {self.LUNES: "festivo"}), \
+             mock.patch.object(core, "PERMISOS",
+                               {self.LUNES: [{"tipo": "conciliacion", "horas": 2.0}]}):
+            self.assertEqual(core.objetivo_de(self.D_LUNES), 0)
+
+    def test_objetivo_nunca_negativo(self):
+        with mock.patch.object(core, "NO_LABORABLES", {}), \
+             mock.patch.object(core, "PERMISOS",
+                               {self.LUNES: [{"tipo": "conciliacion", "horas": 99.0}]}):
+            self.assertEqual(core.objetivo_de(self.D_LUNES), 0)
+
+    def test_horas_permiso_ignora_basura(self):
+        with mock.patch.object(core, "PERMISOS",
+                               {self.LUNES: [{"tipo": "x", "horas": "malo"},
+                                             {"tipo": "y", "horas": 1.5}]}):
+            self.assertEqual(core.horas_permiso(self.LUNES), 1.5)
+
+    def test_anadir_permiso_valida(self):
+        with mock.patch.object(core, "PERMISOS", {}), \
+             mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            core.anadir_permiso(self.LUNES, "conciliacion", "2:00")
+            self.assertEqual(core.horas_permiso(self.LUNES), 2.0)
+            # el total del dia no puede pasar de la jornada (5h): 2h + 4h = 6h
+            with self.assertRaises(ValueError):
+                core.anadir_permiso(self.LUNES, "conciliacion", "4:00")
+            with self.assertRaises(ValueError):  # tipo inexistente
+                core.anadir_permiso(self.LUNES, "no_existe", "1:00")
+            with self.assertRaises(ValueError):  # horas no positivas
+                core.anadir_permiso(self.LUNES, "conciliacion", "0")
+            with self.assertRaises(ValueError):  # fecha invalida
+                core.anadir_permiso("no-es-fecha", "conciliacion", "1:00")
+
+    def test_anadir_permiso_dia_entero_deja_objetivo_a_cero(self):
+        with mock.patch.object(core, "NO_LABORABLES", {}), \
+             mock.patch.object(core, "PERMISOS", {}), \
+             mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            core.anadir_permiso(self.LUNES, "asuntos_particulares", "5:00")
+            self.assertEqual(core.objetivo_de(self.D_LUNES), 0)
+
+    def test_quitar_permiso(self):
+        with mock.patch.object(core, "PERMISOS",
+                               {self.LUNES: [{"tipo": "conciliacion", "horas": 2.0}]}), \
+             mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            self.assertTrue(core.quitar_permiso(self.LUNES, 0))
+            self.assertEqual(core.permisos_dia(self.LUNES), [])
+            self.assertFalse(core.quitar_permiso(self.LUNES, 0))  # ya no hay
+
+    def test_usadas_y_disponibles_por_anio(self):
+        permisos = {
+            "2026-03-02": [{"tipo": "asuntos_particulares", "horas": 3.0}],
+            "2026-04-01": [{"tipo": "asuntos_particulares", "horas": 2.0},
+                           {"tipo": "conciliacion", "horas": 1.0}],
+            "2025-05-05": [{"tipo": "asuntos_particulares", "horas": 10.0}],  # otro año
+        }
+        with mock.patch.object(core, "PERMISOS", permisos):
+            self.assertEqual(core.permiso_usadas("asuntos_particulares", 2026), 5.0)
+            self.assertEqual(core.permiso_usadas("conciliacion", 2026), 1.0)
+            self.assertEqual(core.permiso_disponible("asuntos_particulares", 2026), 65.0)
+            self.assertEqual(core.permiso_disponible("no_existe", 2026), 0.0)
+
+    def test_resumen_permisos(self):
+        with mock.patch.object(core, "PERMISOS",
+                               {"2026-01-05": [{"tipo": "conciliacion", "horas": 4.0}]}):
+            filas = {f["id"]: f for f in core.resumen_permisos(2026)}
+        self.assertEqual(filas["conciliacion"]["usadas"], 4.0)
+        self.assertEqual(filas["conciliacion"]["disponibles"], 26.0)   # 30 - 4
+        self.assertEqual(filas["asuntos_particulares"]["disponibles"], 70.0)
+        self.assertEqual(filas["asuntos_particulares"]["usadas"], 0.0)
+
+    def _con(self, tipos):
+        """Parchea el catalogo de tipos de permiso."""
+        return mock.patch.object(
+            core, "config_valor",
+            lambda c, d=None: tipos if c == "permisos_tipos" else d)
+
+    def test_compat_modelo_viejo_de_cupo_unico(self):
+        """Una config antigua con 'cupo' se lee como una unica concesion."""
+        viejo = [{"id": "mio", "nombre": "El mío", "cupo": "10:30",
+                  "fecha_limite": "2027-01-07"}]
+        with self._con(viejo), mock.patch.object(core, "PERMISOS", {}):
+            self.assertEqual(core.cupo_total("mio"), 10.5)     # "10:30" -> 10.5
+            cs = core.concesiones("mio")
+            self.assertEqual(cs, [{"horas": 10.5, "fecha_limite": "2027-01-07"}])
+            self.assertEqual(core.resumen_permisos(2026)[0]["cupo"], 10.5)
+
+    def test_cupo_total_suma_las_concesiones(self):
+        tipos = [{"id": "sm", "nombre": "Servicios mínimos", "concesiones": [
+            {"horas": 28, "fecha_limite": "2027-01-07"},
+            {"horas": 28, "fecha_limite": "2027-04-06"}]}]
+        with self._con(tipos), mock.patch.object(
+                core, "PERMISOS", {"2026-02-02": [{"tipo": "sm", "horas": 38.0}]}):
+            self.assertEqual(core.cupo_total("sm"), 56.0)
+            self.assertEqual(core.permiso_usadas("sm", 2026), 38.0)
+            self.assertEqual(core.permiso_disponible("sm", 2026), 18.0)  # como el portal
+
+    def test_anadir_concesion_suma_horas(self):
+        tipos = [{"id": "sm", "nombre": "SM", "concesiones": [{"horas": 28}]}]
+        guardado = {}
+        with self._con(tipos), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})):
+            core.anadir_concesion("sm", "28:00", "2027-04-06")
+        cs = guardado["permisos_tipos"][0]["concesiones"]
+        self.assertEqual([c["horas"] for c in cs], [28.0, 28.0])
+        self.assertEqual(cs[1]["fecha_limite"], "2027-04-06")
+        self.assertNotIn("cupo", guardado["permisos_tipos"][0])  # migrado
+
+    def test_anadir_concesion_valida(self):
+        with mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            with self.assertRaises(ValueError):   # horas no positivas
+                core.anadir_concesion("conciliacion", "0")
+            with self.assertRaises(ValueError):   # fecha mal formada
+                core.anadir_concesion("conciliacion", "5:00", "07/01/2027")
+            with self.assertRaises(ValueError):   # tipo inexistente
+                core.anadir_concesion("no_existe", "5:00")
+
+    def test_quitar_concesion(self):
+        tipos = [{"id": "sm", "nombre": "SM",
+                  "concesiones": [{"horas": 28}, {"horas": 10}]}]
+        guardado = {}
+        with self._con(tipos), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})):
+            self.assertTrue(core.quitar_concesion("sm", 0))
+            self.assertFalse(core.quitar_concesion("sm", 9))  # fuera de rango
+        self.assertEqual([c["horas"] for c in guardado["permisos_tipos"][0]["concesiones"]],
+                         [10.0])
+
+    def test_caducidad_avisa_pero_no_descuenta(self):
+        hoy = dt.date(2026, 7, 10)
+        tipos = [{"id": "sm", "nombre": "SM", "concesiones": [
+            {"horas": 10, "fecha_limite": "2026-01-01"},   # ya caducada
+            {"horas": 20, "fecha_limite": "2026-07-20"},   # caduca en 10 dias
+            {"horas": 30, "fecha_limite": "2027-12-31"},   # lejana
+            {"horas": 5,  "fecha_limite": ""}]}]           # sin caducidad
+        with self._con(tipos), mock.patch.object(core, "PERMISOS", {}):
+            self.assertEqual([c["horas"] for c in core.concesiones_caducadas("sm", hoy)],
+                             [10.0])
+            self.assertEqual([c["horas"] for c in
+                              core.concesiones_por_caducar("sm", hoy=hoy)], [20.0])
+            # la caducada SIGUE sumando: solo avisamos
+            self.assertEqual(core.cupo_total("sm"), 65.0)
+            self.assertEqual(core.permiso_disponible("sm", 2026), 65.0)
+
+
 class TestPendientes(unittest.TestCase):
     def test_dias_pendientes_semana(self):
         # miercoles 8/07/2026: lun 6 completo, mar 7 a medias, mie 8 vacio
