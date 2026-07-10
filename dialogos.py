@@ -1142,7 +1142,7 @@ def abrir_permiso_dia(app, dia):
 
     ttk.Label(frm, text=f"{core.DIAS_ES[dia.weekday()]} {dia.strftime('%d/%m/%Y')}",
               font=("TkDefaultFont", 10, "bold")).grid(
-        row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
+        row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
 
     ttk.Label(frm, text="Tipo:").grid(row=1, column=0, sticky="w", pady=3)
     cbo = ttk.Combobox(frm, state="readonly", width=38,
@@ -1154,9 +1154,16 @@ def abrir_permiso_dia(app, dia):
     e_horas = ttk.Entry(frm, width=10)
     e_horas.grid(row=2, column=1, sticky="w", padx=6)
 
+    def _dia_completo():
+        """Atajo: un dia entero de permiso son las horas que quedan de jornada."""
+        e_horas.delete(0, "end")
+        e_horas.insert(0, core.fmt_horas_hhmm(libre))
+    ttk.Button(frm, text=f"Día completo ({core.fmt_horas_hhmm(libre)})",
+               command=_dia_completo).grid(row=2, column=2, sticky="w", padx=(0, 2))
+
     lbl_info = ttk.Label(frm, text="", foreground=COLOR_MUTED,
-                         wraplength=360, justify="left")
-    lbl_info.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+                         wraplength=420, justify="left")
+    lbl_info.grid(row=3, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
     def _refrescar_info(_e=None):
         t = tipos[cbo.current()] if 0 <= cbo.current() < len(tipos) else None
@@ -1209,7 +1216,7 @@ def abrir_permiso_dia(app, dia):
 
     e_horas.bind("<Return>", lambda _e: guardar())
     btns = ttk.Frame(frm)
-    btns.grid(row=4, column=0, columnspan=2, sticky="e", pady=(12, 0))
+    btns.grid(row=4, column=0, columnspan=3, sticky="e", pady=(12, 0))
     ttk.Button(btns, text="Añadir", command=guardar).pack(side="right", padx=4)
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
     e_horas.focus_set()

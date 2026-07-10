@@ -138,8 +138,12 @@ compensación por servicios mínimos. FichaCSIRC lo tiene en cuenta.
 
 **Cómo se usa:** botón derecho sobre el día → **Añadir permiso por horas…**,
 eliges el tipo y las horas (por ejemplo `3:00`). Ese día el objetivo baja solo:
-si tu jornada es de 7 h y coges 3 h de permiso, la app solo te pedirá **4 h**. Si
-metes la jornada entera, el día queda a 0 y no te reclama nada. 👌
+si tu jornada es de 7 h y coges 3 h de permiso, la app solo te pedirá **4 h**. 👌
+
+¿Te coges el **día entero**? Pulsa el botón **«Día completo»** y te rellena tu
+jornada de ese día: el objetivo queda a 0 y se te descuentan esas horas del cupo
+(los asuntos particulares son «días fraccionables», así que un día entero son
+simplemente las horas de tu jornada).
 
 **Las horas las pones tú**, copiándolas de tu portal de personal (no hay forma de
 leerlas automáticamente). Ve a **Herramientas → Permisos (horas)**.
