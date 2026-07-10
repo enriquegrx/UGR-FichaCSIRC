@@ -211,7 +211,7 @@ definición completa y el historial de decisiones.
   actualizado a onedir. Regla: para apps distribuidas por instalador, **preferir
   `--onedir`** (sin extracción a temporal, sin esta clase de fallos, arranque más
   rápido); onefile solo para binario portable suelto.
-- v2.7.0 (jul 2026, **sin publicar**): **permisos por horas**. El portal de
+- v2.7.0 (jul 2026): **permisos por horas**. El portal de
   personal mide casi todos los permisos en HORAS (asuntos particulares 70:00,
   compensación por servicios mínimos 56:00, conciliación 30:00), no en días; la
   app solo sabía marcar el día entero. Ahora un permiso **resta horas al objetivo
