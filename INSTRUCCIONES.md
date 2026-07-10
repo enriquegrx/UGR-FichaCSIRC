@@ -30,7 +30,7 @@ Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INAR
    - Deja marcada **«Crear un acceso directo en el escritorio»** si quieres el
      icono a mano (viene marcada).
    - Al terminar, si es tu **primera instalación**, puedes dejar marcada
-     **«Configurar FichaCSIRC ahora»** para abrir el asistente de configuración
+     **«Configurar FichaCSIRC ahora (necesario la primera vez)»** para abrir el asistente
      (necesitarás tu **API key**: tenla a mano, sección 2). Si es una
      **actualización**, verás **«Abrir FichaCSIRC al terminar»** y la app se
      reabrirá sola. 🔁
@@ -125,8 +125,9 @@ Abre **FichaCSIRC (Registrar horas)**:
   (nacionales, de Andalucía y de Granada), calculados solos, para que no te los pida.
 - 📊 **Resumen del mes**: cuántas horas llevas, tu objetivo y qué días te faltan.
 - 📤 **Exportar CSV**: tus horas en un archivo que abre Excel.
-- ⏰ **Aviso de fichaje** (*Herramientas*): si sueles olvidarte, actívalo y el
-  sistema te avisará cada tarde solo si te faltan horas (Windows y macOS).
+- ⏰ **Aviso diario de fichaje** (*Herramientas*): si sueles olvidarte, actívalo y
+  el sistema te avisará a la hora que elijas (por defecto las **16:00**), solo si
+  te faltan horas (Windows y macOS).
 
 ---
 
@@ -186,7 +187,7 @@ para que no tengas que saltar de una herramienta a otra.
 
 1. Consigue tu **token personal de INARI** desde tu perfil de usuario en INARI
    (es tu clave de API, igual de personal que la de OpenProject 🔒).
-2. En FichaCSIRC, ve a **Herramientas → Integraciones**.
+2. En FichaCSIRC, ve a **Herramientas → Integraciones (INARI)…**.
 3. Marca **«Activar la integración con INARI»** y rellena:
    - **URL**: ya viene puesta.
    - **Usuario** y **Token**. Truco 💡: puedes pegar `usuario:token` de una vez en
@@ -224,7 +225,7 @@ para que no tengas que saltar de una herramienta a otra.
 | «Sin conexión con ProyectosTic» | Comprueba que tienes red de la UGR (o la VPN encendida 🌐). |
 | «Acceso denegado (401)» | Tu API key ya no vale: genera otra (sección 2) y vuelve a pasar el configurador. |
 | «No tienes permiso para ver las tareas de este proyecto» (403) | Es normal: solo ves los proyectos en los que participas. Elige otro. |
-| El indicador **● INARI** está en rojo | Revisa tu token en *Herramientas → Integraciones* y prueba la conexión (solo aplica a SisGes). |
+| El indicador **● INARI** está en rojo | Revisa tu token en *Herramientas → Integraciones (INARI)…* y prueba la conexión (solo aplica a SisGes). |
 | Cualquier otra cosa rara 🐛 | Junto a tu configuración (`%APPDATA%\FichaCSIRC` en Windows, `~/Library/Application Support/FichaCSIRC` en macOS) hay un archivo `fichacsirc.log`: adjúntalo al pedir ayuda. |
 
 ---

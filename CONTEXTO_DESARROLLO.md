@@ -8,9 +8,13 @@ definición completa y el historial de decisiones.
 - `rellenar_horas.py` — motor (API + lógica) y app de consola.
 - `configurar.py` — utilidades de API compartidas + configurador de consola.
 - `registrar_gui.py` — ventana principal de registro (importa `rellenar_horas`).
-- `dialogos.py` — ventanas secundarias (buscar, exportar, editar, resumen, plantillas);
-  cada función recibe la `App` y opera sobre ella.
+- `dialogos.py` — ventanas secundarias (buscar, exportar, editar, resumen, plantillas,
+  permisos, integraciones); cada función recibe la `App` y opera sobre ella.
 - `fichaui.py` — utilidades de UI sin lógica de negocio (`Tooltip`, `en_hilo`, recursos).
+- `inari.py` — cliente JSON-RPC puro de INARI (Kanboard): credenciales por argumento,
+  no importa el resto de la app; slots (tarea por franja) y descubrimiento del tablero.
+- `destinos.py` — puente config-aware entre ProyectosTIC (OpenProject) e INARI; lo usan
+  la ventana, el resumen del mes y el aviso de fichaje.
 - `recordatorio.py` — aviso de fichaje: comprobación suelta + alta/baja de la tarea
   programada de Windows (`schtasks`). La app lo lanza con `--recordatorio`.
 - `configurar_gui.py` — asistente gráfico (wizard); importa `configurar`.
@@ -18,8 +22,10 @@ definición completa y el historial de decisiones.
 - `build_exe.bat` — empaqueta Windows con PyInstaller (`--onedir --noupx`, modo
   carpeta: el `.exe` + su `_internal`); CI en `.github/workflows`.
 - `build_macos.sh` — empaqueta macOS como `.app` y ZIP; CI genera artefactos `arm64` y `x64`.
-- `instalador.iss` + `build_instalador.bat` — instalador único (Inno Setup); la CI
-  lo genera y publica junto a los `.exe` en cada Release.
+- `instalador.iss` + `build_instalador.bat` — instalador único (Inno Setup); la CI lo
+  genera y lo publica como **único artefacto Windows** de cada Release. Ya NO se
+  publican `.exe` sueltos: con `--onedir` el ejecutable necesita su `_internal` al
+  lado. Es también lo que descarga el autoactualizador.
 
 ## Reglas / cuidado
 - **Nunca** subir `config.json` (contiene la API key). Usar `config.example.json`.
@@ -117,17 +123,6 @@ definición completa y el historial de decisiones.
 
 - v2.4.2 (jul 2026): icono con fondo blanco redondeado (`fichacsirc.ico`/`.png`):
   antes era transparente y no se veía en escritorios con fondo oscuro.
-
-## Tests
-- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). Cubren el motor
-  (duraciones ISO, jornada/verano, parsing/paginación de la API, payloads, pendientes)
-  con la red mockeada, más un smoke test de la GUI (`test_gui_smoke.py`, se salta sin
-  display). Ejecutarlos tras tocar el motor o la GUI.
-
-## Pendiente / ideas
-- Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
-  (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
-- Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.
 - v2.5.0 (jul 2026): **Integración con INARI (Kanboard) para los días de
   teletrabajo en SisGes**, opt-in (`inari_activo`, por defecto false). Diseño en
   `MEJORAS_PENDIENTES.md`. Piezas: `inari.py` (cliente JSON-RPC puro, credenciales
@@ -239,5 +234,21 @@ definición completa y el historial de decisiones.
   no laborables (ahora es un permiso por horas, para que descuente del cupo de
   70:00); en su lugar el submenú ofrece «apertura de curso». Los días ya marcados
   como «asuntos propios» en `no_laborables` siguen funcionando. Las **vacaciones
-  siguen en días** (`cupo_vacaciones`). Tests: `TestPermisos` (12) + test del
-  diálogo (118 en total).
+  siguen en días** (`cupo_vacaciones`). Tests: `TestPermisos` (17) + test del
+  diálogo de permisos (123 en total).
+
+## Tests
+- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
+  red mockeada, repartidos así:
+  - `test_fichacsirc.py` (81) — motor: duraciones ISO, jornada/verano, parsing y
+    paginación de la API, payloads, pendientes, festivos, franjas y permisos.
+  - `test_inari.py` (23) — cliente JSON-RPC de INARI (lectura y escritura).
+  - `test_destinos.py` (9) — puente ProyectosTIC/INARI.
+  - `test_gui_acciones.py` (9) — acciones reales de la GUI (con `en_hilo` síncrono).
+  - `test_gui_smoke.py` (1) — arranque de la ventana; se salta sin display.
+- Ejecutarlos tras tocar el motor o la GUI.
+
+## Pendiente / ideas
+- Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
+  (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
+- Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.

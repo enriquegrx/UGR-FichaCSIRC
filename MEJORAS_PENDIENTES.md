@@ -30,16 +30,18 @@ configuracion local.
 ### Modelo de dias y destinos
 
 - **Dia normal**: ProyectosTIC. Sin cambios respecto a hoy.
-- **Dia de teletrabajo** (con INARI activo): la app ofrece elegir destino
-  **INARI o ProyectosTIC, uno solo, nunca los dos**. Sugerencia por defecto:
-  INARI.
-- Como cada dia de teletrabajo va a un unico sistema, ningun dia tiene horas en
-  ambos: **no hay duplicacion de horas por construccion**.
-- Guardarrail: si un dia de teletrabajo ya tiene horas en un sistema y se intenta
-  añadir en el otro, la app **avisa** (no bloquea, coherente con el resto).
-- Nota de estado actual: marcar teletrabajo hoy es solo una etiqueta local
-  (`TELETRABAJO` en config); no escribe horas en ningun sitio. Las horas de un
-  dia de teletrabajo seran los slots que se creen en INARI.
+- **Dia de teletrabajo** (con INARI configurado): INARI es el destino **por
+  convencion**, no por un dialogo de eleccion. La app lee y muestra los slots de
+  INARI de ese dia (`registrar_gui.refrescar`), y registrar en INARI es una accion
+  aparte del menu contextual del dia ("Registrar slot en INARI...").
+- **No hay selector de destino**: el formulario "Añadir apunte" siempre escribe en
+  ProyectosTIC (`core.crear_entrada`). Se penso un chooser INARI/ProyectosTIC y un
+  guardarrail que avisara si un dia tuviera horas en ambos sistemas, pero **no se
+  implementaron**: con el modelo por-dia no hicieron falta.
+- Como cada dia de teletrabajo se lleva en un unico sistema, ningun dia tiene horas
+  en ambos: **no hay duplicacion de horas por construccion**.
+- Marcar teletrabajo es una etiqueta local (`TELETRABAJO` en config); las horas de
+  ese dia son los slots que se creen en INARI.
 
 ### Jornada y computo de horas
 
@@ -49,7 +51,7 @@ configuracion local.
   que tiene las horas ese dia (INARI en teletrabajo, ProyectosTIC en el resto).
 - Afecta a: barra y "faltan Xh" de la semana, aviso diario de fichaje y resumen
   del mes. En dias de teletrabajo, esos calculos leen las horas de INARI
-  (`time_spent` de las subtareas del dia).
+  (`time_spent` de las tareas-slot del dia, agrupadas por su `reference`).
 
 ### Resumen del mes
 
@@ -66,7 +68,7 @@ Objetivo del mes ................. objetivo
 Los dias de teletrabajo se evaluan contra sus horas de INARI: no aparecen como
 incompletos si INARI los cubre.
 
-### Configuracion (Herramientas > Integraciones, NO en el wizard)
+### Configuracion (Herramientas > "Integraciones (INARI)...", NO en el wizard)
 
 La configuracion de INARI va en un dialogo nuevo de `Herramientas >
 Integraciones`, fuera del configurador de primera vez (INARI lo usa una minoria;
@@ -171,40 +173,47 @@ suma de sus subtareas (doble fuente de verdad). La franja "09:00-10:30" va en el
   horas positivas, `duracion = fin - inicio`, sin solapes, y opcionalmente aviso
   si el total del dia no llega a la jornada.
 
-### Fases
+### Fases (ambas completadas)
 
 1. **Fase 1 - solo lectura**: modulo `inari.py` (getMe, getMyProjects, getColumns,
    getActiveSwimlanes, getAllCategories), dialogo de config en Herramientas,
    "Probar conexion", descubrimiento y persistencia de IDs. No escribe nada.
    Tests con red mockeada del cliente y de la validacion de franjas.
-2. **Fase 2 - escritura inmediata**: selector de destino en dias de teletrabajo,
-   formulario de slot, `createTask`/`createSubtask` + `time_spent`, tabla con
-   columna Destino y enrutado de editar/borrar, los dos indicadores de conexion,
-   resumen con los dos cubos y guardarrail de exclusividad.
+2. **Fase 2 - escritura inmediata**: formulario de slot (`dialogos.abrir_slot_inari`),
+   `createTask` + `time_spent` (una tarea por franja; **sin subtareas**), los dos
+   indicadores de conexion y el resumen con los dos cubos.
+
+Lo que **no** se implemento de este borrador: el selector de destino, el
+guardarrail de exclusividad y una columna "Destino" en la tabla (el destino se
+guarda como *tag* de la fila, no como columna visible). Del borrado se encarga
+`destinos.borrar` -> `removeTask`; **editar un slot de INARI esta bloqueado** en la
+GUI: hay que borrarlo y volver a registrarlo.
 
 Se descarta la cola diferida y el estado "Pendiente/Sincronizado" del mockup: con
 escritura inmediata y el modelo exclusivo por dia no hace falta.
 
 ### Decisiones tomadas
 
-- Solo SisGes; INARI = destino de los dias de teletrabajo.
-- En teletrabajo: INARI o ProyectosTIC, exclusivo por dia (nunca ambos).
+- Solo SisGes; INARI = destino de los dias de teletrabajo (por convencion).
+- Un dia de teletrabajo se lleva en un unico sistema (nunca en ambos).
 - Jornada de un dia de teletrabajo = jornada normal por temporada.
 - El computo nunca suma ambos destinos; el resumen usa dos cubos disjuntos.
-- Configuracion en Herramientas > Integraciones, no en el wizard.
+- Configuracion en Herramientas > "Integraciones (INARI)...", no en el wizard.
 - Escritura inmediata (sin cola diferida).
 - Dos indicadores de conexion diferenciados; el de INARI solo si esta activo.
 
 ### Preguntas pendientes
 
-- Confirmar la practica real de SisGes: la convencion tarea-diaria +
-  subtarea-por-slot la impone la app; Kanboard no la exige. Validar que encaja.
-- Revisar en inarifor el namespace `subtask_time_tracking` por si permitiera
-  registrar franjas de forma mas fiel que meterlas en el titulo.
-- Confirmar el flujo de correccion de un slot ya enviado (updateSubtask /
-  removeSubtask / recrear). Encaja con el editar/borrar actual de la app.
-- Hacer el descubrimiento de IDs y los tests primero en `inarifor` con un token
-  de formacion desechable.
+- Confirmar la practica real de SisGes: la convencion **una tarea por franja**, con
+  la franja en el titulo y el dia en `reference`, la impone la app; Kanboard no la
+  exige. Validar que encaja con como trabaja el servicio.
+- Validar la **escritura real** contra `inarifor` con un token de formacion
+  desechable (y revocarlo despues). Es lo unico del modelo que no se puede probar
+  sin el servidor.
+- Corregir un slot ya enviado = `removeTask` + volver a crearlo. La GUI ya obliga a
+  eso (editar un slot de INARI esta bloqueado). Decidir si merece la pena permitir
+  editar en el sitio con `updateTask` (titulo/descripcion/categoria/`time_spent`) y
+  `moveTaskPosition` (columna/carril).
 
 ### Seguridad
 

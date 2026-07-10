@@ -91,7 +91,7 @@ use.
   INARI. Un día de teletrabajo va a un único sistema (INARI *o* ProyectosTIC),
   así que no se duplican horas.
 
-Guía de uso paso a paso en [INSTRUCCIONES.md](INSTRUCCIONES.md), sección 5.
+Guía de uso paso a paso en [INSTRUCCIONES.md](INSTRUCCIONES.md), sección 6.
 
 ## 💾 Instalación
 
@@ -159,13 +159,17 @@ configuración.
 | `configurar.py` | Utilidades de configuración y comprobación de conexión. |
 | `registrar_gui.py` | Ventana principal de registro. |
 | `configurar_gui.py` | Asistente gráfico de configuración inicial. |
-| `dialogos.py` | Diálogos secundarios: búsqueda, edición, resumen mensual, exportación y plantillas. |
+| `dialogos.py` | Diálogos secundarios: búsqueda, edición, resumen mensual, exportación, plantillas, permisos e integraciones. |
 | `fichaui.py` | Utilidades visuales compartidas: estilos, tooltips, botones y ejecución en hilo. |
+| `inari.py` | Cliente JSON-RPC de INARI (Kanboard): credenciales, slots y descubrimiento de proyecto, columna, carril y categoría. |
+| `destinos.py` | Puente entre ProyectosTIC (OpenProject) e INARI: registra y lee las horas de los días de teletrabajo. |
 | `recordatorio.py` | Aviso diario de fichaje mediante Programador de tareas o LaunchAgent. |
 | `instalador.iss` | Instalador Windows con Inno Setup. |
+| `build_exe.bat` | Compilación local de los `.exe` de Windows en modo carpeta (`--onedir`). |
+| `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
 | `build_macos.sh` | Compilación local de apps macOS y ZIP. |
 | `.github/workflows/` | Tests y publicación automática de releases. |
-| `tests/` | Tests del motor y de flujos relevantes de la GUI. |
+| `tests/` | Tests del motor, del cliente INARI, del puente de destinos y de flujos de la GUI. |
 
 Otros documentos:
 
@@ -217,6 +221,12 @@ temporal mediante `FICHACSIRC_CONFIG`.
 
 La publicación oficial se hace con GitHub Actions. El flujo genera el instalador
 combinado de Windows, los paquetes macOS y los sube a GitHub Releases.
+
+Los ejecutables de Windows se empaquetan con PyInstaller en **modo carpeta**
+(`--onedir --noupx`, versión fijada): cada app es un `.exe` junto a su carpeta
+`_internal`. Por eso **el único artefacto Windows de cada Release es
+`FichaCSIRC-Instalador.exe`** (ya no hay `.exe` sueltos portables: el ejecutable
+necesita su carpeta al lado). Es también lo que descarga el autoactualizador.
 
 Para publicar una versión:
 
