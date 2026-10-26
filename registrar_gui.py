@@ -411,7 +411,9 @@ class App:
                            lambda _e, i=n - 1: self._toggle_dia_idx(i))
         # El comentario habitual de cada tarea se recuerda y se sugiere
         self._com_auto = ""
+        # Al cambiar de tarea: su comentario habitual y SUS actividades.
         self.cbo_tarea.bind("<<ComboboxSelected>>", self._sugerir_comentario)
+        self.cbo_tarea.bind("<<ComboboxSelected>>", self._actividades_de_tarea, add="+")
 
         # Contenido de la barra de estado (+ boton Deshacer que aparece tras
         # eliminar). El frame `barra` ya se creo y empaqueto arriba, antes de midf.
@@ -600,15 +602,55 @@ class App:
 
         self._en_hilo(trabajo, al_terminar)
 
-    def _poner_actividades(self, nombres):
+    def _actividades_de_tarea(self, _e=None):
+        """Recarga las actividades con las que permite LA TAREA elegida.
+
+        OpenProject define las actividades por tarea, asi que la lista puede
+        cambiar de una a otra: la de permisos podria admitir solo 'Asuntos
+        propios'/'Baja' y una de desarrollo otras. Se consulta en segundo plano
+        y `core._actividades_disponibles` cachea por tarea, asi que al repetir
+        tarea es instantaneo."""
+        wp_id = self.tareas.get(self.cbo_tarea.get())
+        if wp_id is None:
+            return
+
+        def trabajo():
+            return list(core._actividades_disponibles(wp_id).keys())
+
+        def al_terminar(res, err):
+            if not err and res:
+                self._poner_actividades(res, wp_id)
+
+        self._en_hilo(trabajo, al_terminar)
+
+    def _poner_actividades(self, nombres, wp_id=None):
+        """Rellena el desplegable y preselecciona la actividad mas probable:
+        la que sueles usar CON ESA TAREA; si no hay, la ultima usada."""
         self.cbo_act["values"] = nombres
-        pref = core.config_valor("ultima_actividad") or core.ACTIVIDAD_DEFECTO
+        pref = None
+        if wp_id is not None:
+            pref = (core.config_valor("actividades_tarea") or {}).get(str(wp_id))
+        pref = pref or core.config_valor("ultima_actividad") or core.ACTIVIDAD_DEFECTO
         idx = 0
         for i, n in enumerate(nombres):
             if pref and n.lower() == str(pref).lower():
                 idx = i
         if nombres:
             self.cbo_act.current(idx)
+
+    def _recordar_actividad(self, wp_id, actividad):
+        """Guarda la actividad usada con la tarea para preseleccionarla despues
+        (mismo mecanismo que el comentario habitual)."""
+        if not actividad:
+            return
+        try:
+            mapa = dict(core.config_valor("actividades_tarea") or {})
+            if mapa.get(str(wp_id)) == actividad:
+                return
+            mapa[str(wp_id)] = actividad
+            core.guardar_config_valor("actividades_tarea", mapa)
+        except Exception:
+            pass  # comodidad: nunca debe romper el registro
 
     def _poblar_tareas(self):
         """Rellena el desplegable: tareas de la sesion (Buscar...) + favoritas."""
@@ -1414,6 +1456,8 @@ class App:
             # persistirse ni sugerirse luego en dias normales.
             if creados and comentario and comentario != core.comentario_guardia():
                 self._recordar_comentario(wp_id, comentario)
+            if creados:
+                self._recordar_actividad(wp_id, actividad)
             if errores and creados == 0:
                 self.refrescar()
                 messagebox.showerror(

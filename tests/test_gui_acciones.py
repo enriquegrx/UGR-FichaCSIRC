@@ -266,6 +266,77 @@ class TestWizardConfig(unittest.TestCase):
             core.guardar_config_valor("no_laborables", {})
 
 
+class TestActividadesPorTarea(unittest.TestCase):
+    """Las actividades dependen de la TAREA: al cambiarla hay que recargarlas,
+    y se recuerda la que sueles usar con cada una."""
+
+    def setUp(self):
+        import tkinter as tk
+        import registrar_gui
+        try:
+            self.root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        self.root.withdraw()
+        self.addCleanup(self.root.destroy)
+        self.gui = registrar_gui
+        # Cada tarea ofrece actividades DISTINTAS: es justo lo que se comprueba.
+        self.por_tarea = {
+            111: {"Soporte-Incidencias": "/a/1", "Formación": "/a/2"},
+            222: {"Asuntos propios": "/a/3", "Baja": "/a/4"},
+        }
+        parches = [
+            mock.patch.object(core, "entradas_dia", lambda f: []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: self.por_tarea[int(wp)]),
+            mock.patch.object(core, "FAVORITOS",
+                              [{"id": 111, "nombre": "Mantenimientos"},
+                               {"id": 222, "nombre": "Permisos"}]),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.app = registrar_gui.App(self.root)
+        self.addCleanup(setattr, self.app, "_logo_img", None)
+
+    def test_al_cambiar_de_tarea_se_recargan_sus_actividades(self):
+        # Arranca con las de la primera favorita
+        self.assertEqual(list(self.app.cbo_act["values"]),
+                         ["Soporte-Incidencias", "Formación"])
+        # Al elegir la tarea de permisos, deben salir LAS SUYAS. Se dispara el
+        # evento real del desplegable (no se llama al método a mano): así el
+        # test falla también si se olvida enganchar el binding.
+        self.app.cbo_tarea.set("222 - Permisos")
+        self.app.cbo_tarea.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.assertEqual(list(self.app.cbo_act["values"]),
+                         ["Asuntos propios", "Baja"])
+        # Y al volver, las de la otra
+        self.app.cbo_tarea.set("111 - Mantenimientos")
+        self.app.cbo_tarea.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.assertEqual(list(self.app.cbo_act["values"]),
+                         ["Soporte-Incidencias", "Formación"])
+
+    def test_recuerda_la_actividad_de_cada_tarea(self):
+        guardado = {}
+        with mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})), \
+             mock.patch.object(core, "config_valor",
+                               lambda c, d=None: guardado.get(c, d)):
+            self.app._recordar_actividad(222, "Baja")
+            self.assertEqual(guardado["actividades_tarea"], {"222": "Baja"})
+            # Al poner las actividades de esa tarea, se preselecciona la suya
+            self.app._poner_actividades(["Asuntos propios", "Baja"], 222)
+            self.assertEqual(self.app.cbo_act.get(), "Baja")
+            # Otra tarea sin memoria: no hereda la ajena
+            self.app._poner_actividades(["Soporte-Incidencias", "Formación"], 111)
+            self.assertNotEqual(self.app.cbo_act.get(), "Baja")
+
+
 def _botones(widget, acumulado=None):
     """Todos los botones del árbol de una ventana."""
     import tkinter as tk

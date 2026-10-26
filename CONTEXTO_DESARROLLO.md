@@ -271,6 +271,27 @@ definición completa y el historial de decisiones.
   construcción del diálogo y alguno se autodestruye al fallar (`abrir_buscar_tarea`),
   cosa que no pasa en la app real; por eso el test mockea `core.proyectos`,
   `tareas_proyecto` y `buscar_wp`. 126 tests.
+- v2.7.4 (oct 2026): **las actividades dependen de la tarea elegida**.
+  `_cargar_actividades` solo se llamaba UNA vez al arrancar y además con
+  `FAVORITOS[0]`, así que el desplegable mostraba siempre las actividades de la
+  primera favorita, cambiases de tarea o no. En OpenProject las actividades se
+  definen POR work package, así que podías elegir una que esa tarea no admite
+  (p. ej. «Asuntos propios» sobre «Mantenimientos»). Ahora `_actividades_de_tarea()`
+  recarga la lista al cambiar de tarea (`<<ComboboxSelected>>` con `add="+"`, en
+  segundo plano; `core._actividades_disponibles` ya cachea por wp_id). Además se
+  **recuerda la actividad usada con cada tarea** (`actividades_tarea` en config,
+  espejo de `comentarios_tarea`): `_recordar_actividad` al crear el apunte y
+  preselección en `_poner_actividades(nombres, wp_id)`, con caída a
+  `ultima_actividad`. Tests: `TestActividadesPorTarea` (2), que dispara el evento
+  real del desplegable para que falle también si se pierde el binding (validado
+  retirándolo a propósito). 128 tests.
+  Contexto del hallazgo (consultado contra la API real de ProyectosTIC): en ATE
+  los permisos se imputan sobre `#12154 [PERMISOS] Permisos (Asuntos propios y
+  bajas)`, hija de `[ATE] Otros` (`#11763`), distinguiendo el tipo por la
+  ACTIVIDAD («Asuntos propios» / «Baja»); el estado «Bloquead@» de la tarea no
+  impide imputar (validado con `POST /time_entries/form`, sin crear nada). Las
+  **vacaciones no tienen tarea ni actividad**: no se imputan, y la app ya las
+  trata como día no laborable, que es lo correcto.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la

@@ -4,13 +4,20 @@
   "jornada_invierno": 7,
   "tiene_verano": true,
   "jornada_verano": 5,
-  "verano_inicio": [6, 16],
-  "verano_fin": [9, 15],
+  "verano_inicio": [
+    6,
+    16
+  ],
+  "verano_fin": [
+    9,
+    15
+  ],
   "actividad_defecto": "soporte",
   "favoritos": [],
   "no_laborables": {},
   "plantillas": [],
   "comentarios_tarea": {},
+  "actividades_tarea": {},
   "guardias": [],
   "teletrabajo": [],
   "comentario_guardia": "Servicio de Guardia",
@@ -20,13 +27,40 @@
   "dias_ugr": {},
   "permisos": {},
   "permisos_tipos": [
-    {"id": "asuntos_particulares", "nombre": "Asuntos particulares por horas",
-     "concesiones": [{"horas": 70, "fecha_limite": ""}]},
-    {"id": "servicios_minimos", "nombre": "Compensación por servicios mínimos",
-     "concesiones": [{"horas": 28, "fecha_limite": "2027-01-07"},
-                     {"horas": 28, "fecha_limite": "2027-04-06"}]},
-    {"id": "conciliacion", "nombre": "Conciliación vida laboral y familiar",
-     "concesiones": [{"horas": 30, "fecha_limite": ""}]}
+    {
+      "id": "asuntos_particulares",
+      "nombre": "Asuntos particulares por horas",
+      "concesiones": [
+        {
+          "horas": 70,
+          "fecha_limite": ""
+        }
+      ]
+    },
+    {
+      "id": "servicios_minimos",
+      "nombre": "Compensación por servicios mínimos",
+      "concesiones": [
+        {
+          "horas": 28,
+          "fecha_limite": "2027-01-07"
+        },
+        {
+          "horas": 28,
+          "fecha_limite": "2027-04-06"
+        }
+      ]
+    },
+    {
+      "id": "conciliacion",
+      "nombre": "Conciliación vida laboral y familiar",
+      "concesiones": [
+        {
+          "horas": 30,
+          "fecha_limite": ""
+        }
+      ]
+    }
   ],
   "inari_activo": false,
   "inari_url": "https://inari.ugr.es/kanboard/jsonrpc.php",
