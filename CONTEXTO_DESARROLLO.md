@@ -236,6 +236,14 @@ definición completa y el historial de decisiones.
   como «asuntos propios» en `no_laborables` siguen funcionando. Las **vacaciones
   siguen en días** (`cupo_vacaciones`). Tests: `TestPermisos` (17) + test del
   diálogo de permisos (123 en total).
+- v2.7.1 (jul 2026): **el pie del configurador queda siempre visible**. En el
+  wizard (`configurar_gui._shell`) el pie (Atrás/Siguiente/Finalizar) se
+  empaquetaba DESPUÉS del contenido (`expand=True`), así que un paso alto (el
+  resumen con muchas favoritas) empujaba los botones fuera de la ventana y había
+  que maximizar para ver Finalizar o Atrás. Ahora el pie se empaqueta antes y con
+  `side="bottom"` (queda reservado abajo, con un separador), y el contenido ocupa
+  el hueco restante. El resumen (`p_resumen`) además limita la lista de favoritas
+  a 10 (+ «y N más»). Verificado a 640×580 con 25 favoritas.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
