@@ -244,6 +244,21 @@ definición completa y el historial de decisiones.
   `side="bottom"` (queda reservado abajo, con un separador), y el contenido ocupa
   el hueco restante. El resumen (`p_resumen`) además limita la lista de favoritas
   a 10 (+ «y N más»). Verificado a 640×580 con 25 favoritas.
+- v2.7.2 (oct 2026): **el pie de la ventana principal queda siempre visible** y la
+  app **arranca maximizada**. Mismo fallo que el wizard: en `registrar_gui._construir`
+  la `barra` de estado (indicadores `● ProyectosTIC` / `● INARI`, versión, GitHub) se
+  empaquetaba DESPUÉS de `midf` (`expand=True`), así que sin maximizar el contenido
+  se comía su hueco y el pie desaparecía. Ahora la `barra` se crea y empaqueta antes
+  de `midf`; sus hijos se rellenan después. Nuevo `App._maximizar()` (`state("zoomed")`
+  en Windows, `-zoomed` en X11, tamaño de pantalla en macOS, con fallbacks) — la
+  geometría guardada sigue valiendo como tamaño restaurado.
+  **Auditoría del patrón en todo el proyecto** (analizador AST que compara solo
+  widgets del mismo padre y distingue expansión vertical): 0 casos restantes en
+  `registrar_gui`, `configurar_gui` y `dialogos`; diálogos verificados en ejecución
+  encogiéndolos. **Regresión cubierta**: `TestPieSiempreVisible` + el helper
+  `_barras_en_riesgo`, que recorre el árbol de widgets y falla si una barra
+  `side="bottom"` va tras un expansible del mismo padre (validado contra un layout
+  roto a propósito). 125 tests.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la

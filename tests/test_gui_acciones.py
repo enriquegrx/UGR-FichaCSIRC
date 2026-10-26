@@ -266,5 +266,78 @@ class TestWizardConfig(unittest.TestCase):
             core.guardar_config_valor("no_laborables", {})
 
 
+def _barras_en_riesgo(widget, ruta="root"):
+    """Devuelve las barras inferiores que podrían quedar fuera de la ventana.
+
+    En Tk el widget empaquetado ANTES reclama su espacio primero. Si un
+    contenido expansible (expand=True con fill both/y) se empaqueta antes que
+    una barra con side='bottom' del MISMO padre, al encoger la ventana el
+    contenido se come su hueco y la barra desaparece: hay que maximizar para
+    verla. La barra fija debe ir siempre antes. Comprueba el árbol completo."""
+    fallos = []
+    hijos = widget.pack_slaves()
+    visto_expansible = None
+    for hijo in hijos:
+        try:
+            info = hijo.pack_info()
+        except Exception:
+            continue
+        if info.get("side") == "bottom" and visto_expansible is not None:
+            fallos.append(f"{ruta}: {hijo.winfo_class()} con side='bottom' va "
+                          f"después de {visto_expansible} expansible")
+        elif (str(info.get("expand")) in ("1", "True")
+              and info.get("fill") in ("both", "y")):
+            visto_expansible = hijo.winfo_class()
+    for n, hijo in enumerate(widget.winfo_children()):
+        fallos += _barras_en_riesgo(hijo, f"{ruta}/{hijo.winfo_class()}[{n}]")
+    return fallos
+
+
+class TestPieSiempreVisible(unittest.TestCase):
+    """Regresión: el pie (conexión/versión en la ventana, botones en el wizard)
+    debe quedar visible sin maximizar, a cualquier tamaño."""
+
+    def test_ventana_principal(self):
+        import tkinter as tk
+        import registrar_gui
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        parches = [
+            mock.patch.object(core, "entradas_dia", lambda f: []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: {"soporte": "/x"}),
+            mock.patch.object(core, "FAVORITOS", []),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        app = registrar_gui.App(root)
+        self.addCleanup(setattr, app, "_logo_img", None)
+        self.assertEqual(_barras_en_riesgo(root), [])
+
+    def test_wizard_configurador(self):
+        import tkinter as tk
+        import configurar_gui
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        with mock.patch.object(configurar_gui.ccore, "cargar_previa", lambda: {}):
+            wz = configurar_gui.Wizard(root)
+        self.addCleanup(setattr, wz, "_logo", None)
+        wz.idx = len(wz.pasos) - 1          # el resumen, el paso más alto
+        wz.mostrar()
+        self.assertEqual(_barras_en_riesgo(root), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

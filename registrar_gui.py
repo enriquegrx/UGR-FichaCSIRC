@@ -65,6 +65,10 @@ class App:
                 root.geometry(self._geometria_visible(geo))
             except Exception:
                 pass
+        # Arrancar maximizada: asi se ve todo de un vistazo (incluido el pie con
+        # los indicadores de conexion). La geometria de arriba sigue valiendo como
+        # tamano "restaurado" cuando el usuario desmaximiza.
+        self._maximizar()
         root.protocol("WM_DELETE_WINDOW", self._cerrar)
         self._carpeta = carpeta_app()
         self._logo_img = None
@@ -190,6 +194,26 @@ class App:
             return "Windows"
         return sys.platform
 
+    def _maximizar(self):
+        """Abre la ventana maximizada. Cada plataforma lo hace a su manera y
+        ninguna debe impedir que la app arranque, de ahi los fallbacks."""
+        try:
+            self.root.state("zoomed")          # Windows (y Linux con algunos WM)
+            return
+        except Exception:
+            pass
+        try:
+            self.root.attributes("-zoomed", True)   # Linux/X11
+            return
+        except Exception:
+            pass
+        try:  # macOS: no hay 'zoomed'; se ocupa la pantalla a mano
+            self.root.update_idletasks()
+            self.root.geometry(f"{self.root.winfo_screenwidth()}x"
+                               f"{self.root.winfo_screenheight() - 60}+0+0")
+        except Exception:
+            pass
+
     def _geometria_visible(self, geo):
         """Limita la geometria guardada para que no se esconda el pie."""
         m = re.match(r"^(\d+)x(\d+)([+-]\d+)?([+-]\d+)?$", geo)
@@ -300,6 +324,14 @@ class App:
 
         self._construir_leyenda(diaf)
 
+        # Barra de estado: se crea y empaqueta AQUI, ANTES del contenido expansible
+        # (midf) y con side="bottom", para que el pie (indicadores de conexion,
+        # version, GitHub) quede SIEMPRE reservado abajo. Si se empaqueta despues,
+        # al reducir la ventana el contenido se come su espacio y el pie desaparece
+        # (habia que maximizar para verlo). Sus hijos se rellenan mas abajo.
+        barra = ttk.Frame(self.root, style="Subtle.TFrame")
+        barra.pack(fill="x", side="bottom")
+
         # Lista de apuntes
         midf = ttk.Frame(self.root, padding=(14, 12), style="Panel.TFrame")
         midf.pack(fill="both", expand=True, padx=12, pady=(0, 8))
@@ -381,9 +413,8 @@ class App:
         self._com_auto = ""
         self.cbo_tarea.bind("<<ComboboxSelected>>", self._sugerir_comentario)
 
-        # Barra de estado (+ boton Deshacer que aparece tras eliminar)
-        barra = ttk.Frame(self.root, style="Subtle.TFrame")
-        barra.pack(fill="x", side="bottom")
+        # Contenido de la barra de estado (+ boton Deshacer que aparece tras
+        # eliminar). El frame `barra` ya se creo y empaqueto arriba, antes de midf.
         self.btn_deshacer = ttk.Button(barra, text="Deshacer",
                                        command=self._deshacer_borrado)
         Tooltip(self.btn_deshacer, "Restaura el último apunte eliminado (Ctrl+Z)")
