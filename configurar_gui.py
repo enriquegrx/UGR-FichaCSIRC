@@ -135,11 +135,15 @@ class Wizard:
                   foreground="#666").pack(side="left", padx=10)
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=10)
 
-        self.content = ttk.Frame(self.root, padding=16)
-        self.content.pack(fill="both", expand=True)
-
+        # El pie (Atrás/Siguiente/Finalizar) se empaqueta ANTES que el contenido y
+        # con side="bottom", para que quede SIEMPRE reservado abajo. Si se empaqueta
+        # después, un paso con contenido alto (p. ej. el resumen con muchas tareas
+        # favoritas) empuja los botones fuera de la ventana y obliga a maximizar
+        # para verlos. Una barra separadora lo despega del contenido.
         foot = ttk.Frame(self.root, padding=10)
         foot.pack(fill="x", side="bottom")
+        ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=10,
+                                                          side="bottom")
         self.lbl_paso = ttk.Label(foot, text="")
         self.lbl_paso.pack(side="left")
         self.btn_fin = ttk.Button(foot, text="Finalizar", command=self.finalizar)
@@ -149,6 +153,11 @@ class Wizard:
         self.btn_fin.pack(side="right", padx=4)
         self.btn_next.pack(side="right", padx=4)
         self.btn_back.pack(side="right", padx=4)
+
+        # El contenido se empaqueta el ULTIMO: ocupa el hueco que queda entre la
+        # cabecera y el pie, y si un paso es demasiado alto se recorta él (no el pie).
+        self.content = ttk.Frame(self.root, padding=16)
+        self.content.pack(fill="both", expand=True)
 
     def _limpiar(self):
         for w in self.content.winfo_children():
@@ -409,8 +418,11 @@ class Wizard:
                           f"del {self.v['vini'].get()} al {self.v['vfin'].get()}")
         lineas.append(f"Actividad por defecto: {self.v['act'].get()}")
         lineas.append(f"Tareas favoritas: {len(self.favoritos)}")
-        for f in self.favoritos:
+        _MAX_RESUMEN = 10  # no alargar el resumen sin fin si hay muchas favoritas
+        for f in self.favoritos[:_MAX_RESUMEN]:
             lineas.append(f"   - {f['id']}  {f['nombre'][:44]}")
+        if len(self.favoritos) > _MAX_RESUMEN:
+            lineas.append(f"   ... y {len(self.favoritos) - _MAX_RESUMEN} más")
         ttk.Label(self.content, text="\n".join(lineas), justify="left").pack(anchor="w")
         ttk.Label(self.content, text="\nPulsa 'Finalizar' para guardar.",
                   foreground="#666").pack(anchor="w")
