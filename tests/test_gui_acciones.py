@@ -266,6 +266,18 @@ class TestWizardConfig(unittest.TestCase):
             core.guardar_config_valor("no_laborables", {})
 
 
+def _botones(widget, acumulado=None):
+    """Todos los botones del árbol de una ventana."""
+    import tkinter as tk
+    from tkinter import ttk
+    acumulado = acumulado if acumulado is not None else []
+    for hijo in widget.winfo_children():
+        if isinstance(hijo, (ttk.Button, tk.Button)):
+            acumulado.append(hijo)
+        _botones(hijo, acumulado)
+    return acumulado
+
+
 def _barras_en_riesgo(widget, ruta="root"):
     """Devuelve las barras inferiores que podrían quedar fuera de la ventana.
 
@@ -321,6 +333,98 @@ class TestPieSiempreVisible(unittest.TestCase):
         app = registrar_gui.App(root)
         self.addCleanup(setattr, app, "_logo_img", None)
         self.assertEqual(_barras_en_riesgo(root), [])
+
+    def _app(self):
+        """Ventana principal lista para abrir diálogos sobre ella."""
+        import tkinter as tk
+        import registrar_gui
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        parches = [
+            mock.patch.object(core, "entradas_dia", lambda f: []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: {"soporte": "/x"}),
+            mock.patch.object(core, "FAVORITOS", []),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        app = registrar_gui.App(root)
+        self.addCleanup(setattr, app, "_logo_img", None)
+        return root, app
+
+    def test_dialogos(self):
+        """Cada diálogo, por separado: ninguna barra de botones debe poder
+        quedar fuera. Así una ventana nueva con el patrón malo salta aquí."""
+        import tkinter as tk
+        import dialogos
+        root, app = self._app()
+        dia = dt.date(2026, 7, 6)
+        casos = [
+            ("resumen del mes", lambda: dialogos.abrir_resumen_mes(app)),
+            ("plantillas", lambda: dialogos.abrir_plantillas(app)),
+            ("buscar tarea", lambda: dialogos.abrir_buscar_tarea(app)),
+            ("exportar CSV", lambda: dialogos.abrir_exportar(app)),
+            ("importar festivos", lambda: dialogos.abrir_importar_festivos(app)),
+            ("vacaciones y teletrabajo", lambda: dialogos.abrir_ajustes_dias(app)),
+            ("integraciones (INARI)", lambda: dialogos.abrir_integraciones(app)),
+            ("permisos (horas)", lambda: dialogos.abrir_permisos(app)),
+            ("permiso por horas de un dia",
+             lambda: dialogos.abrir_permiso_dia(app, dia)),
+        ]
+        # `en_hilo` sincrono hace que las cargas terminen DURANTE la construccion
+        # del dialogo; si fallan, algunos se autodestruyen y el test se rompe por
+        # un motivo que no existe en la app real (alli van en un hilo). Por eso se
+        # devuelven datos validos en vez de dejar que reviente la red.
+        silencio = [
+            mock.patch.object(dialogos, "en_hilo", _en_hilo_sync),
+            mock.patch.object(core, "proyectos",
+                              lambda: [{"id": 1, "nombre": "Proyecto de prueba"}]),
+            mock.patch.object(core, "tareas_proyecto", lambda pid: []),
+            mock.patch.object(core, "buscar_wp", lambda t: []),
+            mock.patch.object(dialogos.messagebox, "showinfo", lambda *a, **k: None),
+            mock.patch.object(dialogos.messagebox, "showwarning", lambda *a, **k: None),
+            mock.patch.object(dialogos.messagebox, "showerror", lambda *a, **k: None),
+        ]
+        for p in silencio:
+            p.start()
+            self.addCleanup(p.stop)
+
+        revisados = []
+        for nombre, abrir in casos:
+            previos = {w for w in root.winfo_children()
+                       if isinstance(w, tk.Toplevel)}
+            abrir()
+            nuevos = [w for w in root.winfo_children()
+                      if isinstance(w, tk.Toplevel) and w not in previos]
+            self.assertTrue(nuevos, f"«{nombre}» no abrió ninguna ventana")
+            for top in nuevos:
+                top.update_idletasks()
+                self.assertEqual(_barras_en_riesgo(top, nombre), [],
+                                 f"«{nombre}»: una barra inferior puede quedar fuera")
+                # Y al encogerlo: ningún botón debe salirse de la ventana. Los
+                # diálogos abren ajustados a su contenido, así que esto solo pasa
+                # si el usuario arrastra el borde; no_encoger() lo impide.
+                for ancho, alto in ((320, 220), (480, 320)):
+                    top.geometry(f"{ancho}x{alto}+20+20")
+                    top.update_idletasks()
+                    top.update()
+                    limite = top.winfo_rooty() + top.winfo_height()
+                    fuera = [b.cget("text") for b in _botones(top)
+                             if b.winfo_ismapped()
+                             and b.winfo_rooty() + b.winfo_height() > limite + 1]
+                    self.assertEqual(fuera, [],
+                                     f"«{nombre}» a {ancho}x{alto}: botones fuera")
+                top.destroy()
+            revisados.append(nombre)
+        self.assertEqual(len(revisados), len(casos))
 
     def test_wizard_configurador(self):
         import tkinter as tk

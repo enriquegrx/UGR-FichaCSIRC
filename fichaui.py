@@ -151,6 +151,19 @@ def boton_peligro(parent, texto, comando):
                      relief="flat", bd=0, cursor="hand2", padx=12, pady=7)
 
 
+def no_encoger(ventana):
+    """Impide encoger una ventana por debajo de lo que ocupa su contenido.
+
+    Sin esto, al arrastrar el borde de un dialogo sus ultimos elementos (la fila
+    de botones Guardar/Cancelar) se quedan sin hueco y desaparecen: hay que
+    agrandarla de nuevo para volver a verlos. Llamar al final, ya construida."""
+    try:
+        ventana.update_idletasks()
+        ventana.minsize(ventana.winfo_reqwidth(), ventana.winfo_reqheight())
+    except Exception:
+        pass
+
+
 def en_hilo(root, trabajo, al_terminar):
     """Ejecuta trabajo() en un hilo (sin tocar la UI) y llama a
     al_terminar(resultado, error) de vuelta en el hilo de la interfaz."""

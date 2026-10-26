@@ -18,7 +18,7 @@ from tkinter import ttk, messagebox, filedialog, simpledialog
 
 import rellenar_horas as core
 from fichaui import (COLOR_DANGER, COLOR_MUTED, COLOR_SUCCESS, COLOR_WARNING,
-                     en_hilo)
+                     en_hilo, no_encoger)
 
 MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
             "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
@@ -801,6 +801,7 @@ def abrir_ajustes_dias(app):
     btns.grid(row=7, column=0, columnspan=2, sticky="e", pady=(12, 0))
     ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+    no_encoger(top)   # si se encoge, Guardar/Cancelar quedarian fuera
 
 
 def abrir_integraciones(app):
@@ -962,6 +963,8 @@ def abrir_integraciones(app):
     ttk.Button(btns, text="Probar conexión", command=probar).pack(side="left")
     ttk.Button(btns, text="Guardar", command=guardar).pack(side="right", padx=4)
     ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+
+    no_encoger(top)   # si se encoge, la fila de botones quedaria fuera
 
     # Si ya había credenciales guardadas, intenta poblar los desplegables al abrir.
     if core.config_valor("inari_usuario") and core.config_valor("inari_token"):

@@ -259,6 +259,18 @@ definición completa y el historial de decisiones.
   `_barras_en_riesgo`, que recorre el árbol de widgets y falla si una barra
   `side="bottom"` va tras un expansible del mismo padre (validado contra un layout
   roto a propósito). 125 tests.
+- v2.7.3 (oct 2026): la regresión del pie **cubre también los diálogos**
+  (`TestPieSiempreVisible.test_dialogos`): abre los 9 diálogos, les pasa
+  `_barras_en_riesgo` y además **los encoge** (320×220 y 480×320) comprobando que
+  ningún botón se sale. Eso destapó dos casos reales y más suaves (abren ajustados,
+  así que solo fallaban si el usuario arrastraba el borde): «Vacaciones y
+  teletrabajo» e «Integraciones (INARI)» dejaban fuera Guardar/Cancelar. Arreglados
+  con `fichaui.no_encoger(ventana)`, que fija `minsize` al tamaño que pide el
+  contenido. Ambas comprobaciones validadas contra el código roto a propósito.
+  Nota para el test: con `en_hilo` síncrono las cargas terminan **durante** la
+  construcción del diálogo y alguno se autodestruye al fallar (`abrir_buscar_tarea`),
+  cosa que no pasa en la app real; por eso el test mockea `core.proyectos`,
+  `tareas_proyecto` y `buscar_wp`. 126 tests.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
