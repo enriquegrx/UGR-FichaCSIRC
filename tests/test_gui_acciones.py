@@ -392,6 +392,83 @@ def _barras_en_riesgo(widget, ruta="root"):
     return fallos
 
 
+class TestSegundoApunteMismaTarea(unittest.TestCase):
+    """Se puede imputar DOS veces la misma tarea el mismo día (p. ej. 6 h de
+    trabajo y 1 h de asuntos propios). Antes se saltaba en silencio."""
+
+    def setUp(self):
+        import tkinter as tk
+        import registrar_gui
+        try:
+            self.root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        self.root.withdraw()
+        self.addCleanup(self.root.destroy)
+        self.gui = registrar_gui
+        h = dt.date.today()
+        self.lunes = (h - dt.timedelta(days=h.weekday())).isoformat()
+        # Ese dia YA tiene 6 h imputadas en la tarea 111
+        self.ya = [{"id": 1, "wp_id": 111, "horas": 6.0, "wp_titulo": "T",
+                    "actividad": "soporte", "comentario": ""}]
+        parches = [
+            mock.patch.object(core, "entradas_dia",
+                              lambda f: self.ya if f == self.lunes else []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: {"soporte": "/x"}),
+            mock.patch.object(core, "FAVORITOS", [{"id": 111, "nombre": "Tarea"}]),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.app = registrar_gui.App(self.root)
+        self.addCleanup(setattr, self.app, "_logo_img", None)
+
+    def _preparar(self):
+        # "Hoy" viene marcado de serie: hay que desmarcar todo y dejar SOLO el
+        # lunes, o se crearia un apunte por cada dia marcado.
+        for var, _d, _card in self.app.dia_vars:
+            var.set(False)
+        self.app.dia_vars[0][0].set(True)      # solo el lunes
+        self.app.cbo_tarea.set("111 - Tarea")
+        self.app.ent_horas.delete(0, "end")
+        self.app.ent_horas.insert(0, "1")
+
+    def test_si_confirmas_se_graba_el_segundo_apunte(self):
+        self._preparar()
+        with mock.patch.object(self.gui.messagebox, "askyesno",
+                               lambda *a, **k: True) as _, \
+             mock.patch.object(core, "crear_entrada") as m_crear:
+            self.app._anadir()
+        m_crear.assert_called_once()           # ANTES: no se llamaba nunca
+        self.assertEqual(m_crear.call_args.args[0], self.lunes)
+        self.assertEqual(m_crear.call_args.args[2], 1.0)
+
+    def test_si_dices_que_no_se_respeta_y_no_duplica(self):
+        self._preparar()
+        with mock.patch.object(self.gui.messagebox, "askyesno",
+                               lambda *a, **k: False), \
+             mock.patch.object(core, "crear_entrada") as m_crear:
+            self.app._anadir()
+        m_crear.assert_not_called()            # se deja el dia como estaba
+
+    def test_avisa_mencionando_las_horas_que_ya_hay(self):
+        self._preparar()
+        vistos = []
+        def espia(titulo, mensaje, *a, **k):
+            vistos.append(f"{titulo}|{mensaje}")
+            return True
+        with mock.patch.object(self.gui.messagebox, "askyesno", espia), \
+             mock.patch.object(core, "crear_entrada"):
+            self.app._anadir()
+        aviso = next((v for v in vistos if "ya tiene horas" in v.lower()), "")
+        self.assertTrue(aviso, f"no se avisó del duplicado: {vistos}")
+        self.assertIn("6h", aviso)             # dice cuantas horas hay ya
+
+
 class TestNovedades(unittest.TestCase):
     """El changelog para usuarios: se lee del fichero empaquetado, sin internet."""
 

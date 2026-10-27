@@ -5,22 +5,41 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 2.7.6
+
+**Correcciones**
+- Ya puedes imputar **dos veces la misma tarea el mismo día** (por ejemplo 6 h de
+  trabajo y 1 h de asuntos propios). Antes el segundo apunte se descartaba sin
+  avisar y simplemente no aparecía. Ahora la app te pregunta si quieres añadirlo.
+
+**Mejoras**
+- En **Ayuda → Acerca de** aparecen los datos de contacto del desarrollador.
+
 ## 2.7.5
 
 **Mejoras**
-- Al elegir una tarea, el desplegable de **Actividad** se actualiza con las que
-  admite esa tarea.
-- La app **recuerda la actividad que sueles usar con cada tarea** y la pone sola.
-  Si prefieres no esperar a que la aprenda, pulsa **botón derecho sobre
-  Actividad** y fíjala tú para esa tarea.
-- Nueva ventana **Ayuda → Novedades**: esto que estás leyendo, sin tener que ir a
-  internet.
+- Pulsando **botón derecho sobre el desplegable de Actividad** puedes fijar la
+  actividad que quieras para esa tarea. Así no tienes que acordarte cada vez.
+- Nueva ventana **Ayuda → Novedades**: esto que estás leyendo, sin salir de la
+  aplicación ni necesitar internet.
+
+## 2.7.4
+
+**Mejoras**
+- Al cambiar de tarea, el desplegable de **Actividad** se actualiza con las que
+  admite esa tarea, y la app **recuerda la que sueles usar con cada una**.
+
+## 2.7.3
+
+**Correcciones**
+- En las ventanas de *Vacaciones y teletrabajo* e *Integraciones*, los botones
+  **Guardar** y **Cancelar** podían quedarse fuera si encogías la ventana.
 
 ## 2.7.2
 
 **Correcciones**
 - El pie de la ventana (los indicadores de conexión y la versión) ya **se ve
-  siempre**, aunque no tengas la ventana maximizada.
+  siempre**, aunque no la tengas maximizada.
 - La aplicación **se abre maximizada**.
 
 ## 2.7.1
@@ -35,11 +54,11 @@ instalada aparece en el pie de la ventana.
 - **Permisos por horas**. Los permisos se miden en horas, no en días enteros:
   asuntos particulares, conciliación o compensación por servicios mínimos. Botón
   derecho sobre un día → *Añadir permiso por horas*. Ese día la app te pedirá
-  menos horas, las que te queden de jornada.
+  solo las horas que te queden de jornada.
 - Si coges el día entero, el botón **Día completo** rellena tu jornada.
 - Nueva ventana **Herramientas → Permisos (horas)** con tus saldos: total, horas
   usadas y disponibles. Las horas se van **concediendo en bolsas**, cada una con
-  su fecha límite, y se añaden con *Añadir concesión*. La app avisa cuando una
+  su fecha límite, y se añaden con *Añadir concesión*. La app avisa cuando alguna
   está a punto de caducar.
 
 ## 2.6.x
@@ -78,4 +97,4 @@ instalada aparece en el pie de la ventana.
 
 ---
 
-*¿Algo no va o se te ocurre una mejora? Contacta con quien te pasó la aplicación.*
+*¿Algo no va o se te ocurre una mejora? Escribe a quique@ugr.es*

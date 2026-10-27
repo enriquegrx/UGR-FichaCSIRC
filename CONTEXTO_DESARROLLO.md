@@ -308,6 +308,19 @@ definición completa y el historial de decisiones.
   viñeta. Tests: `TestNovedades` + el diálogo entra en la batería de
   `test_dialogos`. 130 tests.
 
+- v2.7.6 (oct 2026): **arreglado el salto silencioso del segundo apunte**. En
+  `_anadir`, si el día ya tenía un apunte de ESA tarea, el nuevo se descartaba
+  (`saltados += 1; continue`) **sin avisar**: imputar 6 h de trabajo y luego 1 h
+  de asuntos propios en la misma tarea no grababa nada. La regla existía para
+  evitar duplicar al aplicar a varios días, pero impedía un caso legítimo (imputar
+  en dos tramos). Ahora se pregunta (`permitir_repetir`): «Sí» lo añade, «No»
+  mantiene el comportamiento anterior. Efecto colateral corregido: el aviso de
+  jornada superada ignoraba esos días por considerarlos saltados; ahora los cuenta
+  si se van a añadir. Tests: `TestSegundoApunteMismaTarea` (3) — ojo, «hoy» viene
+  marcado de serie, así que el test desmarca todo antes de elegir un día.
+  Además: datos del desarrollador en **Ayuda → Acerca de**, y `NOVEDADES.md`
+  completado con una entrada por versión de la 2.7.0 a la 2.7.6. 133 tests.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
   red mockeada, repartidos así:

@@ -542,8 +542,10 @@ class App:
             "Acerca de FichaCSIRC",
             f"FichaCSIRC v{core.VERSION}\n"
             f"Compilación: {self._fecha_build()}\n\n"
-            "Registro de horas en OpenProject (ProyectosTic, UGR).\n"
-            + (f"github.com/{core.GITHUB_REPO}" if core.GITHUB_REPO else ""))
+            "Registro de horas en OpenProject (ProyectosTic, UGR).\n\n"
+            "Desarrollador: Enrique Vargas Vega\n"
+            "Correo: quique@ugr.es\n"
+            + (f"\ngithub.com/{core.GITHUB_REPO}" if core.GITHUB_REPO else ""))
 
     def _atajos(self):
         messagebox.showinfo(
@@ -1441,12 +1443,33 @@ class App:
                     + "\n  ".join(nolab) + "\n\n¿Continuar igualmente?"):
                 return
 
-        # Aviso 2: en dias laborables, si con este apunte se supera la jornada
+        # Aviso 2: esa tarea YA tiene horas ese dia. No es un error: se puede
+        # imputar en dos tramos (manana y tarde, o trabajo y permiso en la misma
+        # tarea). Antes se saltaba EN SILENCIO y el apunte no aparecia, sin
+        # explicar por que. Ahora se pregunta: "Si" lo anade igual; "No" mantiene
+        # el comportamiento anterior (dejar esos dias como estan).
+        repetidos = []
+        for d in dias:
+            ya = sum(e["horas"] for e in (self._cache_dia.get(d.isoformat()) or [])
+                     if str(e.get("wp_id")) == str(wp_id))
+            if ya:
+                repetidos.append(f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}"
+                                 f" (ya tiene {core._fmt(ya)} en esta tarea)")
+        permitir_repetir = True
+        if repetidos:
+            permitir_repetir = messagebox.askyesno(
+                "Esa tarea ya tiene horas ese día",
+                "Ya hay horas de esta tarea en:\n  " + "\n  ".join(repetidos)
+                + f"\n\n¿Añadir {core._fmt(horas)} más de todas formas?\n"
+                "(Si respondes No, esos días se dejan como están.)")
+
+        # Aviso 3: en dias laborables, si con este apunte se supera la jornada
         exceso = []
         for d in dias:
             existentes = self._cache_dia.get(d.isoformat()) or []
-            if any(str(e.get("wp_id")) == str(wp_id) for e in existentes):
-                continue  # se saltara por duplicado, no suma
+            if (not permitir_repetir
+                    and any(str(e.get("wp_id")) == str(wp_id) for e in existentes)):
+                continue  # ese dia se va a saltar, no suma
             if core.es_no_laborable(d.isoformat()):
                 continue  # ya avisado arriba; su objetivo es 0
             reg = sum(a["horas"] for a in existentes)
@@ -1471,7 +1494,8 @@ class App:
             ultimo_error = ""
             for d in dias:
                 existentes = cache.get(d.isoformat()) or []
-                if any(str(e.get("wp_id")) == str(wp_id) for e in existentes):
+                if (not permitir_repetir
+                        and any(str(e.get("wp_id")) == str(wp_id) for e in existentes)):
                     saltados += 1
                     continue
                 try:
