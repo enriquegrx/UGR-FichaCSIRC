@@ -45,9 +45,15 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
   van añadiendo, p. ej. por servicios extraordinarios); el total es su suma y las
   usadas se calculan solas. La caducidad avisa, pero no descuenta sola. Se
   introducen a mano: el portal de personal no las expone por API.
-- 🏡 **Solo SisGes (opcional):** fichar los días de teletrabajo en **INARI (Kanboard)**
-  en vez de en ProyectosTIC, con clasificación por franja (columna, carril,
-  categoría) e indicador de conexión propio en el pie.
+- ☕ Distinguir la **jornada oficial** de la que se ficha: si media hora es de
+  desayuno, fichas 6,5 h al día pero **un día completo de permiso cuenta como 7 h**,
+  que es como lo descuenta el portal (`desayuno` y `horas_dia_permiso`).
+- 🔗 **Asociar una actividad con su tarea** (botón derecho sobre Actividad): al
+  elegir esa actividad, la tarea cambia sola a la que le corresponde. Hace falta
+  porque OpenProject devuelve las mismas actividades para todas las tareas y nada
+  impide imputar «Asuntos propios» en una tarea que no toca.
+- 🆕 Ver las **novedades de cada versión dentro de la app** (Ayuda → Novedades),
+  sin pasar por GitHub.
 - 📊 Consultar un resumen mensual con objetivo, horas registradas y días
   incompletos.
 - 📤 Exportar horas a CSV.
@@ -69,9 +75,9 @@ El flujo habitual es:
 4. Abrir `FichaCSIRC`.
 5. Seleccionar el día o los días, elegir tarea, revisar horas y guardar.
 
-La app evita duplicados básicos al aplicar un apunte a varios días, avisa si se
-supera la jornada configurada y mantiene la interfaz activa mientras consulta la
-API en segundo plano.
+La ventana se abre maximizada. La app avisa si se supera la jornada configurada
+o si una tarea ya tiene horas ese día (se puede imputar en dos tramos), y
+mantiene la interfaz activa mientras consulta la API en segundo plano.
 
 ## 🏡 Integración con INARI (solo SisGes, opcional)
 
@@ -168,6 +174,7 @@ configuración.
 | `build_exe.bat` | Compilación local de los `.exe` de Windows en modo carpeta (`--onedir`). |
 | `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
 | `build_macos.sh` | Compilación local de apps macOS y ZIP. |
+| `NOVEDADES.md` | Changelog para usuarios; se empaqueta y se ve en Ayuda → Novedades. |
 | `.github/workflows/` | Tests y publicación automática de releases. |
 | `tests/` | Tests del motor, del cliente INARI, del puente de destinos y de flujos de la GUI. |
 

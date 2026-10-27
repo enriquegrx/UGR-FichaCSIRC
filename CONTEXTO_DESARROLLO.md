@@ -39,6 +39,19 @@ definición completa y el historial de decisiones.
 - El recordatorio diario automatico usa `schtasks` en Windows y un LaunchAgent
   de usuario (`launchd`) en macOS.
 
+## Al cerrar una version (checklist, NO saltarse)
+Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquetar:
+1. `VERSION` en `rellenar_horas.py` **y** las 4 cadenas de `version_info.txt`.
+2. **`NOVEDADES.md`**: una entrada de la version en lenguaje llano (Mejoras /
+   Correcciones). Es lo que el usuario ve en Ayuda > Novedades; si falta, la
+   version "no existe" para el.
+3. **`README.md`**: si cambia algo que el usuario ve o una clave de config nueva,
+   tocar "Que permite hacer" y/o la tabla de estructura.
+4. **`INSTRUCCIONES.md`**: si cambia el uso diario (menus, botones, flujos).
+5. **`config.example.json`**: claves nuevas que lea el codigo.
+6. Entrada en "Hecho recientemente" de este fichero, con el **porque**, no solo el que.
+7. `python -m unittest discover -s tests -t .` en verde.
+
 ## Hecho recientemente
 - Revisión UX aplicada (jul 2026): quick wins + llamadas a la API en hilos en la
   GUI (`_en_hilo` en `registrar_gui.py`), caché de apuntes por semana, exportación

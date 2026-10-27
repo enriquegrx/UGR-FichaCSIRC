@@ -123,6 +123,13 @@ Abre **FichaCSIRC (Registrar horas)**:
   recuerdan de un vistazo).
 - 🏖️ **Importar festivos** (*Herramientas*): marca de golpe los festivos del año
   (nacionales, de Andalucía y de Granada), calculados solos, para que no te los pida.
+- 🔗 **Asociar una actividad con su tarea**: pulsa **botón derecho sobre el
+  desplegable de Actividad** y elige *Asociar*. A partir de ahí, al seleccionar
+  esa actividad la tarea cambia sola a la que corresponde (te avisa abajo). Muy
+  útil para los permisos: asocia «Asuntos propios» con la tarea de *Permisos* y
+  no se te volverá a ir a la tarea equivocada.
+- 🆕 **Ayuda → Novedades**: qué ha cambiado en cada versión, dentro de la propia
+  aplicación.
 - 📊 **Resumen del mes**: cuántas horas llevas, tu objetivo y qué días te faltan.
 - 📤 **Exportar CSV**: tus horas en un archivo que abre Excel.
 - ⏰ **Aviso diario de fichaje** (*Herramientas*): si sueles olvidarte, actívalo y
@@ -167,6 +174,14 @@ Compensación por servicios mínimos     Total 56:00 · Usadas 38:00 · Disponib
 - **Disponibles** = total − usadas. En rojo si te pasas.
 - ⏳ La app **avisa** cuando una concesión está a punto de caducar, y ⚠️ marca las
   ya caducadas — pero **no te resta horas sola**: tú decides qué hacer.
+
+> ☕ **Si descuentas el desayuno, léete esto.** Una cosa es lo que **fichas** cada
+> día y otra lo que **vale un día de permiso**. Si tu jornada oficial son 7 h pero
+> media hora es de desayuno, fichas 6,5 h… pero un día entero de asuntos propios
+> (o de baja, o de conciliación) **cuenta como 7 h**, que es como lo descuenta el
+> portal. Indícalo en el asistente de configuración: pon tu jornada **oficial** y
+> marca *Descontar desayuno*. Si no lo haces, el cupo se te queda corto (media
+> hora de más por cada día de permiso).
 
 > 💡 Las **vacaciones** siguen contándose **en días** (su cupo está en
 > *Herramientas → Vacaciones y teletrabajo*), porque así las mide el portal.
