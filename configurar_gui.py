@@ -83,6 +83,20 @@ def escribir_lanzadores():
         f.write("\n".join(reg) + "\n")
 
 
+def _desayuno_elegido(v):
+    """Horas de desayuno que el usuario ha marcado descontar (0 si no marca)."""
+    if not v["tdes"].get():
+        return 0
+    return _num_jornada(v["des"].get()) or 0
+
+
+def _jornada_fichada(v, cfg):
+    """Horas que se imputan al dia: la jornada oficial menos el desayuno."""
+    oficial = _num_jornada(v["jinv"].get()) or cfg.get("jornada_invierno", 7)
+    fichada = round(oficial - _desayuno_elegido(v), 2)
+    return fichada if fichada > 0 else oficial
+
+
 class Wizard:
     def __init__(self, root):
         self.root = root
@@ -101,9 +115,14 @@ class Wizard:
         self.v = {
             "url": tk.StringVar(value=previa.get("base_url", "https://proyectostic.ugr.es")),
             "key": tk.StringVar(value=previa.get("api_key", "")),
-            "jinv": tk.StringVar(value=_fmt_jornada(previa.get("jornada_invierno", 7))),
+            # 'jinv' es la jornada OFICIAL: lo fichado mas el desayuno que se
+            # descuenta (si no hay desayuno, coinciden).
+            "jinv": tk.StringVar(value=_fmt_jornada(
+                previa.get("jornada_invierno", 7) + (previa.get("desayuno") or 0))),
             "tver": tk.BooleanVar(value=bool(previa.get("tiene_verano", True))),
             "jver": tk.StringVar(value=_fmt_jornada(previa.get("jornada_verano", 5))),
+            "tdes": tk.BooleanVar(value=bool(previa.get("desayuno", 0))),
+            "des": tk.StringVar(value=_fmt_jornada(previa.get("desayuno", 0.5) or 0.5)),
             "vini": tk.StringVar(value=_lista_a_fecha(previa.get("verano_inicio", [6, 16]))),
             "vfin": tk.StringVar(value=_lista_a_fecha(previa.get("verano_fin", [9, 15]))),
             "act": tk.StringVar(value=previa.get("actividad_defecto")
@@ -283,23 +302,67 @@ class Wizard:
         ttk.Label(f, text="Horas por día (normal):").grid(row=0, column=0, sticky="w", pady=4)
         ttk.Spinbox(f, from_=0.5, to=24, increment=0.5,
                     textvariable=self.v["jinv"], width=6).grid(row=0, column=1, sticky="w", padx=6)
+        ttk.Label(f, text="(tu jornada oficial, p. ej. 7)",
+                  foreground="#666").grid(row=0, column=2, sticky="w", padx=6)
+
+        # Desayuno: media hora que no se ficha. Se guarda aparte porque la
+        # jornada OFICIAL hace falta para los permisos (un dia entero de asuntos
+        # propios vale la oficial, no la que se ficha).
+        ttk.Checkbutton(f, text="Descontar desayuno (no se ficha)",
+                        variable=self.v["tdes"], command=self._recalcular_jornada).grid(
+            row=1, column=0, sticky="w", pady=(10, 2))
+        self._sp_des = ttk.Spinbox(f, from_=0, to=4, increment=0.5,
+                                   textvariable=self.v["des"], width=6,
+                                   command=self._recalcular_jornada)
+        self._sp_des.grid(row=1, column=1, sticky="w", padx=6)
+        self.lbl_jornada = ttk.Label(f, text="", foreground="#0b66c3")
+        self.lbl_jornada.grid(row=2, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        self.v["jinv"].trace_add("write", lambda *_a: self._recalcular_jornada())
+        self.v["des"].trace_add("write", lambda *_a: self._recalcular_jornada())
         ttk.Checkbutton(f, text="Tengo horario de verano distinto",
                         variable=self.v["tver"], command=self._toggle_verano).grid(
-            row=1, column=0, columnspan=2, sticky="w", pady=(10, 4))
-        ttk.Label(f, text="Horas por día (verano):").grid(row=2, column=0, sticky="w", pady=4)
+            row=3, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        ttk.Label(f, text="Horas por día (verano):").grid(row=4, column=0, sticky="w", pady=4)
         sp = ttk.Spinbox(f, from_=0.5, to=24, increment=0.5,
                          textvariable=self.v["jver"], width=6)
-        sp.grid(row=2, column=1, sticky="w", padx=6)
+        sp.grid(row=4, column=1, sticky="w", padx=6)
         ttk.Label(f, text="(puedes poner medias horas, p. ej. 4.5)",
-                  foreground="#666").grid(row=2, column=2, sticky="w", padx=6)
-        ttk.Label(f, text="Inicio verano (DD/MM):").grid(row=3, column=0, sticky="w", pady=4)
+                  foreground="#666").grid(row=4, column=2, sticky="w", padx=6)
+        ttk.Label(f, text="Inicio verano (DD/MM):").grid(row=5, column=0, sticky="w", pady=4)
         e1 = ttk.Entry(f, textvariable=self.v["vini"], width=10)
-        e1.grid(row=3, column=1, sticky="w", padx=6)
-        ttk.Label(f, text="Fin verano (DD/MM):").grid(row=4, column=0, sticky="w", pady=4)
+        e1.grid(row=5, column=1, sticky="w", padx=6)
+        ttk.Label(f, text="Fin verano (DD/MM):").grid(row=6, column=0, sticky="w", pady=4)
         e2 = ttk.Entry(f, textvariable=self.v["vfin"], width=10)
-        e2.grid(row=4, column=1, sticky="w", padx=6)
+        e2.grid(row=6, column=1, sticky="w", padx=6)
         self._verano_inputs = (sp, e1, e2)
         self._toggle_verano()
+        self._recalcular_jornada()
+
+    def _recalcular_jornada(self):
+        """Muestra en vivo cuanto se ficha: jornada oficial menos el desayuno.
+
+        Se guardan los dos numeros por separado porque sirven para cosas
+        distintas: la fichada son las horas que se imputan cada dia, y la
+        oficial es lo que vale un dia completo de permiso."""
+        hay = bool(self.v["tdes"].get())
+        if getattr(self, "_sp_des", None) is not None:
+            self._sp_des.configure(state=("normal" if hay else "disabled"))
+        oficial = _num_jornada(self.v["jinv"].get())
+        des = (_num_jornada(self.v["des"].get()) or 0) if hay else 0
+        if oficial is None:
+            self.lbl_jornada.config(text="")
+            return
+        fichas = round(oficial - des, 2)
+        if des and fichas > 0:
+            self.lbl_jornada.config(
+                text=f"Jornada {_fmt_jornada(oficial)} h − {_fmt_jornada(des)} h de "
+                     f"desayuno = fichas {_fmt_jornada(fichas)} h al día "
+                     f"(un día de permiso cuenta como {_fmt_jornada(oficial)} h)")
+        elif des:
+            self.lbl_jornada.config(text="El desayuno no puede ser igual o mayor "
+                                         "que la jornada.")
+        else:
+            self.lbl_jornada.config(text=f"Fichas {_fmt_jornada(oficial)} h al día.")
 
     def _toggle_verano(self):
         estado = "normal" if self.v["tver"].get() else "disabled"
@@ -436,8 +499,11 @@ class Wizard:
         cfg.update({
             "base_url": self.v["url"].get().strip().rstrip("/"),
             "api_key": self.v["key"].get().strip(),
-            "jornada_invierno": _num_jornada(self.v["jinv"].get())
-                                or cfg.get("jornada_invierno", 7),
+            "jornada_invierno": _jornada_fichada(self.v, cfg),
+            "desayuno": _desayuno_elegido(self.v),
+            # Lo que vale un dia completo de permiso: la jornada OFICIAL.
+            "horas_dia_permiso": _num_jornada(self.v["jinv"].get())
+                                 or cfg.get("horas_dia_permiso", 7),
             "tiene_verano": bool(self.v["tver"].get()),
             "jornada_verano": _num_jornada(self.v["jver"].get())
                               or cfg.get("jornada_verano", 5),

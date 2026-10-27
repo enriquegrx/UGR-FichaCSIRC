@@ -405,15 +405,36 @@ class TestPermisos(unittest.TestCase):
              mock.patch.object(core, "guardar_config_valor", lambda *a: None):
             core.anadir_permiso(self.LUNES, "conciliacion", "2:00")
             self.assertEqual(core.horas_permiso(self.LUNES), 2.0)
-            # el total del dia no puede pasar de la jornada (5h): 2h + 4h = 6h
+            # El tope es lo que vale un DIA COMPLETO de permiso (7h), no la
+            # jornada que se ficha: 2h + 6h = 8h se pasa.
             with self.assertRaises(ValueError):
-                core.anadir_permiso(self.LUNES, "conciliacion", "4:00")
+                core.anadir_permiso(self.LUNES, "conciliacion", "6:00")
             with self.assertRaises(ValueError):  # tipo inexistente
                 core.anadir_permiso(self.LUNES, "no_existe", "1:00")
             with self.assertRaises(ValueError):  # horas no positivas
                 core.anadir_permiso(self.LUNES, "conciliacion", "0")
             with self.assertRaises(ValueError):  # fecha invalida
                 core.anadir_permiso("no-es-fecha", "conciliacion", "1:00")
+
+    def test_dia_completo_de_permiso_son_7h_aunque_se_fichen_menos(self):
+        """Un dia entero de permiso vale la jornada OFICIAL. El 06/07 es verano
+        (se fichan 5h), pero el permiso de dia completo son 7h: si se topara en
+        la jornada fichada, el cupo se consumiria de menos frente al portal."""
+        with mock.patch.object(core, "PERMISOS", {}), \
+             mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            self.assertEqual(core.jornada_de(self.D_LUNES), 5)      # se fichan 5h
+            self.assertEqual(core.horas_dia_permiso(), 7.0)         # el permiso, 7h
+            core.anadir_permiso(self.LUNES, "asuntos_particulares", "7:00")
+            self.assertEqual(core.horas_permiso(self.LUNES), 7.0)
+
+    def test_desayuno_separa_lo_fichado_de_lo_oficial(self):
+        """Con jornada fichada 6,5h y 0,5h de desayuno, un dia de permiso son 7h."""
+        def cfg(c, d=None):
+            return {"desayuno": 0.5}.get(c, d)
+        with mock.patch.object(core, "config_valor", cfg), \
+             mock.patch.object(core, "JORNADA_INV", 6.5):
+            self.assertEqual(core.desayuno(), 0.5)
+            self.assertEqual(core.horas_dia_permiso(), 7.0)
 
     def test_anadir_permiso_dia_entero_deja_objetivo_a_cero(self):
         with mock.patch.object(core, "NO_LABORABLES", {}), \

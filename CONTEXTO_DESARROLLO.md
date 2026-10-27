@@ -321,6 +321,28 @@ definición completa y el historial de decisiones.
   Además: datos del desarrollador en **Ayuda → Acerca de**, y `NOVEDADES.md`
   completado con una entrada por versión de la 2.7.0 a la 2.7.6. 133 tests.
 
+- v2.8.0 (oct 2026): **asociación actividad ↔ tarea** y **desayuno**.
+  (1) Hallazgo verificado contra la API: en esta instancia **las 16 tareas
+  favoritas devuelven las MISMAS 8 actividades** (están definidas por proyecto,
+  no por work package), así que `_actividades_de_tarea` no puede filtrar nada y
+  nada impedía imputar «Asuntos propios» sobre «Mantenimientos» — que es lo que
+  le pasó al usuario. La relación la pone ahora el usuario: `_asociar` escribe en
+  los DOS sentidos (`actividades_tarea` tarea→actividad y `tareas_actividad`
+  actividad→tarea) y `_tarea_de_actividad` (bind a `<<ComboboxSelected>>` de
+  `cbo_act`) cambia la tarea al elegir una actividad asociada, avisando en la
+  barra de estado. No adivina nunca (solo asociaciones creadas a mano) y mover la
+  tarea después a mano se respeta: `set()` no dispara `<<ComboboxSelected>>`, así
+  que no hay bucle ni se pisa la actividad elegida.
+  (2) **Desayuno**: `desayuno()` y `horas_dia_permiso()`. La jornada que se ficha
+  (6,5 h) y lo que vale un día completo de permiso (7 h) son cosas distintas; el
+  cupo se mide con la oficial (70:00 h = 10 días × 7 h), así que topar en la
+  jornada consumía media hora de menos por día. El tope de `anadir_permiso` pasa a
+  `max(jornada_de(dia), horas_dia_permiso())` y el botón «Día completo» usa la
+  oficial. El wizard pregunta la jornada oficial + «Descontar desayuno» y guarda
+  `jornada_invierno` (fichada), `desayuno` y `horas_dia_permiso`; al recargar,
+  `jinv` muestra la oficial (fichada + desayuno), así que es compatible con las
+  configuraciones que ya existían. 139 tests.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
   red mockeada, repartidos así:

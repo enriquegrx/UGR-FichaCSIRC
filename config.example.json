@@ -4,6 +4,8 @@
   "jornada_invierno": 7,
   "tiene_verano": true,
   "jornada_verano": 5,
+  "desayuno": 0,
+  "horas_dia_permiso": 7,
   "verano_inicio": [
     6,
     16
@@ -18,6 +20,7 @@
   "plantillas": [],
   "comentarios_tarea": {},
   "actividades_tarea": {},
+  "tareas_actividad": {},
   "guardias": [],
   "teletrabajo": [],
   "comentario_guardia": "Servicio de Guardia",

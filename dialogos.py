@@ -1126,9 +1126,10 @@ def abrir_permiso_dia(app, dia):
                             "Revisa Herramientas > Permisos (horas).")
         return
     anio = dia.year
-    jornada = core.jornada_de(dia)
+    jornada = core.jornada_de(dia)          # lo que se ficha ese dia (p. ej. 6,5 h)
+    dia_entero = core.horas_dia_permiso()   # lo que vale un dia de permiso (7 h)
     ya = core.horas_permiso(fecha)
-    libre = round(jornada - ya, 2)
+    libre = round(max(jornada, dia_entero) - ya, 2)
     if libre <= 0:
         messagebox.showinfo(
             "Permisos",
@@ -1159,10 +1160,11 @@ def abrir_permiso_dia(app, dia):
     e_horas.grid(row=2, column=1, sticky="w", padx=6)
 
     def _dia_completo():
-        """Atajo: un dia entero de permiso son las horas que quedan de jornada."""
+        """Un dia entero de permiso vale la jornada OFICIAL (7 h), no la que se
+        ficha (6,5 h): es asi como lo descuenta el portal del cupo."""
         e_horas.delete(0, "end")
-        e_horas.insert(0, core.fmt_horas_hhmm(libre))
-    ttk.Button(frm, text=f"Día completo ({core.fmt_horas_hhmm(libre)})",
+        e_horas.insert(0, core.fmt_horas_hhmm(round(dia_entero - ya, 2)))
+    ttk.Button(frm, text=f"Día completo ({core.fmt_horas_hhmm(dia_entero)})",
                command=_dia_completo).grid(row=2, column=2, sticky="w", padx=(0, 2))
 
     lbl_info = ttk.Label(frm, text="", foreground=COLOR_MUTED,
@@ -1175,8 +1177,11 @@ def abrir_permiso_dia(app, dia):
             return
         disp = core.permiso_disponible(t["id"], anio)
         txt = (f"Disponible en {anio}: {core.fmt_horas_hhmm(disp)}   ·   "
-               f"Máximo hoy: {core.fmt_horas_hhmm(libre)} "
-               f"(jornada {core.fmt_horas_hhmm(jornada)})")
+               f"Máximo hoy: {core.fmt_horas_hhmm(libre)}   ·   "
+               f"día completo = {core.fmt_horas_hhmm(dia_entero)}")
+        if abs(dia_entero - jornada) > 0.01:
+            txt += ("\n(fichas " + core.fmt_horas_hhmm(jornada) + " al día; un día"
+                    " de permiso cuenta como " + core.fmt_horas_hhmm(dia_entero) + ")")
         color = COLOR_MUTED
         caducadas = core.concesiones_caducadas(t["id"])
         proximas = core.concesiones_por_caducar(t["id"])

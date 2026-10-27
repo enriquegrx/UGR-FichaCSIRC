@@ -321,20 +321,20 @@ class TestActividadesPorTarea(unittest.TestCase):
         self.assertEqual(list(self.app.cbo_act["values"]),
                          ["Soporte-Incidencias", "Formación"])
 
-    def test_fijar_actividad_sin_haberla_usado(self):
-        """Fijarla a mano escribe en la MISMA clave que el aprendizaje, asi que
-        surte efecto al instante, sin tener que imputar antes."""
+    def test_asociar_surte_efecto_sin_haber_imputado(self):
+        """Asociar a mano escribe en la MISMA clave que el aprendizaje, así que
+        vale al instante, sin tener que imputar antes."""
         guardado = {}
-        with mock.patch.object(core, "guardar_config_valor",
-                               lambda k, v: guardado.update({k: v})),              mock.patch.object(core, "config_valor",
+        with mock.patch.object(core, "guardar_config_valores", guardado.update), \
+             mock.patch.object(core, "config_valor",
                                lambda c, d=None: guardado.get(c, d)):
-            self.app._fijar_actividad(222, "Asuntos propios")
+            self.app._asociar(222, "Asuntos propios")
             self.assertEqual(guardado["actividades_tarea"], {"222": "Asuntos propios"})
             # Se preselecciona ya, sin haber creado ningun apunte
             self.app._poner_actividades(["Asuntos propios", "Baja"], 222)
             self.assertEqual(self.app.cbo_act.get(), "Asuntos propios")
             # Y se puede quitar
-            self.app._fijar_actividad(222, None)
+            self.app._desasociar("Asuntos propios")
             self.assertEqual(guardado["actividades_tarea"], {})
 
     def test_recuerda_la_actividad_de_cada_tarea(self):
@@ -390,6 +390,89 @@ def _barras_en_riesgo(widget, ruta="root"):
     for n, hijo in enumerate(widget.winfo_children()):
         fallos += _barras_en_riesgo(hijo, f"{ruta}/{hijo.winfo_class()}[{n}]")
     return fallos
+
+
+class TestAsociacionActividadTarea(unittest.TestCase):
+    """El caso real: elegir «Asuntos propios» debe llevar el apunte a la tarea
+    de Permisos, no quedarse en Mantenimientos. OpenProject no sabe de esa
+    relación (devuelve las mismas actividades para todas las tareas), así que
+    la pone el usuario una vez."""
+
+    MANTEN, PERMISOS = 11754, 12154
+
+    def setUp(self):
+        import tkinter as tk
+        import registrar_gui
+        try:
+            self.root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        self.root.withdraw()
+        self.addCleanup(self.root.destroy)
+        self.cfg = {}
+        parches = [
+            mock.patch.object(core, "entradas_dia", lambda f: []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: {"Actuaciones técnicas": "/a/1",
+                                          "Asuntos propios": "/a/2"}),
+            mock.patch.object(core, "FAVORITOS",
+                              [{"id": self.MANTEN, "nombre": "Mantenimientos"},
+                               {"id": self.PERMISOS, "nombre": "Permisos"}]),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+            mock.patch.object(core, "config_valor",
+                              lambda c, d=None: self.cfg.get(c, d)),
+            mock.patch.object(core, "guardar_config_valores", self.cfg.update),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.app = registrar_gui.App(self.root)
+        self.addCleanup(setattr, self.app, "_logo_img", None)
+
+    def test_elegir_la_actividad_lleva_a_su_tarea(self):
+        self.app._asociar(self.PERMISOS, "Asuntos propios")
+        # Situacion del miercoles 14: se parte de Mantenimientos
+        self.app.cbo_tarea.set(f"{self.MANTEN} - Mantenimientos")
+        self.app.cbo_act.set("Asuntos propios")
+        self.app.cbo_act.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.assertEqual(self.app.tareas.get(self.app.cbo_tarea.get()),
+                         self.PERMISOS, "la tarea no saltó a Permisos")
+        self.assertIn("Tarea cambiada", self.app.status.cget("text"))
+
+    def test_sin_asociacion_no_toca_nada(self):
+        """La app nunca adivina: sin asociación creada, la tarea se queda."""
+        self.app.cbo_tarea.set(f"{self.MANTEN} - Mantenimientos")
+        self.app.cbo_act.set("Asuntos propios")
+        self.app.cbo_act.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.assertEqual(self.app.tareas.get(self.app.cbo_tarea.get()), self.MANTEN)
+
+    def test_cambiar_la_tarea_a_mano_se_respeta(self):
+        """La regla salta al tocar la ACTIVIDAD, no en bucle: si luego mueves la
+        tarea a mano, se queda donde la dejes."""
+        self.app._asociar(self.PERMISOS, "Asuntos propios")
+        self.app.cbo_act.set("Asuntos propios")
+        self.app.cbo_act.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.app.cbo_tarea.set(f"{self.MANTEN} - Mantenimientos")
+        self.app.cbo_tarea.event_generate("<<ComboboxSelected>>")
+        self.root.update()
+        self.assertEqual(self.app.tareas.get(self.app.cbo_tarea.get()), self.MANTEN)
+
+    def test_la_asociacion_vale_en_los_dos_sentidos(self):
+        self.app._asociar(self.PERMISOS, "Asuntos propios")
+        self.assertEqual(self.cfg["tareas_actividad"], {"Asuntos propios": self.PERMISOS})
+        self.assertEqual(self.cfg["actividades_tarea"], {str(self.PERMISOS): "Asuntos propios"})
+        # al elegir la TAREA, se preselecciona su actividad
+        self.app._poner_actividades(["Actuaciones técnicas", "Asuntos propios"],
+                                    self.PERMISOS)
+        self.assertEqual(self.app.cbo_act.get(), "Asuntos propios")
+        # y se puede deshacer
+        self.app._desasociar("Asuntos propios")
+        self.assertEqual(self.cfg["tareas_actividad"], {})
 
 
 class TestSegundoApunteMismaTarea(unittest.TestCase):

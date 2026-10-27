@@ -5,6 +5,20 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 2.8.0
+
+**Mejoras**
+- **Asociar una actividad con su tarea.** Pulsa **botón derecho sobre Actividad**
+  y elige *Asociar*. A partir de ahí, al seleccionar esa actividad la tarea
+  cambia sola a la que le corresponde (te avisa abajo). Útil para los permisos:
+  asocia «Asuntos propios» con la tarea de *Permisos* y no volverá a irse a la
+  tarea equivocada.
+- **El desayuno ya no descuadra los permisos.** En el asistente puedes indicar tu
+  jornada oficial (por ejemplo 7 h) y marcar *Descontar desayuno* (0,5 h): fichas
+  6,5 h al día, pero **un día completo de permiso cuenta como 7 h**, que es como
+  lo descuenta el portal de personal. Antes se consumía media hora de menos por
+  cada día de permiso.
+
 ## 2.7.6
 
 **Correcciones**

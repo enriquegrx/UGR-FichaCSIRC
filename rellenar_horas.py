@@ -46,7 +46,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.7.6"
+VERSION = "2.8.0"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -788,6 +788,30 @@ def fmt_horas_hhmm(horas):
     return f"{signo}{total // 60}:{total % 60:02d}"
 
 
+def desayuno():
+    """Horas de desayuno que NO se fichan.
+
+    La jornada oficial puede ser de 7 h pero imputarse 6,5 porque media hora es
+    de desayuno. Se guarda aparte para no perder el dato: la jornada oficial
+    hace falta para los permisos (ver horas_dia_permiso)."""
+    return parsear_horas(config_valor("desayuno", 0)) or 0.0
+
+
+def horas_dia_permiso():
+    """Lo que vale un DIA COMPLETO de permiso (asuntos propios, baja,
+    conciliacion, vacaciones): la jornada OFICIAL, no la que se ficha.
+
+    Importa porque el cupo se mide con la oficial: 70:00 h de asuntos
+    particulares son 10 dias de 7 h. Si se usara la jornada fichada (6,5 h) se
+    consumiria media hora de menos por dia y el saldo acabaria descuadrado
+    respecto al portal de personal."""
+    explicito = parsear_horas(config_valor("horas_dia_permiso"))
+    if explicito:
+        return explicito
+    # Sin configurar: jornada de invierno mas el desayuno que se descuenta.
+    return round((parsear_horas(JORNADA_INV) or 0.0) + desayuno(), 2)
+
+
 def permisos_tipos():
     """Catalogo de tipos de permiso. La config manda sobre el de por defecto."""
     tipos = config_valor("permisos_tipos") or PERMISOS_TIPOS_DEFECTO
@@ -829,7 +853,10 @@ def anadir_permiso(fecha_iso, tipo_id, horas):
         dia = dt.date.fromisoformat(fecha_iso)
     except ValueError:
         raise ValueError("Fecha no válida.")
-    tope = jornada_de(dia)
+    # Tope: lo que valga un dia completo de permiso (7 h) o la jornada si fuera
+    # mayor. Con jornada fichada 6,5 h un dia entero de permiso son 7 h, asi que
+    # no se puede topar en la jornada o no dejaria registrarlo.
+    tope = max(jornada_de(dia), horas_dia_permiso())
     if horas_permiso(fecha_iso) + h > tope + 1e-9:
         raise ValueError(
             f"Las horas de permiso del día no pueden superar la jornada ({_fmt(tope)}).")

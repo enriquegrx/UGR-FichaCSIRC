@@ -389,8 +389,10 @@ class App:
         # Boton derecho: fijar esta actividad para la tarea elegida, sin esperar
         # a que la app la aprenda sola al imputar.
         self.cbo_act.bind("<Button-3>", self._menu_actividad)
+        # Al elegir una actividad asociada, la tarea salta sola a la suya.
+        self.cbo_act.bind("<<ComboboxSelected>>", self._tarea_de_actividad)
         Tooltip(self.cbo_act, "Actividad con la que se imputan las horas. "
-                              "Botón derecho: fijarla para la tarea elegida.")
+                              "Botón derecho: asociarla con la tarea elegida.")
 
         ttk.Label(form, text="Comentario:", background=COLOR_PANEL).grid(row=3, column=0, sticky="w")
         self.ent_com = ttk.Entry(form, width=50)
@@ -648,39 +650,77 @@ class App:
             self.cbo_act.current(idx)
 
     def _menu_actividad(self, evento):
-        """Menu del boton derecho sobre Actividad: fijarla para esta tarea.
+        """Menu del boton derecho sobre Actividad: asociarla con la tarea.
 
-        Escribe en la misma clave `actividades_tarea` que usa el aprendizaje
-        automatico; la diferencia es que no hay que haber imputado antes."""
+        La asociacion vale en los DOS sentidos, que es lo que hace falta:
+        OpenProject no sabe que "Asuntos propios" va en la tarea de Permisos
+        (devuelve las mismas actividades para todas las tareas), asi que esa
+        relacion la pone el usuario una vez y la app la respeta."""
         wp_id = self.tareas.get(self.cbo_tarea.get())
         actividad = self.cbo_act.get()
         if wp_id is None or not actividad:
             return
         nombre_tarea = self.cbo_tarea.get().split(" - ", 1)[-1]
-        fijada = (core.config_valor("actividades_tarea") or {}).get(str(wp_id))
+        asociada = (core.config_valor("tareas_actividad") or {}).get(actividad)
         menu = tk.Menu(self.root, tearoff=0)
         menu.add_command(
-            label=f"Usar siempre «{actividad}» para «{nombre_tarea[:34]}»",
-            command=lambda: self._fijar_actividad(wp_id, actividad))
-        if fijada:
-            menu.add_command(label=f"Quitar la fijada («{fijada}»)",
-                             command=lambda: self._fijar_actividad(wp_id, None))
+            label=f"Asociar «{actividad}» con «{nombre_tarea[:32]}»",
+            command=lambda: self._asociar(wp_id, actividad))
+        if asociada is not None:
+            menu.add_command(label=f"Quitar la asociación de «{actividad}»",
+                             command=lambda: self._desasociar(actividad))
         menu.tk_popup(evento.x_root, evento.y_root)
 
-    def _fijar_actividad(self, wp_id, actividad):
-        """Fija (o quita) la actividad asociada a una tarea."""
+    def _asociar(self, wp_id, actividad):
+        """Enlaza actividad <-> tarea en los dos sentidos."""
         try:
-            mapa = dict(core.config_valor("actividades_tarea") or {})
-            if actividad:
-                mapa[str(wp_id)] = actividad
-            else:
-                mapa.pop(str(wp_id), None)
-            core.guardar_config_valor("actividades_tarea", mapa)
+            por_tarea = dict(core.config_valor("actividades_tarea") or {})
+            por_actividad = dict(core.config_valor("tareas_actividad") or {})
+            por_tarea[str(wp_id)] = actividad
+            por_actividad[actividad] = int(wp_id)
+            core.guardar_config_valores({"actividades_tarea": por_tarea,
+                                         "tareas_actividad": por_actividad})
         except Exception:
             return
+        self.status.config(text=f"«{actividad}» queda asociada a esa tarea.")
+
+    def _desasociar(self, actividad):
+        try:
+            por_actividad = dict(core.config_valor("tareas_actividad") or {})
+            wp_id = por_actividad.pop(actividad, None)
+            por_tarea = dict(core.config_valor("actividades_tarea") or {})
+            if wp_id is not None:
+                por_tarea.pop(str(wp_id), None)
+            core.guardar_config_valores({"actividades_tarea": por_tarea,
+                                         "tareas_actividad": por_actividad})
+        except Exception:
+            return
+        self.status.config(text=f"Asociación de «{actividad}» retirada.")
+
+    def _tarea_de_actividad(self, _e=None):
+        """Al elegir una actividad asociada, salta a SU tarea.
+
+        Es el caso que fallaba: elegir "Asuntos propios" y que el apunte se
+        fuera a Mantenimientos porque la tarea no se movia. Solo actua con
+        asociaciones creadas a mano; nunca adivina. Cambiar la tarea despues a
+        mano se respeta (la regla salta al tocar la ACTIVIDAD, no en bucle)."""
+        actividad = self.cbo_act.get()
+        destino = (core.config_valor("tareas_actividad") or {}).get(actividad)
+        if destino is None:
+            return
+        if self.tareas.get(self.cbo_tarea.get()) == int(destino):
+            return                      # ya esta en su tarea
+        etiqueta = next((t for t, wid in self.tareas.items()
+                         if wid == int(destino)), None)
+        if etiqueta is None:
+            return                      # la tarea asociada ya no esta en la lista
+        self.cbo_tarea.set(etiqueta)
+        # set() no dispara <<ComboboxSelected>>, asi que NO se recarga la lista
+        # de actividades: justo lo que interesa, para no pisar la elegida.
+        self._sugerir_comentario()
         self.status.config(
-            text=(f"Actividad fijada: «{actividad}» para esa tarea." if actividad
-                  else "Actividad fijada quitada."))
+            text=f"Tarea cambiada a «{etiqueta.split(' - ', 1)[-1][:40]}» "
+                 f"por la actividad elegida.")
 
     def _recordar_actividad(self, wp_id, actividad):
         """Guarda la actividad usada con la tarea para preseleccionarla despues
