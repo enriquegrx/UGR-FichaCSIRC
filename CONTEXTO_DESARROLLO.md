@@ -292,6 +292,21 @@ definición completa y el historial de decisiones.
   impide imputar (validado con `POST /time_entries/form`, sin crear nada). Las
   **vacaciones no tienen tarea ni actividad**: no se imputan, y la app ya las
   trata como día no laborable, que es lo correcto.
+- v2.7.5 (oct 2026): **fijar la actividad de una tarea** y **visor de novedades**.
+  (1) El aprendizaje de `actividades_tarea` solo surtía efecto tras imputar una
+  vez; ahora con **botón derecho sobre el desplegable de Actividad** se fija al
+  instante (`_menu_actividad` / `_fijar_actividad`). No es un mecanismo nuevo:
+  escribe en la MISMA clave que lee `_poner_actividades`, así que la fontanería
+  ya estaba probada. Nota: en esta instancia **todas las tareas ofrecen las mismas
+  8 actividades** (están definidas por proyecto, no por tarea), así que la recarga
+  de v2.7.4 no cambia la lista visiblemente; lo útil es la preselección.
+  (2) Nuevo `NOVEDADES.md` (changelog en lenguaje llano, para usuarios) que se
+  empaqueta con `--add-data` y se muestra en **Ayuda → Novedades**
+  (`dialogos.abrir_novedades`), para no mandar a nadie a los mensajes de commit de
+  GitHub. El visor **vuelve a unir las líneas partidas a 80 columnas** del fichero;
+  si no, cada trozo se pintaba como párrafo suelto y perdía la sangría de su
+  viñeta. Tests: `TestNovedades` + el diálogo entra en la batería de
+  `test_dialogos`. 130 tests.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la

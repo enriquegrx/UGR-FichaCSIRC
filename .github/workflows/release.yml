@@ -39,7 +39,7 @@ jobs:
           pyinstaller --noconfirm --clean --onedir --windowed --noupx
           --name "FichaCSIRC" --icon "fichacsirc.ico"
           --version-file "version_info.txt"
-          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;."
           registrar_gui.py
 
       - name: Construir FichaCSIRC-Configurar (carpeta)
@@ -47,7 +47,7 @@ jobs:
           pyinstaller --noconfirm --clean --onedir --windowed --noupx
           --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico"
           --version-file "version_info.txt"
-          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;."
           configurar_gui.py
 
       - name: Instalar Inno Setup

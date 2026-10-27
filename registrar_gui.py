@@ -386,6 +386,11 @@ class App:
                   background=COLOR_PANEL).pack(side="left", padx=(18, 6))
         self.cbo_act = ttk.Combobox(fila_ha, state="readonly", width=24)
         self.cbo_act.pack(side="left")
+        # Boton derecho: fijar esta actividad para la tarea elegida, sin esperar
+        # a que la app la aprenda sola al imputar.
+        self.cbo_act.bind("<Button-3>", self._menu_actividad)
+        Tooltip(self.cbo_act, "Actividad con la que se imputan las horas. "
+                              "Botón derecho: fijarla para la tarea elegida.")
 
         ttk.Label(form, text="Comentario:", background=COLOR_PANEL).grid(row=3, column=0, sticky="w")
         self.ent_com = ttk.Entry(form, width=50)
@@ -495,6 +500,8 @@ class App:
 
         m_ayuda = tk.Menu(barra, tearoff=0)
         m_ayuda.add_command(label="Atajos de teclado", command=self._atajos)
+        m_ayuda.add_command(label="Novedades (qué hay de nuevo)",
+                            command=lambda: dialogos.abrir_novedades(self))
         m_ayuda.add_command(label="Comprobar actualizaciones",
                             command=lambda: self._comprobar_actualizacion(forzar=True))
         if core.GITHUB_REPO:
@@ -637,6 +644,41 @@ class App:
                 idx = i
         if nombres:
             self.cbo_act.current(idx)
+
+    def _menu_actividad(self, evento):
+        """Menu del boton derecho sobre Actividad: fijarla para esta tarea.
+
+        Escribe en la misma clave `actividades_tarea` que usa el aprendizaje
+        automatico; la diferencia es que no hay que haber imputado antes."""
+        wp_id = self.tareas.get(self.cbo_tarea.get())
+        actividad = self.cbo_act.get()
+        if wp_id is None or not actividad:
+            return
+        nombre_tarea = self.cbo_tarea.get().split(" - ", 1)[-1]
+        fijada = (core.config_valor("actividades_tarea") or {}).get(str(wp_id))
+        menu = tk.Menu(self.root, tearoff=0)
+        menu.add_command(
+            label=f"Usar siempre «{actividad}» para «{nombre_tarea[:34]}»",
+            command=lambda: self._fijar_actividad(wp_id, actividad))
+        if fijada:
+            menu.add_command(label=f"Quitar la fijada («{fijada}»)",
+                             command=lambda: self._fijar_actividad(wp_id, None))
+        menu.tk_popup(evento.x_root, evento.y_root)
+
+    def _fijar_actividad(self, wp_id, actividad):
+        """Fija (o quita) la actividad asociada a una tarea."""
+        try:
+            mapa = dict(core.config_valor("actividades_tarea") or {})
+            if actividad:
+                mapa[str(wp_id)] = actividad
+            else:
+                mapa.pop(str(wp_id), None)
+            core.guardar_config_valor("actividades_tarea", mapa)
+        except Exception:
+            return
+        self.status.config(
+            text=(f"Actividad fijada: «{actividad}» para esa tarea." if actividad
+                  else "Actividad fijada quitada."))
 
     def _recordar_actividad(self, wp_id, actividad):
         """Guarda la actividad usada con la tarea para preseleccionarla despues

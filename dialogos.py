@@ -11,6 +11,7 @@ flujo del dia a dia.
 
 import os
 import csv
+import webbrowser
 import calendar
 import datetime as dt
 import tkinter as tk
@@ -1349,3 +1350,99 @@ def abrir_permisos(app):
     btns.pack(fill="x", pady=(12, 0))
     ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
     return top
+
+
+# ----------------------- novedades (changelog para usuarios) -----------------------
+
+def abrir_novedades(app):
+    """Muestra NOVEDADES.md: qué ha cambiado en cada versión, en lenguaje llano.
+
+    Se lee del fichero que se empaqueta con la app, no de internet: así funciona
+    sin conexión y sin mandar al usuario a GitHub, que es mucho más técnico."""
+    top = tk.Toplevel(app.root)
+    top.title(f"Novedades · FichaCSIRC {core.VERSION}")
+    top.transient(app.root)
+    top.grab_set()
+    top.geometry("660x560")
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+
+    # El pie primero: así los botones nunca se quedan sin hueco al encoger.
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", side="bottom", pady=(10, 0))
+    ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
+    if core.GITHUB_REPO:
+        ttk.Button(btns, text="Ver todo en GitHub",
+                   command=lambda: webbrowser.open(
+                       f"https://github.com/{core.GITHUB_REPO}/releases")).pack(side="left")
+
+    ttk.Label(frm, text="Qué hay de nuevo",
+              font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
+    ttk.Label(frm, text=f"Tienes instalada la versión {core.VERSION}.",
+              foreground=COLOR_MUTED).pack(anchor="w", pady=(0, 8))
+
+    caja = ttk.Frame(frm)
+    caja.pack(fill="both", expand=True)
+    txt = tk.Text(caja, wrap="word", relief="flat", padx=10, pady=8,
+                  background="#ffffff", borderwidth=1, highlightthickness=1,
+                  highlightbackground="#d7dce2")
+    sb = ttk.Scrollbar(caja, orient="vertical", command=txt.yview)
+    txt.configure(yscrollcommand=sb.set)
+    sb.pack(side="right", fill="y")
+    txt.pack(side="left", fill="both", expand=True)
+
+    # Estilos: titulo de version en grande, apartados en negrita, vinetas sangradas
+    txt.tag_configure("version", font=("TkDefaultFont", 12, "bold"),
+                      foreground="#0b66c3", spacing1=12, spacing3=4)
+    txt.tag_configure("apartado", font=("TkDefaultFont", 9, "bold"),
+                      spacing1=6, spacing3=2)
+    txt.tag_configure("punto", lmargin1=14, lmargin2=28, spacing3=3)
+    txt.tag_configure("normal", spacing3=4)
+
+    try:
+        with open(app._recurso("NOVEDADES.md"), encoding="utf-8") as f:
+            lineas = f.read().splitlines()
+    except Exception:
+        lineas = ["No se encontró el fichero de novedades.",
+                  "Puedes consultarlas en GitHub con el botón de abajo."]
+
+    # El fichero trae las lineas partidas a 80 columnas; hay que volver a
+    # juntarlas o cada trozo se pintaria como un parrafo suelto y perderia la
+    # sangria de su vineta. Se acumula el bloque y se vuelca al cambiar de tipo.
+    estado = {"txt": "", "estilo": "normal"}
+
+    def volcar():
+        if estado["txt"].strip():
+            txt.insert("end", estado["txt"].strip() + "\n", estado["estilo"])
+        estado["txt"], estado["estilo"] = "", "normal"
+
+    def suelta(contenido, estilo):
+        volcar()
+        txt.insert("end", contenido + "\n", estilo)
+
+    for ln in lineas:
+        limpio = ln.strip()
+        if limpio in ("---", "# Novedades de FichaCSIRC"):
+            continue
+        if limpio.startswith("## "):
+            suelta("Versión " + limpio[3:], "version")
+        elif limpio.startswith("**") and limpio.endswith("**"):
+            suelta(_sin_marcas(limpio), "apartado")
+        elif limpio.startswith("- "):
+            volcar()
+            estado["txt"] = "•  " + _sin_marcas(limpio[2:])
+            estado["estilo"] = "punto"
+        elif limpio:
+            estado["txt"] = (estado["txt"] + " " + _sin_marcas(limpio)).strip()
+        else:
+            volcar()
+    volcar()
+    txt.configure(state="disabled")
+    no_encoger(top)
+    top._texto = txt   # para los tests
+    return top
+
+
+def _sin_marcas(t):
+    """Quita el marcado de Markdown que no se va a pintar (**negrita**, *cursiva*)."""
+    return t.replace("**", "").replace("*", "")

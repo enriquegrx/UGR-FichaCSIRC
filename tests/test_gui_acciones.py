@@ -321,6 +321,22 @@ class TestActividadesPorTarea(unittest.TestCase):
         self.assertEqual(list(self.app.cbo_act["values"]),
                          ["Soporte-Incidencias", "Formación"])
 
+    def test_fijar_actividad_sin_haberla_usado(self):
+        """Fijarla a mano escribe en la MISMA clave que el aprendizaje, asi que
+        surte efecto al instante, sin tener que imputar antes."""
+        guardado = {}
+        with mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})),              mock.patch.object(core, "config_valor",
+                               lambda c, d=None: guardado.get(c, d)):
+            self.app._fijar_actividad(222, "Asuntos propios")
+            self.assertEqual(guardado["actividades_tarea"], {"222": "Asuntos propios"})
+            # Se preselecciona ya, sin haber creado ningun apunte
+            self.app._poner_actividades(["Asuntos propios", "Baja"], 222)
+            self.assertEqual(self.app.cbo_act.get(), "Asuntos propios")
+            # Y se puede quitar
+            self.app._fijar_actividad(222, None)
+            self.assertEqual(guardado["actividades_tarea"], {})
+
     def test_recuerda_la_actividad_de_cada_tarea(self):
         guardado = {}
         with mock.patch.object(core, "guardar_config_valor",
@@ -374,6 +390,50 @@ def _barras_en_riesgo(widget, ruta="root"):
     for n, hijo in enumerate(widget.winfo_children()):
         fallos += _barras_en_riesgo(hijo, f"{ruta}/{hijo.winfo_class()}[{n}]")
     return fallos
+
+
+class TestNovedades(unittest.TestCase):
+    """El changelog para usuarios: se lee del fichero empaquetado, sin internet."""
+
+    def test_muestra_las_novedades_sin_markdown(self):
+        import tkinter as tk
+        import registrar_gui
+        import dialogos
+        try:
+            root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        root.withdraw()
+        self.addCleanup(root.destroy)
+        parches = [
+            mock.patch.object(core, "entradas_dia", lambda f: []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: {"soporte": "/x"}),
+            mock.patch.object(core, "FAVORITOS", []),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        app = registrar_gui.App(root)
+        self.addCleanup(setattr, app, "_logo_img", None)
+        top = dialogos.abrir_novedades(app)
+        try:
+            texto = top._texto.get("1.0", "end")
+            self.assertNotIn("No se encontró", texto)   # el fichero se empaqueta
+            self.assertIn("Versión", texto)              # hay cabeceras de version
+            self.assertNotIn("**", texto)                # el markdown se limpia
+            self.assertNotIn("##", texto)
+            # Las lineas partidas del fichero se vuelven a juntar: una viñeta,
+            # una linea logica (no trozos sueltos sin sangrar).
+            sueltas = [l for l in texto.splitlines()
+                       if l.strip() and not l.startswith(("Versión", "•"))
+                       and l.strip()[0].islower()]
+            self.assertEqual(sueltas, [], f"líneas partidas sin unir: {sueltas[:3]}")
+        finally:
+            top.destroy()
 
 
 class TestPieSiempreVisible(unittest.TestCase):
@@ -447,6 +507,7 @@ class TestPieSiempreVisible(unittest.TestCase):
             ("vacaciones y teletrabajo", lambda: dialogos.abrir_ajustes_dias(app)),
             ("integraciones (INARI)", lambda: dialogos.abrir_integraciones(app)),
             ("permisos (horas)", lambda: dialogos.abrir_permisos(app)),
+            ("novedades", lambda: dialogos.abrir_novedades(app)),
             ("permiso por horas de un dia",
              lambda: dialogos.abrir_permiso_dia(app, dia)),
         ]

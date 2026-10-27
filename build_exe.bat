@@ -16,11 +16,11 @@ echo Instalando PyInstaller y requests (puede tardar la primera vez)...
 
 echo.
 echo Construyendo la app de registro (FichaCSIRC)...
-"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." registrar_gui.py
+"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." registrar_gui.py
 
 echo.
 echo Construyendo el configurador (FichaCSIRC-Configurar)...
-"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." configurar_gui.py
+"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." configurar_gui.py
 
 echo.
 echo ============================================================
