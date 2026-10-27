@@ -9,7 +9,6 @@ Separarlas de la ventana principal mantiene registrar_gui.py enfocado en el
 flujo del dia a dia.
 """
 
-import os
 import csv
 import webbrowser
 import calendar
@@ -19,7 +18,7 @@ from tkinter import ttk, messagebox, filedialog, simpledialog
 
 import rellenar_horas as core
 from fichaui import (COLOR_DANGER, COLOR_MUTED, COLOR_SUCCESS, COLOR_WARNING,
-                     en_hilo, no_encoger)
+                     abrir_con_sistema, en_hilo, no_encoger)
 
 MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
             "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
@@ -260,7 +259,7 @@ def abrir_resumen_mes(app):
                     tv.insert("", "end", iid=d.isoformat(),
                               values=(f"{core.DIAS_ES[d.weekday()]} "
                                       f"{d.strftime('%d/%m')}",
-                                      f"{core._fmt(reg)} / {obj}h"))
+                                      f"{core._fmt(reg)} / {core._fmt(obj)}"))
                 tv.pack(fill="x", before=btns)
 
         en_hilo(app.root, trabajo, al_terminar)
@@ -450,7 +449,13 @@ def abrir_plantillas(app):
             creados = saltados = errores = 0
             ultimo = ""
             for d in dias:
-                existentes = cache.get(d.isoformat()) or []
+                existentes = cache.get(d.isoformat())
+                if existentes is None:
+                    # No se pudo leer: aplicar a ciegas podria duplicar.
+                    errores += len(plantilla["apuntes"])
+                    ultimo = (f"no se pudieron leer los apuntes del "
+                              f"{d.strftime('%d/%m')}; se ha saltado")
+                    continue
                 for a in plantilla["apuntes"]:
                     if any(str(e.get("wp_id")) == str(a["id"])
                            for e in existentes):
@@ -729,7 +734,7 @@ def abrir_exportar(app):
                 try:
                     for a in core.entradas_dia(d.isoformat()):
                         filas.append([d.isoformat(),
-                                      core._fmt(a["horas"]).rstrip("h"),
+                                      core.horas_csv(a["horas"]),
                                       a["wp_titulo"], a["actividad"], a["comentario"]])
                         total += a["horas"]
                 except Exception as e:
@@ -757,7 +762,7 @@ def abrir_exportar(app):
                     w.writerow(["Fecha", "Horas", "Tarea", "Actividad", "Comentario"])
                     w.writerows(filas)
                     w.writerow([])
-                    w.writerow(["", f"{total:g}", "TOTAL"])
+                    w.writerow(["", core.horas_csv(total), "TOTAL"])
             except Exception as e:
                 messagebox.showerror("Error",
                                      f"No se pudo escribir el CSV:\n{e}", parent=top)
@@ -769,7 +774,7 @@ def abrir_exportar(app):
                     f"{len(filas)} apuntes ({total:g}h) exportados a:\n{ruta}\n\n"
                     "¿Abrir el archivo ahora?"):
                 try:
-                    os.startfile(ruta)
+                    abrir_con_sistema(ruta)
                 except Exception:
                     pass
 
@@ -1229,7 +1234,6 @@ def abrir_permiso_dia(app, dia):
                             "No hay tipos de permiso configurados.\n"
                             "Revisa Herramientas > Permisos (horas).")
         return
-    anio = dia.year
     jornada = core.jornada_de(dia)          # lo que se ficha ese dia (p. ej. 6,5 h)
     dia_entero = core.horas_dia_permiso()   # lo que vale un dia de permiso (7 h)
     ya = core.horas_permiso(fecha)
@@ -1279,13 +1283,20 @@ def abrir_permiso_dia(app, dia):
         t = tipos[cbo.current()] if 0 <= cbo.current() < len(tipos) else None
         if not t:
             return
-        disp = core.permiso_disponible(t["id"], anio)
-        txt = (f"Disponible en {anio}: {core.fmt_horas_hhmm(disp)}   ·   "
+        disp = core.permiso_disponible(t["id"])
+        txt = (f"Te quedan: {core.fmt_horas_hhmm(disp)}   ·   "
                f"Máximo hoy: {core.fmt_horas_hhmm(libre)}   ·   "
                f"día completo = {core.fmt_horas_hhmm(dia_entero)}")
         if abs(dia_entero - jornada) > 0.01:
             txt += ("\n(fichas " + core.fmt_horas_hhmm(jornada) + " al día; un día"
                     " de permiso cuenta como " + core.fmt_horas_hhmm(dia_entero) + ")")
+        act = core.actividad_de_permiso(t["id"])
+        if act:
+            # En ese servicio el permiso se imputa como actividad: si ademas se
+            # marca aqui, contaria dos veces (resta jornada Y gasta saldo doble).
+            txt += (f"\nℹ En tu servicio este permiso se imputa en ProyectosTic con "
+                    f"la actividad «{act}». Si lo imputas allí, no lo marques "
+                    f"también aquí o contará dos veces.")
         color = COLOR_MUTED
         caducadas = core.concesiones_caducadas(t["id"])
         proximas = core.concesiones_por_caducar(t["id"])
@@ -1300,6 +1311,9 @@ def abrir_permiso_dia(app, dia):
         lbl_info.config(text=txt, foreground=color)
     cbo.bind("<<ComboboxSelected>>", _refrescar_info)
     _refrescar_info()
+    # Si algun permiso se imputa como actividad, el saldo depende de la red:
+    # se pinta ya con la ultima lectura y se corrige al llegar la nueva.
+    _refrescar_usadas_pt(app, lambda: top.winfo_exists() and _refrescar_info())
 
     def guardar():
         i = cbo.current()
@@ -1311,11 +1325,11 @@ def abrir_permiso_dia(app, dia):
             messagebox.showwarning("Horas no válidas",
                                    "Escribe las horas como 3:00 o 3,5.", parent=top)
             return
-        disp = core.permiso_disponible(t["id"], anio)
+        disp = core.permiso_disponible(t["id"])
         if h > disp and not messagebox.askyesno(
                 "Sin cupo suficiente",
                 f"Te quedan {core.fmt_horas_hhmm(disp)} de «{t.get('nombre')}» "
-                f"en {anio} y vas a usar {core.fmt_horas_hhmm(h)}.\n\n¿Continuar?",
+                f"y vas a usar {core.fmt_horas_hhmm(h)}.\n\n¿Continuar?",
                 parent=top):
             return
         try:
@@ -1371,13 +1385,38 @@ def _pedir_concesion(padre, nombre_tipo):
     return (res.get("horas"), res.get("fecha")) if res else None
 
 
-def abrir_permisos(app):
-    """Permisos del año, como el portal: cada tipo con sus CONCESIONES.
+SIN_ACTIVIDAD = "— solo se marca en el día —"
 
-    Las horas no son un cupo fijo: se van concediendo en bolsas (p. ej. por
-    servicios extraordinarios), cada una con su fecha límite. Se teclean a mano:
-    el portal de personal no las expone por API. Añadir/quitar guarda al momento.
-    La caducidad solo avisa; nunca descuenta horas sola."""
+
+def _refrescar_usadas_pt(app, despues):
+    """Relee en segundo plano las horas de permiso imputadas como actividad en
+    ProyectosTic y llama a despues() al terminar. No hace nada (ni red) si
+    ningun permiso esta enlazado a una actividad."""
+    if not any(core.actividad_de_permiso(t["id"]) for t in core.permisos_tipos()):
+        return
+    en_hilo(app.root, core.actualizar_usadas_proyectostic,
+            lambda _res, _err: despues())
+
+
+def _actividades_conocidas(app, extra=()):
+    """Nombres de actividad para el desplegable del permiso: las de la tarea
+    elegida, las asociadas a mano y las de por defecto."""
+    nombres = set(app.cbo_act["values"] or ()) | set(core.ACTIVIDADES)
+    nombres |= set((core.config_valor("tareas_actividad") or {}).keys())
+    nombres |= {n for n in extra if n}
+    return sorted(nombres, key=str.lower)
+
+
+def abrir_permisos(app):
+    """Saldo de permisos por horas: cada tipo con sus CONCESIONES.
+
+    Las horas se van concediendo en bolsas (cada año, o por servicios
+    extraordinarios), cada una con su fecha limite. Lo que no se usa se ARRASTRA:
+    el saldo es todo lo concedido menos todo lo usado desde que se lleva la
+    cuenta. Lo usado sale de los permisos marcados en el dia y, si en el servicio
+    el permiso se imputa como actividad de una tarea, de ProyectosTic. Se
+    teclean a mano: el portal de personal no las expone por API. La caducidad
+    solo avisa; nunca descuenta horas sola."""
     top = tk.Toplevel(app.root)
     top.title("Permisos (horas)")
     top.transient(app.root)
@@ -1385,32 +1424,48 @@ def abrir_permisos(app):
     frm = ttk.Frame(top, padding=14)
     frm.pack(fill="both", expand=True)
 
-    anio = dt.date.today().year
-    ttk.Label(frm, text=f"Permisos por horas · {anio}",
+    # Pie primero: los botones nunca se quedan sin hueco al encoger.
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", side="bottom", pady=(12, 0))
+
+    desde = core.permisos_desde()
+    ttk.Label(frm, text="Permisos por horas",
               font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(0, 2))
-    ttk.Label(frm, text="Cada tipo suma las horas de sus concesiones. Las usadas se "
-                        "calculan solas con los permisos que marcas en los días.",
+    ttk.Label(frm, text=f"Saldo desde el {desde.strftime('%d/%m/%Y')}: lo que no usas "
+                        "se arrastra y las horas de cada año se suman a lo que te "
+                        "queda. Las usadas se calculan solas.",
               foreground=COLOR_MUTED, wraplength=560, justify="left").pack(
-        anchor="w", pady=(0, 10))
+        anchor="w", pady=(0, 4))
+    lbl_pt = ttk.Label(frm, text="", foreground=COLOR_MUTED)
+    lbl_pt.pack(anchor="w", pady=(0, 6))
 
     cuerpo = ttk.Frame(frm)
     cuerpo.pack(fill="both", expand=True)
+    estado = {"leyendo": False}
 
     def _pintar():
+        if not top.winfo_exists():
+            return
         for w in cuerpo.winfo_children():
             w.destroy()
-        top._filas = core.resumen_permisos(anio)
+        top._filas = core.resumen_permisos()
         for f in top._filas:
             caja = ttk.LabelFrame(cuerpo, text=f["nombre"], padding=8)
             caja.pack(fill="x", pady=(0, 8))
             disp_col = COLOR_DANGER if f["disponibles"] < 0 else COLOR_SUCCESS
             cab = ttk.Frame(caja)
             cab.pack(fill="x")
-            ttk.Label(cab, text=f"Total {core.fmt_horas_hhmm(f['cupo'])}").pack(side="left")
+            ttk.Label(cab, text=f"Concedidas {core.fmt_horas_hhmm(f['cupo'])}").pack(side="left")
             ttk.Label(cab, text=f"   ·   Usadas {core.fmt_horas_hhmm(f['usadas'])}",
                       foreground=COLOR_MUTED).pack(side="left")
-            ttk.Label(cab, text=f"   ·   Disponibles {core.fmt_horas_hhmm(f['disponibles'])}",
+            ttk.Label(cab, text=f"   ·   Te quedan {core.fmt_horas_hhmm(f['disponibles'])}",
                       foreground=disp_col).pack(side="left")
+            if f["actividad"]:
+                pt = "…" if estado["leyendo"] else core.fmt_horas_hhmm(f["usadas_pt"])
+                ttk.Label(caja, foreground=COLOR_MUTED,
+                          text=f"{core.fmt_horas_hhmm(f['usadas_local'])} marcadas en el "
+                               f"día  ·  {pt} imputadas en ProyectosTic como "
+                               f"«{f['actividad']}»").pack(anchor="w", pady=(2, 0))
 
             for i, c in enumerate(f["concesiones"]):
                 fila = ttk.Frame(caja)
@@ -1428,9 +1483,60 @@ def abrir_permisos(app):
                 ttk.Button(fila, text="Quitar", width=7,
                            command=lambda t=f["id"], i=i: _quitar(t, i)).pack(side="right")
 
-            ttk.Button(caja, text="＋ Añadir concesión",
-                       command=lambda t=f["id"], n=f["nombre"]: _anadir(t, n)).pack(
-                anchor="w", pady=(6, 0))
+            pie = ttk.Frame(caja)
+            pie.pack(fill="x", pady=(6, 0))
+            ttk.Button(pie, text="＋ Añadir concesión",
+                       command=lambda t=f["id"], n=f["nombre"]: _anadir(t, n)).pack(side="left")
+            # Segun el servicio el permiso se marca en el dia (local) o se
+            # imputa como actividad de una tarea: aqui se dice cual.
+            cbo = ttk.Combobox(pie, width=26,
+                               values=[SIN_ACTIVIDAD] + _actividades_conocidas(
+                                   app, [f["actividad"]]))
+            cbo.set(f["actividad"] or SIN_ACTIVIDAD)
+            cbo.pack(side="right")
+            ttk.Label(pie, text="Se imputa como actividad:",
+                      foreground=COLOR_MUTED).pack(side="right", padx=(0, 6))
+
+            def fijar(_e=None, t=f["id"], c=cbo):
+                try:
+                    nueva = c.get().strip()
+                except tk.TclError:
+                    return                       # combo ya destruido al repintar
+                nueva = "" if nueva == SIN_ACTIVIDAD else nueva
+                # Se compara con lo GUARDADO (no con lo que habia al pintar):
+                # tras elegir, el FocusOut posterior no debe volver a guardar.
+                if nueva == core.actividad_de_permiso(t):
+                    return
+                core.fijar_actividad_permiso(t, nueva)
+                top.after_idle(_leer_y_pintar)   # no destruir el combo en su evento
+            cbo.bind("<<ComboboxSelected>>", fijar)
+            cbo.bind("<Return>", fijar)
+            cbo.bind("<FocusOut>", fijar)
+
+    def _leer_y_pintar():
+        if not any(core.actividad_de_permiso(t["id"]) for t in core.permisos_tipos()):
+            lbl_pt.config(text="")
+            _pintar()
+            return
+        estado["leyendo"] = True
+        lbl_pt.config(text="Consultando las horas imputadas en ProyectosTic…",
+                      foreground=COLOR_MUTED)
+        _pintar()
+
+        def al_terminar(_res, err):
+            if not top.winfo_exists():
+                return
+            estado["leyendo"] = False
+            if err:
+                lbl_pt.config(text=f"No se pudieron leer las horas imputadas en "
+                                   f"ProyectosTic ({err}); se muestra la última lectura.",
+                              foreground=COLOR_WARNING)
+            else:
+                lbl_pt.config(text="")
+            _pintar()
+            app.repintar_local()
+
+        en_hilo(app.root, core.actualizar_usadas_proyectostic, al_terminar)
 
     def _anadir(tipo_id, nombre):
         pedido = _pedir_concesion(top, nombre)
@@ -1454,10 +1560,113 @@ def abrir_permisos(app):
         _pintar()
         app.repintar_local()
 
-    _pintar()
-    btns = ttk.Frame(frm)
-    btns.pack(fill="x", pady=(12, 0))
+    _leer_y_pintar()
     ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
+    ttk.Button(btns, text=f"Añadir los permisos de {dt.date.today().year}…",
+               command=lambda: abrir_permisos_nuevo_anio(
+                   app, manual=True, al_terminar=_pintar)).pack(side="left")
+    top._repintar = _pintar   # para los tests
+    return top
+
+
+def abrir_permisos_nuevo_anio(app, manual=False, al_terminar=None):
+    """Al empezar el año (o a mano): añadir las horas de permiso que te
+    corresponden. Se SUMAN a lo que te queda, no lo sustituyen.
+
+    Es opcional: 'Más tarde' vuelve a preguntar en el proximo arranque y 'No
+    este año' no vuelve a preguntar hasta el siguiente. Las casillas vienen con
+    las horas de la ultima concesion de cada tipo y su fecha limite un año mas
+    tarde; se corrigen o se dejan en blanco para no añadir ese tipo."""
+    anio = dt.date.today().year
+    top = tk.Toplevel(app.root)
+    top.title(f"Permisos de {anio}")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", side="bottom", pady=(12, 0))
+
+    titulo = ("Añadir los permisos de este año" if manual
+              else f"Empieza {anio}: ¿añades tus permisos de este año?")
+    ttk.Label(frm, text=titulo, font=("TkDefaultFont", 11, "bold")).pack(anchor="w")
+    ttk.Label(frm, text="Las horas que añadas se suman a las que te quedan. Deja en "
+                        "blanco los permisos que no te correspondan.",
+              foreground=COLOR_MUTED, wraplength=520, justify="left").pack(
+        anchor="w", pady=(2, 10))
+
+    tabla = ttk.Frame(frm)
+    tabla.pack(fill="x")
+    for col, txt in enumerate(("Permiso", "Te quedan", "Horas a añadir",
+                               "Fecha límite (AAAA-MM-DD)")):
+        ttk.Label(tabla, text=txt, foreground=COLOR_MUTED).grid(
+            row=0, column=col, sticky="w", padx=(0, 10), pady=(0, 4))
+    filas = []
+    for n, prop in enumerate(core.propuesta_permisos_del_anio(), start=1):
+        ttk.Label(tabla, text=prop["nombre"]).grid(row=n, column=0, sticky="w",
+                                                   padx=(0, 10), pady=2)
+        ttk.Label(tabla, text=core.fmt_horas_hhmm(core.permiso_disponible(prop["id"]))
+                  ).grid(row=n, column=1, sticky="e", padx=(0, 10))
+        e_h = ttk.Entry(tabla, width=9)
+        if prop["horas"]:
+            e_h.insert(0, core.fmt_horas_hhmm(prop["horas"]))
+        e_h.grid(row=n, column=2, sticky="w", padx=(0, 10))
+        e_f = ttk.Entry(tabla, width=14)
+        e_f.insert(0, prop["fecha_limite"])
+        e_f.grid(row=n, column=3, sticky="w")
+        filas.append((prop, e_h, e_f))
+
+    def terminar():
+        top.destroy()
+        if al_terminar:
+            al_terminar()
+        app.repintar_local()
+
+    def anadir():
+        pendientes = []
+        for prop, e_h, e_f in filas:
+            txt_h = e_h.get().strip()
+            if not txt_h:
+                continue                     # en blanco: ese tipo no se añade
+            h = core.parsear_horas(txt_h)
+            fecha = e_f.get().strip()
+            if not h or h <= 0:
+                messagebox.showwarning("Horas no válidas",
+                                       f"{prop['nombre']}: escribe las horas como 70:00 "
+                                       "o 70, o déjalo en blanco.", parent=top)
+                return
+            if fecha:
+                try:
+                    dt.date.fromisoformat(fecha)
+                except ValueError:
+                    messagebox.showwarning("Fecha no válida",
+                                           f"{prop['nombre']}: la fecha límite debe ser "
+                                           "AAAA-MM-DD (o vacía si no caduca).", parent=top)
+                    return
+            pendientes.append((prop, h, fecha))
+        # Validado todo antes de guardar nada: o se añade todo o nada.
+        for prop, h, fecha in pendientes:
+            core.anadir_concesion(prop["id"], h, fecha)
+        core.marcar_permisos_anio_revisado(anio)
+        app.status.config(text=(f"Permisos de {anio} añadidos ({len(pendientes)})."
+                                if pendientes else "No se ha añadido ningún permiso."))
+        terminar()
+
+    def no_este_anio():
+        core.marcar_permisos_anio_revisado(anio)
+        terminar()
+
+    ttk.Button(btns, text="Añadir", command=anadir).pack(side="right", padx=4)
+    if manual:
+        ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+    else:
+        ttk.Button(btns, text="No este año", command=no_este_anio).pack(side="right")
+        ttk.Button(btns, text="Más tarde", command=top.destroy).pack(side="right", padx=4)
+    no_encoger(top)
+    top._filas = filas           # para los tests
+    top._anadir = anadir
+    top._no_este_anio = no_este_anio
     return top
 
 

@@ -29,6 +29,8 @@
   "festivos_locales_extra": [],
   "dias_ugr": {},
   "permisos": {},
+  "permisos_desde": "2026-01-01",
+  "permisos_anio_revisado": 2026,
   "permisos_tipos": [
     {
       "id": "asuntos_particulares",
@@ -38,7 +40,8 @@
           "horas": 70,
           "fecha_limite": ""
         }
-      ]
+      ],
+      "actividad": ""
     },
     {
       "id": "servicios_minimos",

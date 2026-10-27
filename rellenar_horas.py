@@ -15,6 +15,9 @@ import re
 import sys
 import json
 import csv
+import platform
+import posixpath
+import subprocess
 import math
 import time
 import logging
@@ -52,6 +55,7 @@ VERSION = "2.9.2"
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
 UPDATE_CHECK_INTERVAL_HOURS = 4
 WINDOWS_INSTALLER_ASSET = "FichaCSIRC-Instalador.exe"
+MAC_INSTALLER_ASSET = "FichaCSIRC-mac-{arch}.dmg"
 
 
 class ComprobacionFallida(RuntimeError):
@@ -144,14 +148,63 @@ def _chequeo_update_reciente():
     return dt.datetime.now() - anterior < intervalo
 
 
+def arquitectura_mac():
+    """'arm64' o 'x64' segun el HARDWARE, no el proceso.
+
+    Una app Intel corriendo con Rosetta en un Mac M1/M2... ve platform.machine()
+    == 'x86_64' y se quedaria actualizando a la de Intel para siempre; el sysctl
+    hw.optional.arm64 dice la verdad aunque el proceso este traducido (en un Mac
+    Intel la clave no existe y se cae al platform.machine())."""
+    try:
+        r = subprocess.run(["sysctl", "-n", "hw.optional.arm64"],
+                           capture_output=True, text=True, timeout=5)
+        if r.stdout.strip() == "1":
+            return "arm64"
+    except Exception:
+        pass
+    return "arm64" if platform.machine() == "arm64" else "x64"
+
+
 def _asset_instalador(data):
-    """URL del instalador Windows en la release, si aplica."""
-    if os.name != "nt":
+    """URL del instalador de esta plataforma en la release (.exe o .dmg)."""
+    if os.name == "nt":
+        nombre = WINDOWS_INSTALLER_ASSET
+    elif sys.platform == "darwin":
+        nombre = MAC_INSTALLER_ASSET.format(arch=arquitectura_mac())
+    else:
         return ""
     for asset in data.get("assets", []):
-        if asset.get("name") == WINDOWS_INSTALLER_ASSET:
+        if asset.get("name") == nombre:
             return asset.get("browser_download_url", "")
     return ""
+
+
+def fuera_de_aplicaciones(ejecutable=None):
+    """En macOS, motivo por el que la app empaquetada NO esta en Aplicaciones
+    ('dmg', 'translocada', 'otra') o None si esta bien instalada (o no aplica).
+
+    Importa porque una .app abierta desde Descargas o desde el propio .dmg no se
+    sustituye al actualizar: cada version deja otra copia y Launchpad muestra un
+    icono por copia (paso de verdad: 5 iconos de FichaCSIRC)."""
+    if ejecutable is None:
+        if sys.platform != "darwin" or not getattr(sys, "frozen", False):
+            return None
+        ejecutable = sys.executable
+    # .../FichaCSIRC.app/Contents/MacOS/FichaCSIRC -> .../FichaCSIRC.app
+    # (posixpath: son rutas de macOS, y asi se puede probar desde Windows)
+    d = posixpath.dirname
+    bundle = d(d(d(ejecutable)))
+    if not bundle.endswith(".app"):
+        return None
+    if "/AppTranslocation/" in bundle:
+        # macOS la ejecuta desde una copia temporal porque se abrio sin moverla
+        return "translocada"
+    if bundle.startswith("/Volumes/"):
+        return "dmg"
+    for base in ("/Applications/", posixpath.expanduser("~/Applications") + "/"):
+        if bundle.startswith(base):
+            return None
+    return "otra"
 
 
 def descargar_archivo(url, destino):
@@ -246,6 +299,37 @@ def config_valor(clave, defecto=None):
     return _cfg.get(clave, defecto)
 
 
+def escribir_json_atomico(ruta, datos):
+    """Escribe el JSON en un temporal y lo pone en su sitio de golpe (os.replace).
+
+    config.json se reescribe a menudo (geometria al cerrar, ultimo chequeo de
+    version, cada marca de dia...). Escribiendo encima, un corte de luz o un
+    cierre a mitad lo dejaba truncado y la app ya no arrancaba, perdiendo API
+    key, permisos, plantillas y festivos. Asi o queda el viejo o el nuevo."""
+    tmp = f"{ruta}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    for intento in (1, 2, 3):
+        try:
+            os.replace(tmp, ruta)
+            return
+        except PermissionError:
+            # Windows: otro proceso (el aviso de fichaje) puede tenerlo abierto
+            # justo en ese instante.
+            if intento == 3:
+                raise
+            time.sleep(0.2)
+
+
 def guardar_config_valores(valores):
     """Actualiza varias claves de config.json en una sola lectura/escritura."""
     try:
@@ -254,8 +338,7 @@ def guardar_config_valores(valores):
     except Exception:
         cfg = {}
     cfg.update(valores)
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    escribir_json_atomico(CONFIG_PATH, cfg)
     _cfg.update(valores)
 
 
@@ -315,19 +398,25 @@ def _get_todos(path, params=None):
 _ME = None
 
 
-def _me():
-    """Datos del usuario autenticado (cacheados tras la primera respuesta valida)."""
+def _me(estricto=False):
+    """Datos del usuario autenticado (cacheados tras la primera respuesta valida).
+
+    Por defecto un fallo devuelve {} (para pintar el nombre no merece la pena
+    romper nada). Con estricto=True el error se propaga: lo usa quien NO puede
+    seguir sin saber quien eres."""
     global _ME
     if not _ME:
         try:
             _ME = _get("/api/v3/users/me")
         except Exception:
+            if estricto:
+                raise
             return {}
     return _ME
 
 
-def _user_id():
-    return str(_me().get("id", ""))
+def _user_id(estricto=False):
+    return str(_me(estricto).get("id", ""))
 
 
 def nombre_usuario():
@@ -357,27 +446,59 @@ def _fmt(horas):
     return (f"{horas:.2f}".rstrip("0").rstrip(".")) + "h"
 
 
+def horas_csv(horas):
+    """Horas para el CSV: '6,5' y no '6.5'. El CSV va con ';' para el Excel en
+    español, que usa coma decimal: con punto, '6.5' se leia como texto o como
+    fecha (6 de mayo) y los totales no sumaban."""
+    return _fmt(horas)[:-1].replace(".", ",")
+
+
 def entradas_dia(fecha_iso):
-    uid = _user_id()
-    filtros = [{"spent_on": {"operator": "=d", "values": [fecha_iso]}}]
-    if uid:
-        filtros.append({"user": {"operator": "=", "values": [uid]}})
+    # Sin saber quien eres NO se consulta. Antes, si /users/me fallaba (un
+    # corte puntual), se pedia el dia SIN filtro de usuario y la API devolvia
+    # los apuntes de todos los que puedes ver: en un proyecto con permiso de
+    # ver horas, las de tus compañeros se sumaban a tu jornada y aparecian en
+    # la tabla como tuyas (con su boton de eliminar).
+    uid = _user_id(estricto=True)
+    if not uid:
+        raise RuntimeError("No se pudo identificar tu usuario en ProyectosTic.")
+    filtros = [{"spent_on": {"operator": "=d", "values": [fecha_iso]}},
+               {"user": {"operator": "=", "values": [uid]}}]
     data = _get("/api/v3/time_entries",
                 params={"filters": json.dumps(filtros), "pageSize": 100})
+    return [_apunte(e) for e in data.get("_embedded", {}).get("elements", [])]
+
+
+def _apunte(e):
+    """Un time_entry de la API -> el dict de apunte que usa toda la app."""
+    links = e.get("_links", {})
+    wp = links.get("workPackage", {})
+    _href = wp.get("href", "") or ""
+    _wpid = _href.rstrip("/").split("/")[-1] if _href else ""
+    return {
+        "id": e["id"],
+        "wp_id": _wpid,
+        "horas": _parse_horas(e.get("hours")),
+        "wp_titulo": wp.get("title", "?"),
+        "comentario": (e.get("comment") or {}).get("raw", ""),
+        "actividad": links.get("activity", {}).get("title", ""),
+    }
+
+
+def entradas_rango(desde_iso, hasta_iso):
+    """Tus apuntes entre dos fechas (ambas incluidas), en UNA consulta paginada.
+    Cada apunte lleva ademas su 'fecha'. Mismo blindaje que entradas_dia: sin
+    usuario identificado no se consulta."""
+    uid = _user_id(estricto=True)
+    if not uid:
+        raise RuntimeError("No se pudo identificar tu usuario en ProyectosTic.")
+    filtros = [{"spent_on": {"operator": "<>d", "values": [desde_iso, hasta_iso]}},
+               {"user": {"operator": "=", "values": [uid]}}]
     out = []
-    for e in data.get("_embedded", {}).get("elements", []):
-        links = e.get("_links", {})
-        wp = links.get("workPackage", {})
-        _href = wp.get("href", "") or ""
-        _wpid = _href.rstrip("/").split("/")[-1] if _href else ""
-        out.append({
-            "id": e["id"],
-            "wp_id": _wpid,
-            "horas": _parse_horas(e.get("hours")),
-            "wp_titulo": wp.get("title", "?"),
-            "comentario": (e.get("comment") or {}).get("raw", ""),
-            "actividad": links.get("activity", {}).get("title", ""),
-        })
+    for e in _get_todos("/api/v3/time_entries", {"filters": json.dumps(filtros)}):
+        a = _apunte(e)
+        a["fecha"] = str(e.get("spentOn", ""))
+        out.append(a)
     return out
 
 
@@ -411,10 +532,12 @@ def _actividades_disponibles(wp_id):
 
 
 def _actividad_href(wp_id, nombre):
-    try:
-        acts = _actividades_disponibles(wp_id)
-    except Exception:
-        return None
+    """href de la actividad 'nombre' en esa tarea, o None si no existe en ella.
+
+    Si la consulta FALLA se propaga el error: antes se tragaba y el apunte se
+    creaba igualmente sin actividad, asi que OpenProject le ponia la de por
+    defecto y el usuario no se enteraba de que se habia imputado con otra."""
+    acts = _actividades_disponibles(wp_id)
     for name, href in acts.items():
         if name.lower() == str(nombre).lower():
             return href
@@ -435,6 +558,9 @@ def crear_entrada(fecha_iso, wp_id, horas, comentario, actividad):
         href = _actividad_href(wp_id, actividad)
         if href:
             payload["_links"]["activity"] = {"href": href}
+        else:
+            LOG.warning("La actividad %r no existe en wp=%s: se usa la de por defecto",
+                        actividad, wp_id)
     r = requests.post(f"{BASE_URL}/api/v3/time_entries",
                       headers=_auth(), json=payload, timeout=30)
     if r.status_code not in (200, 201):
@@ -919,14 +1045,32 @@ def quitar_permiso(fecha_iso, indice):
     return True
 
 
-def permiso_usadas(tipo_id, anio):
-    """Horas de ese tipo consumidas en el año."""
+def permisos_desde():
+    """Fecha desde la que se lleva el saldo de permisos (date).
+
+    Las horas NO se reinician el 1 de enero: lo que sobra se arrastra y las
+    concesiones de cada año se suman a lo que queda (como pide el servicio). Por
+    eso las usadas se cuentan desde que se empezo a llevar la cuenta, no por año
+    natural. Por defecto, el 1 de enero del año en curso."""
+    try:
+        return dt.date.fromisoformat(str(config_valor("permisos_desde") or ""))
+    except ValueError:
+        return dt.date(_hoy().year, 1, 1)
+
+
+def permiso_usadas(tipo_id, anio=None):
+    """Horas de ese tipo MARCADAS EN EL DIA (permiso local).
+
+    Sin 'anio': todas desde permisos_desde() (lo que cuenta para el saldo). Con
+    'anio': solo las de ese año (dato informativo)."""
+    desde = permisos_desde()
     total = 0.0
     for fecha, ps in PERMISOS.items():
         try:
-            if dt.date.fromisoformat(fecha).year != anio:
-                continue
+            d = dt.date.fromisoformat(fecha)
         except ValueError:
+            continue
+        if (d.year != anio) if anio is not None else (d < desde):
             continue
         for p in ps:
             if p.get("tipo") == tipo_id:
@@ -935,6 +1079,66 @@ def permiso_usadas(tipo_id, anio):
                 except (TypeError, ValueError):
                     continue
     return round(total, 2)
+
+
+# Horas de permiso imputadas en ProyectosTic como ACTIVIDAD (servicios donde
+# los asuntos propios se imputan en una tarea, no se marcan en local). Se
+# calcula con red, asi que se guarda aqui la ultima lectura para no bloquear
+# la interfaz: {tipo_id: horas}.
+_USADAS_PT = {}
+
+
+def actividad_de_permiso(tipo_id):
+    """Actividad de ProyectosTic con la que se imputa ese permiso ('' = local)."""
+    t = tipo_permiso(tipo_id) or {}
+    return str(t.get("actividad") or "").strip()
+
+
+def fijar_actividad_permiso(tipo_id, actividad):
+    """Enlaza (o desenlaza, con '') un tipo de permiso con una actividad."""
+    actividad = (actividad or "").strip()
+    nuevos = []
+    for t in permisos_tipos():
+        t = dict(t)
+        t["concesiones"] = [dict(c) for c in concesiones(t["id"])]
+        t.pop("cupo", None)
+        t.pop("fecha_limite", None)
+        if t["id"] == tipo_id:
+            if actividad:
+                t["actividad"] = actividad
+            else:
+                t.pop("actividad", None)
+        nuevos.append(t)
+    guardar_config_valor("permisos_tipos", nuevos)
+    _USADAS_PT.pop(tipo_id, None)
+
+
+def actualizar_usadas_proyectostic():
+    """Lee de ProyectosTic las horas imputadas con la actividad de cada permiso
+    (desde permisos_desde() hasta fin del año siguiente, por si hay alguno ya
+    planificado). Una sola consulta paginada. Devuelve {tipo_id: horas}."""
+    mapa = {t["id"]: actividad_de_permiso(t["id"]) for t in permisos_tipos()}
+    mapa = {tid: act.lower() for tid, act in mapa.items() if act}
+    if not mapa:
+        _USADAS_PT.clear()
+        return {}
+    hasta = dt.date(_hoy().year + 1, 12, 31)
+    apuntes = entradas_rango(permisos_desde().isoformat(), hasta.isoformat())
+    res = {tid: 0.0 for tid in mapa}
+    for a in apuntes:
+        act = str(a.get("actividad") or "").strip().lower()
+        for tid, buscada in mapa.items():
+            if act == buscada:
+                res[tid] += a["horas"]
+    res = {tid: round(h, 2) for tid, h in res.items()}
+    _USADAS_PT.clear()
+    _USADAS_PT.update(res)
+    return dict(res)
+
+
+def permiso_usadas_proyectostic(tipo_id):
+    """Ultima lectura de las horas imputadas como actividad (0 si no aplica)."""
+    return _USADAS_PT.get(tipo_id, 0.0) if actividad_de_permiso(tipo_id) else 0.0
 
 
 def concesiones(tipo_id):
@@ -1034,30 +1238,97 @@ def _guardar_tipos(cambios):
     guardar_config_valor("permisos_tipos", nuevos)
 
 
-def permiso_disponible(tipo_id, anio):
-    """Horas que te quedan de ese tipo en el año (total concedido - usadas).
+def permiso_usadas_total(tipo_id):
+    """Todo lo consumido para el saldo: lo marcado en el dia mas lo imputado en
+    ProyectosTic con su actividad (segun el servicio se hace de una forma u
+    otra)."""
+    return round(permiso_usadas(tipo_id) + permiso_usadas_proyectostic(tipo_id), 2)
+
+
+def permiso_disponible(tipo_id):
+    """Saldo: todo lo concedido menos todo lo usado desde permisos_desde().
 
     Las concesiones caducadas siguen sumando: la caducidad solo avisa."""
     if tipo_permiso(tipo_id) is None:
         return 0.0
-    return round(cupo_total(tipo_id) - permiso_usadas(tipo_id, anio), 2)
+    return round(cupo_total(tipo_id) - permiso_usadas_total(tipo_id), 2)
 
 
-def resumen_permisos(anio, hoy=None):
-    """Tabla del año, como el portal:
-    [{id, nombre, cupo, usadas, disponibles, concesiones, caducadas, por_caducar}]"""
+def resumen_permisos(hoy=None):
+    """Tabla de saldos: [{id, nombre, cupo, usadas, usadas_local, usadas_pt,
+    actividad, disponibles, concesiones, caducadas, por_caducar}]"""
     filas = []
     for t in permisos_tipos():
         tid = t["id"]
-        usadas = permiso_usadas(tid, anio)
+        local = permiso_usadas(tid)
+        pt = permiso_usadas_proyectostic(tid)
+        usadas = round(local + pt, 2)
         cupo = cupo_total(tid)
         filas.append({"id": tid, "nombre": t.get("nombre", tid),
                       "cupo": cupo, "usadas": usadas,
+                      "usadas_local": local, "usadas_pt": pt,
+                      "actividad": actividad_de_permiso(tid),
                       "disponibles": round(cupo - usadas, 2),
                       "concesiones": concesiones(tid),
                       "caducadas": concesiones_caducadas(tid, hoy),
                       "por_caducar": concesiones_por_caducar(tid, hoy=hoy)})
     return filas
+
+
+# ---- permisos del año nuevo (aviso opcional a partir del 1 de enero) ----
+
+def inicializar_permisos_anuales(hoy=None):
+    """Primer arranque con esta version: fija desde cuando se lleva el saldo y
+    da por revisado el año en curso (el aviso es para el año QUE EMPIEZA, no
+    para preguntar a mitad de año a quien ya tiene sus permisos)."""
+    hoy = hoy or _hoy()
+    nuevos = {}
+    if not config_valor("permisos_desde"):
+        nuevos["permisos_desde"] = dt.date(hoy.year, 1, 1).isoformat()
+    if not config_valor("permisos_anio_revisado"):
+        nuevos["permisos_anio_revisado"] = hoy.year
+    if nuevos:
+        guardar_config_valores(nuevos)
+
+
+def toca_anadir_permisos_del_anio(hoy=None):
+    """True si ha empezado un año cuyos permisos aun no se han revisado."""
+    hoy = hoy or _hoy()
+    try:
+        revisado = int(config_valor("permisos_anio_revisado") or hoy.year)
+    except (TypeError, ValueError):
+        revisado = hoy.year
+    return hoy.year > revisado and bool(permisos_tipos())
+
+
+def marcar_permisos_anio_revisado(anio):
+    guardar_config_valor("permisos_anio_revisado", int(anio))
+
+
+def _un_anio_despues(fecha_iso):
+    """'2027-01-15' -> '2028-01-15' (29-feb -> 28-feb). '' si no hay fecha."""
+    try:
+        d = dt.date.fromisoformat(fecha_iso)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        return d.replace(year=d.year + 1).isoformat()
+    except ValueError:
+        return d.replace(year=d.year + 1, day=28).isoformat()
+
+
+def propuesta_permisos_del_anio():
+    """Lo que se propone añadir al empezar el año: por tipo, las horas de su
+    ultima concesion y su fecha limite un año mas tarde. Solo es el valor
+    inicial del dialogo; el usuario lo corrige o lo deja en blanco."""
+    out = []
+    for t in permisos_tipos():
+        cs = concesiones(t["id"])
+        ultima = cs[-1] if cs else {"horas": 0.0, "fecha_limite": ""}
+        out.append({"id": t["id"], "nombre": t.get("nombre", t["id"]),
+                    "horas": ultima["horas"],
+                    "fecha_limite": _un_anio_despues(ultima.get("fecha_limite", ""))})
+    return out
 
 
 # ----------------------- guardias (modalidad) -----------------------
@@ -1292,7 +1563,7 @@ def listar_exportar():
     while d <= hasta:
         try:
             for a in entradas_dia(d.isoformat()):
-                filas.append([d.isoformat(), _fmt(a["horas"]).rstrip("h"),
+                filas.append([d.isoformat(), horas_csv(a["horas"]),
                               a["wp_titulo"], a["actividad"], a["comentario"]])
         except Exception as e:
             print(f"  (Error el {d}: {e})")
@@ -1318,7 +1589,7 @@ def listar_exportar():
             w.writerow(["Fecha", "Horas", "Tarea", "Actividad", "Comentario"])
             w.writerows(filas)
             w.writerow([])
-            w.writerow(["", total, "TOTAL"])
+            w.writerow(["", horas_csv(total), "TOTAL"])
         print(f"  Exportado a: {ruta}")
         print("  (Se abre con Excel; separador punto y coma.)\n")
     except Exception as e:

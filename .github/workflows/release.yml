@@ -117,4 +117,4 @@ jobs:
       - name: Publicar release con apps macOS
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/FichaCSIRC-mac-${{ matrix.arch }}.zip
+          files: dist/FichaCSIRC-mac-${{ matrix.arch }}.dmg

@@ -380,9 +380,33 @@ def escribir_lanzador():
         return None
 
 
+def escribir_config(cfg):
+    """Escribe config.json de forma atomica (temporal + os.replace): un corte a
+    mitad no puede dejarlo truncado. Misma tecnica que el motor; aqui va
+    aparte porque importar rellenar_horas sin config.json hace sys.exit."""
+    tmp = f"{CONFIG_PATH}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, CONFIG_PATH)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def guardar(cfg):
-    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    # Partir de la config existente, como el wizard grafico: este asistente
+    # solo pregunta conexion, jornada, actividad y favoritas, y volcar SOLO eso
+    # borraba festivos, vacaciones, permisos y sus concesiones, plantillas,
+    # guardias, teletrabajo, INARI...
+    completa = cargar_previa() or {}
+    completa.update(cfg)
+    escribir_config(completa)
     print(f"\nGuardado en: {CONFIG_PATH}")
     if escribir_lanzador():
         print("Lanzador creado: 2-Registrar-horas.bat (con tu ruta de Python).")

@@ -75,19 +75,38 @@ echo "Construyendo FichaCSIRC-Configurar.app..."
   --add-data "NOVEDADES.md:." \
   configurar_gui.py
 
-ZIP="dist/FichaCSIRC-mac-${ARCH_LABEL}.zip"
-PKG_DIR="build/macos/FichaCSIRC-mac-${ARCH_LABEL}"
-rm -rf "$PKG_DIR"
-mkdir -p "$PKG_DIR"
-cp -R "dist/FichaCSIRC.app" "$PKG_DIR/"
-cp -R "dist/FichaCSIRC-Configurar.app" "$PKG_DIR/"
-rm -f "$ZIP"
-ditto -c -k --keepParent "$PKG_DIR" "$ZIP"
+# Se distribuye como .dmg (no .zip): al abrirlo, el Finder muestra las dos apps
+# junto a un acceso a Aplicaciones y basta con arrastrarlas; si ya estaban, el
+# Finder pregunta "Reemplazar". Con el zip cada actualizacion se descomprimia en
+# otra carpeta de Descargas y Launchpad acababa mostrando un icono por copia.
+DMG="dist/FichaCSIRC-mac-${ARCH_LABEL}.dmg"
+STAGE="build/macos/dmg-${ARCH_LABEL}"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+ditto "dist/FichaCSIRC.app" "$STAGE/FichaCSIRC.app"
+ditto "dist/FichaCSIRC-Configurar.app" "$STAGE/FichaCSIRC-Configurar.app"
+ln -s /Applications "$STAGE/Aplicaciones"
+rm -f "$DMG"
+# hdiutil falla a veces en los runners de GitHub con "Resource busy" (algun
+# proceso del sistema aun tiene abierta la imagen); se reintenta un par de veces.
+for intento in 1 2 3; do
+  if hdiutil create -volname "FichaCSIRC" -srcfolder "$STAGE" \
+       -ov -format UDZO "$DMG"; then
+    break
+  fi
+  if [[ "$intento" == 3 ]]; then
+    echo "ERROR: hdiutil no pudo crear $DMG"
+    exit 1
+  fi
+  echo "hdiutil fallo (intento $intento), reintentando..."
+  sleep 5
+done
 
 echo
 echo "Listo:"
 echo "  dist/FichaCSIRC.app"
 echo "  dist/FichaCSIRC-Configurar.app"
-echo "  $ZIP"
+echo "  $DMG"
 echo
-echo "Nota: sin firma/notarizacion, macOS puede pedir abrirlas con clic derecho > Abrir."
+echo "Nota: sin firma/notarizacion, la primera vez macOS las bloquea. Se abren en"
+echo "Ajustes del Sistema > Privacidad y seguridad > Abrir igualmente."

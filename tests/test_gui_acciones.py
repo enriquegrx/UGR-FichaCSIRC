@@ -109,6 +109,68 @@ class TestGuiAcciones(unittest.TestCase):
         # 2h + 3h del lunes simulado deben aparecer sumadas en el titulo
         self.assertIn("5h /", self.app.lbl_semana.cget("text"))
 
+    def test_objetivo_sin_decimales_de_mas(self):
+        # "0h / 7h", no "0h / 7.0h" (objetivo_de devuelve float)
+        textos = []
+
+        def recoger(w):
+            try:
+                textos.append(str(w.cget("text")))
+            except Exception:
+                pass
+            for h in w.winfo_children():
+                recoger(h)
+        recoger(self.app.dias_frame)
+        textos.append(self.app.lbl_semana.cget("text"))
+        self.assertFalse([t for t in textos if ".0h" in t], textos)
+
+    def test_menu_contextual_tambien_en_mac(self):
+        import tkinter as tk
+        import fichaui
+        w = tk.Label(self.root)
+        with mock.patch.object(fichaui.sys, "platform", "darwin"):
+            fichaui.bind_menu_contextual(w, lambda e: None)
+        self.assertTrue({"<Button-3>", "<Button-2>", "<Control-Button-1>"}
+                        <= set(w.bind()))
+        w2 = tk.Label(self.root)
+        with mock.patch.object(fichaui.sys, "platform", "win32"):
+            fichaui.bind_menu_contextual(w2, lambda e: None)
+        self.assertEqual(set(w2.bind()), {"<Button-3>"})  # Button-2 = rueda
+
+    def test_anadir_pregunta_si_el_dia_no_se_pudo_leer(self):
+        self.app._cache_dia[self.lunes] = None     # fallo al leer el lunes
+        for var, _d, _c in self.app.dia_vars:      # solo el lunes (hoy viene
+            var.set(False)                         # marcado por defecto)
+        self._marcar_lunes()
+        self.app.ent_horas.delete(0, "end")
+        self.app.ent_horas.insert(0, "1")
+        preguntas = []
+
+        def responder(titulo, *_a, **_k):
+            preguntas.append(titulo)
+            return False                           # "No": no anadir
+        with mock.patch.object(self.gui.messagebox, "askyesno", responder), \
+             mock.patch.object(core, "crear_entrada") as m_crear:
+            self.app._anadir()
+        self.assertIn("No se pudieron leer algunos días", preguntas)
+        m_crear.assert_not_called()
+
+    def test_copiar_semana_salta_el_dia_que_no_se_pudo_leer(self):
+        self.app._cache_dia = {d.isoformat(): [] for d in self.app._dias_semana()}
+        self.app._cache_dia[self.lunes] = None
+        origen = [{"id": 5, "wp_id": "10", "horas": 1.0, "wp_titulo": "Tarea A",
+                   "comentario": "", "actividad": "soporte"}]
+        creados = []
+        with mock.patch.object(core, "entradas_dia", lambda f: list(origen)), \
+             mock.patch.object(self.gui.messagebox, "askyesno", lambda *a, **k: True), \
+             mock.patch.object(self.gui.messagebox, "showwarning") as m_aviso, \
+             mock.patch.object(core, "crear_entrada",
+                               lambda fecha, *a: creados.append(fecha)):
+            self.app._copiar_semana_anterior()
+        self.assertNotIn(self.lunes, creados)       # no se copia a ciegas
+        self.assertEqual(len(creados), 4)           # el resto de la semana si
+        m_aviso.assert_called_once()                # y se avisa del salto
+
     def test_comentario_guardia_por_dia(self):
         # Lunes = dia de guardia; martes normal. El autorrelleno de guardia
         # solo debe viajar al dia de guardia, el resto va sin comentario, y
@@ -164,7 +226,9 @@ class TestGuiAcciones(unittest.TestCase):
         import dialogos
         anio = dt.date.today().year
         with mock.patch.object(core, "PERMISOS",
-                               {f"{anio}-01-05": [{"tipo": "conciliacion", "horas": 4.0}]}):
+                               {f"{anio}-01-05": [{"tipo": "conciliacion", "horas": 4.0}]}), \
+             mock.patch.object(core, "permisos_desde",
+                               return_value=dt.date(anio, 1, 1)):
             top = dialogos.abrir_permisos(self.app)
         try:
             filas = {f["id"]: f for f in top._filas}
@@ -174,6 +238,99 @@ class TestGuiAcciones(unittest.TestCase):
         finally:
             top.destroy()
 
+
+    def test_permisos_del_año_nuevo_se_suman(self):
+        import dialogos
+        tipos = [{"id": "ap", "nombre": "AP",
+                  "concesiones": [{"horas": 70, "fecha_limite": "2026-01-15"}]},
+                 {"id": "sm", "nombre": "SM",
+                  "concesiones": [{"horas": 28, "fecha_limite": ""}]}]
+        guardado = {"permisos_tipos": tipos}
+        with mock.patch.object(core, "config_valor",
+                               lambda c, d=None: guardado.get(c, d)), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})), \
+             mock.patch.object(core, "PERMISOS", {}):
+            top = dialogos.abrir_permisos_nuevo_anio(self.app)
+            filas = {prop["id"]: (e_h, e_f) for prop, e_h, e_f in top._filas}
+            self.assertEqual(filas["ap"][0].get(), "70:00")         # propuesta
+            self.assertEqual(filas["ap"][1].get(), "2027-01-15")
+            filas["sm"][0].delete(0, "end")                          # SM: no
+            top._anadir()
+            self.assertFalse(top.winfo_exists())
+            self.assertEqual(core.cupo_total("ap"), 140.0)           # se SUMA
+            self.assertEqual(core.cupo_total("sm"), 28.0)            # intacto
+            self.assertEqual(guardado["permisos_anio_revisado"], dt.date.today().year)
+
+    def test_permisos_del_año_nuevo_no_este_año(self):
+        import dialogos
+        guardado = {}
+        with mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})):
+            top = dialogos.abrir_permisos_nuevo_anio(self.app)
+            top._no_este_anio()
+        self.assertEqual(guardado, {"permisos_anio_revisado": dt.date.today().year})
+
+    def test_al_arrancar_el_año_se_ofrecen_los_permisos(self):
+        import dialogos
+        with mock.patch.object(core, "toca_anadir_permisos_del_anio", lambda: True), \
+             mock.patch.object(dialogos, "abrir_permisos_nuevo_anio") as m_dlg:
+            self.app._permisos_nuevo_anio()
+        m_dlg.assert_called_once_with(self.app)
+        with mock.patch.object(core, "toca_anadir_permisos_del_anio", lambda: False), \
+             mock.patch.object(dialogos, "abrir_permisos_nuevo_anio") as m_dlg:
+            self.app._permisos_nuevo_anio()
+        m_dlg.assert_not_called()
+
+    def test_dialogo_permisos_lee_lo_imputado_como_actividad(self):
+        import dialogos
+        anio = dt.date.today().year
+        tipos = [{"id": "ap", "nombre": "AP", "actividad": "Asuntos propios",
+                  "concesiones": [{"horas": 70, "fecha_limite": ""}]}]
+        valores = {"permisos_tipos": tipos, "permisos_desde": f"{anio}-01-01"}
+        with mock.patch.object(core, "config_valor",
+                               lambda c, d=None: valores.get(c, d)), \
+             mock.patch.object(core, "PERMISOS", {}), \
+             mock.patch.dict(core._USADAS_PT, {}, clear=True), \
+             mock.patch.object(dialogos, "en_hilo", _en_hilo_sync), \
+             mock.patch.object(core, "entradas_rango", return_value=[
+                 {"horas": 3.0, "actividad": "Asuntos propios"}]):
+            top = dialogos.abrir_permisos(self.app)
+            try:
+                fila = top._filas[0]
+                self.assertEqual((fila["usadas_pt"], fila["disponibles"]), (3.0, 67.0))
+            finally:
+                top.destroy()
+
+    def test_enlazar_permiso_con_actividad_desde_el_dialogo(self):
+        import dialogos
+        from tkinter import ttk
+        guardado = {"permisos_tipos": [{"id": "ap", "nombre": "AP", "concesiones": [
+            {"horas": 70, "fecha_limite": ""}]}]}
+        with mock.patch.object(core, "config_valor",
+                               lambda c, d=None: guardado.get(c, d)),              mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})),              mock.patch.object(core, "PERMISOS", {}),              mock.patch.object(dialogos, "en_hilo", _en_hilo_sync),              mock.patch.object(core, "entradas_rango", return_value=[]):
+            top = dialogos.abrir_permisos(self.app)
+            try:
+                def combos(w):
+                    out = [w] if isinstance(w, ttk.Combobox) else []
+                    for h in w.winfo_children():
+                        out += combos(h)
+                    return out
+                cbo = combos(top)[0]
+                self.assertEqual(cbo.get(), dialogos.SIN_ACTIVIDAD)
+                cbo.set("Asuntos propios")
+                cbo.event_generate("<<ComboboxSelected>>")
+                self.root.update()
+                self.assertEqual(core.actividad_de_permiso("ap"), "Asuntos propios")
+                # y volver a "solo en el dia" lo desenlaza
+                cbo = combos(top)[0]
+                cbo.set(dialogos.SIN_ACTIVIDAD)
+                cbo.event_generate("<<ComboboxSelected>>")
+                self.root.update()
+                self.assertEqual(core.actividad_de_permiso("ap"), "")
+            finally:
+                top.destroy()
 
 class TestGuiInari(unittest.TestCase):
     """Un dia de teletrabajo con INARI activo lee/borra en INARI, no en OpenProject."""
@@ -230,6 +387,17 @@ class TestGuiInari(unittest.TestCase):
         m_b.assert_called_once_with("100")
         m_op.assert_not_called()
 
+
+    def test_borrar_slot_inari_cuenta_en_el_mensaje(self):
+        # Un slot de INARI no se puede deshacer, pero SI se ha borrado: el
+        # mensaje decia "0 apuntes eliminados".
+        self.app.dia_vars[0][0].set(True)
+        self.app._recargar_tree()
+        self.app.tree.selection_set(self.app.tree.get_children()[0])
+        with mock.patch.object(self.destinos, "borrar", return_value=True), \
+             mock.patch.object(self.gui.messagebox, "askyesno", lambda *a, **k: True):
+            self.app._eliminar()
+        self.assertIn("Apunte eliminado.", self.app.status.cget("text"))
 
 class TestWizardConfig(unittest.TestCase):
     def test_finalizar_preserva_claves_ajenas(self):

@@ -46,21 +46,39 @@ Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INAR
 
 ### 🍎 macOS
 
-1. **Descarga** el ZIP de tu Mac desde:
+1. **Descarga** el `.dmg` de tu Mac desde:
    **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
 
-   - Apple Silicon (M1/M2/M3/M4): `FichaCSIRC-mac-arm64.zip`
-   - Intel: `FichaCSIRC-mac-x64.zip`
+   - Apple Silicon (M1/M2/M3/M4): `FichaCSIRC-mac-arm64.dmg`
+   - Intel: `FichaCSIRC-mac-x64.dmg`
 
-2. Descomprime el ZIP. Dentro hay dos aplicaciones:
+2. Ábrelo. Verás dos aplicaciones y un acceso a **Aplicaciones**:
 
    - 📝 **FichaCSIRC.app** — la de cada día.
    - 🔧 **FichaCSIRC-Configurar.app** — el asistente de configuración.
 
-3. Abre primero **FichaCSIRC-Configurar.app**. Si macOS avisa de que la app no
-   está firmada, haz **clic derecho → Abrir → Abrir**. Solo la primera vez. 🔓
+   **Arrastra las dos a Aplicaciones** 📂. Si ya las tenías, elige
+   **«Reemplazar»**. No las abras desde el propio `.dmg` ni desde Descargas: así
+   cada actualización sustituye a la anterior en vez de dejar otra copia.
+
+3. Abre primero **FichaCSIRC-Configurar.app** desde Aplicaciones. Como la app no
+   está firmada por Apple, la primera vez macOS la bloquea: ve a **Ajustes del
+   Sistema → Privacidad y seguridad** y pulsa **«Abrir igualmente»**. Solo la
+   primera vez. 🔓
 
 4. Cuando termines la configuración, abre **FichaCSIRC.app** para fichar.
+
+> 🔄 **Actualizar en Mac:** cuando haya versión nueva, la app te ofrece
+> descargarla. Se abre el instalador y la app se cierra; arrastra las dos apps a
+> Aplicaciones y elige **«Reemplazar»**.
+>
+> 🧹 **¿Te salen varios iconos de FichaCSIRC en Launchpad?** Son copias viejas
+> (de cuando se distribuía en `.zip`). Deja solo las de **Aplicaciones** y manda
+> el resto a la Papelera desde el Finder; suelen estar en **Descargas**. Si
+> Launchpad sigue mostrándolas, ejecuta `killall Dock` en Terminal.
+>
+> 🖱️ En Mac, el **botón derecho** de estas instrucciones es el clic secundario
+> (dos dedos en el trackpad) o **Ctrl+clic**.
 
 ---
 
@@ -123,9 +141,9 @@ Abre **FichaCSIRC (Registrar horas)**:
   día* → *Eliminar apuntes de este día*. Te los lista y eliges uno, varios o
   todos (se puede deshacer).
 - ✏️ **Doble clic** en un apunte lo edita; **Supr** lo borra (con botón *Deshacer* 🔙).
-- 🖱️ **Botón derecho** sobre un día: marcarlo como festivo, vacaciones, guardia o
-  teletrabajo, o **añadir un permiso por horas** (los colores y etiquetas te lo
-  recuerdan de un vistazo).
+- 🖱️ **Botón derecho** sobre un día (en Mac, **Ctrl+clic**): marcarlo como
+  festivo, vacaciones, guardia o teletrabajo, o **añadir un permiso por horas**
+  (los colores y etiquetas te lo recuerdan de un vistazo).
 - 🏖️ **Importar festivos** (*Herramientas*): marca de golpe los festivos del año
   (nacionales, de Andalucía y de Granada), calculados solos, para que no te los pida.
 - 🔗 **Asociar una actividad con su tarea**: pulsa **botón derecho sobre el
@@ -175,8 +193,26 @@ Compensación por servicios mínimos     Total 56:00 · Usadas 38:00 · Disponib
 
 - **＋ Añadir concesión** 🎁: cuando te concedan horas nuevas, las añades ahí con
   su fecha límite (déjala vacía si no caduca). Se guarda al momento.
-- **Usadas** se calculan solas con los permisos que marcas en los días.
-- **Disponibles** = total − usadas. En rojo si te pasas.
+- **Usadas** se calculan solas (ver abajo).
+- **Te quedan** = todo lo concedido − todo lo usado. En rojo si te pasas.
+
+**Lo que no usas no se pierde** 🔁: el saldo es continuo. A partir del **1 de
+enero**, al abrir la app te ofrece **añadir los permisos del año nuevo**, que se
+**suman a lo que te quede**. Viene con las horas del año anterior ya puestas;
+corrígelas o deja en blanco las que no te toquen. Es opcional: *Más tarde* te lo
+vuelve a preguntar al siguiente arranque y *No este año* no insiste más. También
+lo tienes a mano en *Herramientas → Permisos (horas) → Añadir los permisos de…*.
+
+**¿Cómo se cuentan las usadas?** Depende de tu servicio:
+
+- Si tus permisos **solo los marcas en el día** (botón derecho → *Añadir permiso
+  por horas…*), se cuentan esos. Es la opción por defecto.
+- Si en tu servicio los asuntos propios (u otro permiso) **se imputan en
+  ProyectosTic como una actividad** dentro de una tarea, dile a la app cuál: en
+  *Herramientas → Permisos (horas)*, en ese permiso, elige la actividad en
+  **«Se imputa como actividad»** (por ejemplo *Asuntos propios*). Desde entonces
+  las horas que imputes con esa actividad también te descuentan del saldo. 🔗
+  En ese caso no marques además el permiso en el día, o contará dos veces.
 - ⏳ La app **avisa** cuando una concesión está a punto de caducar, y ⚠️ marca las
   ya caducadas — pero **no te resta horas sola**: tú decides qué hacer.
 
@@ -245,6 +281,8 @@ para que no tengas que saltar de una herramienta a otra.
 | «Sin conexión con ProyectosTic» | Comprueba que tienes red de la UGR (o la VPN encendida 🌐). |
 | «Acceso denegado (401)» | Tu API key ya no vale: genera otra (sección 2) y vuelve a pasar el configurador. |
 | «No tienes permiso para ver las tareas de este proyecto» (403) | Es normal: solo ves los proyectos en los que participas. Elige otro. |
+| Varios iconos de FichaCSIRC en Launchpad (Mac) | Son copias viejas en Descargas: deja solo las de Aplicaciones (ver sección 1, macOS). |
+| El aviso diario de fichaje no salta | Abre FichaCSIRC una vez: si el aviso apuntaba a una instalación vieja, la app lo reprograma sola a la misma hora. |
 | El indicador **● INARI** está en rojo | Revisa tu token en *Herramientas → Integraciones (INARI)…* y prueba la conexión (solo aplica a SisGes). |
 | Cualquier otra cosa rara 🐛 | Junto a tu configuración (`%APPDATA%\FichaCSIRC` en Windows, `~/Library/Application Support/FichaCSIRC` en macOS) hay un archivo `fichacsirc.log`: adjúntalo al pedir ayuda. |
 

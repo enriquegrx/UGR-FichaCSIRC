@@ -48,8 +48,8 @@ from fichaui import (
     COLOR_PRIMARY, COLOR_SELECTED, COLOR_SUCCESS, COLOR_WARNING,
     COLOR_VACACIONES, COLOR_GUARDIA_BG, COLOR_GUARDIA_FG, COLOR_TELE_BG,
     COLOR_TELE_FG, COLOR_PERMISO_BG, COLOR_PERMISO_FG, Tooltip,
-    TooltipFilas, aplicar_estilo, boton_peligro, boton_primario, chip_modalidad,
-    en_hilo, recurso, carpeta_app,
+    TooltipFilas, aplicar_estilo, bind_menu_contextual, boton_peligro,
+    boton_primario, chip_modalidad, en_hilo, recurso, carpeta_app,
 )
 
 
@@ -94,6 +94,14 @@ class App:
         self._poblar_tareas()
         self.refrescar()
         self._comprobar_actualizacion()
+        self.root.after(800, self._avisar_si_fuera_de_aplicaciones)
+        try:
+            core.inicializar_permisos_anuales()
+        except Exception:
+            pass
+        self.root.after(1500, self._permisos_nuevo_anio)
+        # Aviso diario que apunte a un .exe/.app que ya no existe: se repara solo.
+        self._en_hilo(recordatorio.reparar_recordatorio, lambda _r, _e: None)
 
     def _comprobar_actualizacion(self, forzar=False):
         """Avisa (una vez al dia, sin molestar) si hay una version nueva."""
@@ -112,13 +120,17 @@ class App:
                 return
             version, url = res[:2]
             installer_url = res[2] if len(res) > 2 else ""
-            if os.name == "nt" and installer_url:
+            if installer_url:
+                if sys.platform == "darwin":
+                    como = ("Se abrirá el instalador y FichaCSIRC se cerrará para "
+                            "que puedas sustituirla.")
+                else:
+                    como = "FichaCSIRC se cerrará al iniciar el instalador."
                 if messagebox.askyesno(
                         "Actualización disponible",
                         f"Hay una versión nueva de FichaCSIRC ({version}).\n"
                         f"Tú tienes la {core.VERSION}.\n\n"
-                        "¿Descargar e instalar ahora?\n"
-                        "FichaCSIRC se cerrará al iniciar el instalador."):
+                        f"¿Descargar e instalar ahora?\n{como}"):
                     self._descargar_e_instalar(version, installer_url, url)
                 return
             if messagebox.askyesno(
@@ -134,8 +146,11 @@ class App:
         en_hilo(self.root, lambda: core.buscar_actualizacion(forzar=forzar), al_terminar)
 
     def _descargar_e_instalar(self, version, installer_url, pagina_url):
-        """Descarga el instalador Windows y lo lanza fuera de la app."""
-        nombre = f"FichaCSIRC-Instalador-{version}.exe"
+        """Descarga el instalador (.exe o .dmg) y lo lanza fuera de la app."""
+        if sys.platform == "darwin":
+            nombre = f"FichaCSIRC-{version}-mac-{core.arquitectura_mac()}.dmg"
+        else:
+            nombre = f"FichaCSIRC-Instalador-{version}.exe"
         destino = os.path.join(tempfile.gettempdir(), nombre)
         self.status.config(text=f"Descargando actualización {version}...")
 
@@ -171,8 +186,62 @@ class App:
         """Lanza el instalador directamente (sin cmd/start: sus comillas se
         mangleaban y start acababa buscando el archivo '\\\\'). No hace falta
         esperar aqui: el instalador espera y cierra los procesos de la app
-        antes de copiar (InitializeSetup y PrepareToInstall)."""
+        antes de copiar (InitializeSetup y PrepareToInstall).
+
+        En macOS se abre el .dmg (el Finder muestra la ventana de arrastrar a
+        Aplicaciones) y hay que cerrar la app: el Finder no deja reemplazar una
+        aplicacion que esta abierta. Al bajarlo la propia app, el .dmg no lleva
+        la marca de cuarentena y la version nueva no pide "Abrir igualmente"."""
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", ruta], close_fds=True)
+            messagebox.showinfo(
+                "Instalar la actualización",
+                "Se ha abierto el instalador.\n\n"
+                "Arrastra FichaCSIRC y FichaCSIRC-Configurar a la carpeta "
+                "Aplicaciones y, cuando lo pregunte, elige «Reemplazar».\n\n"
+                "FichaCSIRC se cerrará ahora para poder sustituirla.")
+            return
         subprocess.Popen([ruta], close_fds=True)
+
+    def _permisos_nuevo_anio(self):
+        """A partir del 1 de enero, ofrece (una vez, y es opcional) añadir los
+        permisos del año que empieza: se suman a lo que quede."""
+        try:
+            if core.toca_anadir_permisos_del_anio():
+                dialogos.abrir_permisos_nuevo_anio(self)
+        except Exception:
+            pass
+
+    def _avisar_si_fuera_de_aplicaciones(self):
+        """En Mac, avisa si la app no esta en Aplicaciones: abierta desde
+        Descargas o desde el .dmg, cada actualizacion deja otra copia y en
+        Launchpad acaban saliendo varios iconos. Se avisa una vez por ruta (una
+        app 'translocada' cambia de ruta en cada arranque, asi que en ese caso
+        insiste hasta que se mueva, que es justo lo que se quiere)."""
+        motivo = core.fuera_de_aplicaciones()
+        if not motivo or core.config_valor("aviso_aplicaciones") == sys.executable:
+            return
+        try:
+            core.guardar_config_valor("aviso_aplicaciones", sys.executable)
+        except Exception:
+            pass
+        if motivo == "dmg":
+            texto = ("Estás usando FichaCSIRC directamente desde el instalador "
+                     "(.dmg). Al expulsarlo dejará de funcionar.")
+        else:
+            texto = ("FichaCSIRC no está en la carpeta Aplicaciones, así que cada "
+                     "actualización deja otra copia y en Launchpad acaban "
+                     "saliendo varios iconos.")
+        if messagebox.askyesno(
+                "Mueve FichaCSIRC a Aplicaciones",
+                texto + "\n\nArrastra FichaCSIRC y FichaCSIRC-Configurar a la "
+                "carpeta Aplicaciones (si ya están, elige «Reemplazar») y borra "
+                "las copias que tengas en Descargas.\n\n"
+                "¿Abrir la carpeta Aplicaciones?"):
+            try:
+                subprocess.Popen(["open", "/Applications"])
+            except Exception:
+                pass
 
     # ---------- utilidades ----------
     def _lunes_actual(self):
@@ -394,7 +463,7 @@ class App:
         self.cbo_act.pack(side="left")
         # Boton derecho: fijar esta actividad para la tarea elegida, sin esperar
         # a que la app la aprenda sola al imputar.
-        self.cbo_act.bind("<Button-3>", self._menu_actividad)
+        bind_menu_contextual(self.cbo_act, self._menu_actividad)
         # Al elegir una actividad asociada, la tarea salta sola a la suya.
         self.cbo_act.bind("<<ComboboxSelected>>", self._tarea_de_actividad)
         Tooltip(self.cbo_act, "Actividad con la que se imputan las horas. "
@@ -873,7 +942,7 @@ class App:
         tt = f"    ·    ⌂ {core.teletrabajo_en_semana(dias[0])}/{cupo_tt}" if cupo_tt else ""
         self.lbl_semana.config(
             text=f"Semana {dias[0].strftime('%d/%m/%Y')} - {dom.strftime('%d/%m/%Y')}"
-                 f"    ·    {core._fmt(reg_sem)} / {obj_sem}h{tt}")
+                 f"    ·    {core._fmt(reg_sem)} / {core._fmt(obj_sem)}{tt}")
         for w in self.dias_frame.winfo_children():
             w.destroy()
         self.dia_vars = []
@@ -926,16 +995,16 @@ class App:
                     texto2 = f"{core._fmt(reg)} · {texto2}"
             elif reg > obj + 0.001:
                 frac, color = 1.0, COLOR_DANGER
-                texto2 = f"{core._fmt(reg)} / {obj}h  (te pasas)"
+                texto2 = f"{core._fmt(reg)} / {core._fmt(obj)}  (te pasas)"
             elif reg >= obj - 0.001 and reg > 0:
                 frac, color = 1.0, COLOR_SUCCESS
-                texto2 = f"{core._fmt(reg)} / {obj}h  ✔"
+                texto2 = f"{core._fmt(reg)} / {core._fmt(obj)}  ✔"
             elif reg > 0:
                 frac, color = (reg / obj if obj else 0.0), COLOR_WARNING
-                texto2 = f"{core._fmt(reg)} / {obj}h"
+                texto2 = f"{core._fmt(reg)} / {core._fmt(obj)}"
             else:
                 frac, color = 0.0, "#9a9a9a"
-                texto2 = f"0h / {obj}h"
+                texto2 = f"0h / {core._fmt(obj)}"
             lbl2 = tk.Label(card, text=texto2, font=("TkDefaultFont", 12, "bold"),
                             fg=color, bg=COLOR_PANEL, anchor="w")
             lbl2.pack(fill="x", padx=12,
@@ -975,7 +1044,7 @@ class App:
             cv.bind("<Configure>", dibujar)
             for wdg in clicables:
                 wdg.bind("<Button-1>", lambda _e, v=var: self._click_dia(v))
-                wdg.bind("<Button-3>", lambda e, d=d: self._menu_dia(e, d))
+                bind_menu_contextual(wdg, lambda e, d=d: self._menu_dia(e, d))
             self.dia_vars.append((var, d, card))
         self._pintar_sel()
         self._recargar_tree()
@@ -1071,7 +1140,7 @@ class App:
             falta = obj - reg
             extra = (f"faltan {core._fmt(falta)}" if falta > 0.001
                      else ("completo" if abs(falta) < 0.001 else f"te pasas {core._fmt(-falta)}"))
-            self.status.config(text=f"{etiqueta}: {core._fmt(reg)}/{obj}h  ({extra})")
+            self.status.config(text=f"{etiqueta}: {core._fmt(reg)}/{core._fmt(obj)}  ({extra})")
             self._sugerir_horas(falta)
             self._sugerir_comentario()
         elif marcados:
@@ -1325,7 +1394,13 @@ class App:
                     if core.es_no_laborable(d_dest.isoformat()):
                         saltados += len(apuntes)
                         continue
-                    existentes = cache.get(d_dest.isoformat()) or []
+                    existentes = cache.get(d_dest.isoformat())
+                    if existentes is None:
+                        # No se pudo leer: copiar a ciegas podria duplicar.
+                        errores += len(apuntes)
+                        ultimo = (f"no se pudieron leer los apuntes del "
+                                  f"{d_dest.strftime('%d/%m')}; se ha saltado")
+                        continue
                     for a in apuntes:
                         if any(str(e.get("wp_id")) == str(a["wp_id"])
                                for e in existentes):
@@ -1410,7 +1485,13 @@ class App:
                 creados = saltados = errores = 0
                 ultimo = ""
                 for d in dias:
-                    existentes = cache.get(d.isoformat()) or []
+                    existentes = cache.get(d.isoformat())
+                    if existentes is None:
+                        # No se pudo leer: copiar a ciegas podria duplicar.
+                        errores += len(apuntes)
+                        ultimo = (f"no se pudieron leer los apuntes del "
+                                  f"{d.strftime('%d/%m')}; se ha saltado")
+                        continue
                     for a in apuntes:
                         if any(str(e.get("wp_id")) == str(a["wp_id"])
                                for e in existentes):
@@ -1485,6 +1566,17 @@ class App:
                     f"¿Añadir {core._fmt(horas)} de '{txt}' [{actividad}] a {len(dias)} días?"):
                 return
 
+        # Aviso 0: dias que no se pudieron leer. Sin sus apuntes no se puede
+        # comprobar si ya tienen esa tarea ni si se pasa la jornada.
+        sin_leer = [f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}"
+                    for d in dias if self._cache_dia.get(d.isoformat(), []) is None]
+        if sin_leer and not messagebox.askyesno(
+                "No se pudieron leer algunos días",
+                "No se pudieron leer los apuntes de:\n  " + "\n  ".join(sin_leer)
+                + "\n\nPuede que ya tengan horas de esta tarea. ¿Añadir igualmente?\n"
+                "(Si no, pulsa F5 para recargar y vuelve a intentarlo.)"):
+            return
+
         # Aviso 1: dias no laborables (festivo/vacaciones/cierre) -> permitir,
         # pero con un mensaje claro (una guardia en festivo es un caso real).
         nolab = []
@@ -1535,7 +1627,7 @@ class App:
             reg = sum(a["horas"] for a in existentes)
             if reg + horas > core.objetivo_de(d) + 0.001:
                 exceso.append(f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')} "
-                              f"({core._fmt(reg + horas)} de {core.objetivo_de(d)}h)")
+                              f"({core._fmt(reg + horas)} de {core._fmt(core.objetivo_de(d))})")
         if exceso:
             if not messagebox.askyesno(
                     "Jornada superada",
@@ -1635,36 +1727,40 @@ class App:
         self.status.config(text="Eliminando...")
 
         def trabajo():
-            eliminados, errores, ultimo = [], 0, ""
+            # `n_ok` cuenta todo lo borrado; `eliminados` solo lo que se puede
+            # deshacer (un slot de INARI se borra pero no se restaura). Antes el
+            # mensaje usaba len(eliminados) y decia "0 apuntes eliminados".
+            eliminados, n_ok, errores, ultimo = [], 0, 0, ""
             for entry_id, destino, datos in apuntes:
                 try:
                     if destino == "inari":
                         destinos.borrar(entry_id)
                     else:
                         core.eliminar_entrada(entry_id)
+                    n_ok += 1
                     if datos:
                         eliminados.append(datos)
                 except Exception as ex:
                     errores += 1
                     ultimo = str(ex)
-            return eliminados, errores, ultimo
+            return eliminados, n_ok, errores, ultimo
 
         def al_terminar(res, err):
             if err:
                 self.refrescar()
                 messagebox.showerror("Error", f"No se pudo eliminar:\n{err}")
                 return
-            eliminados, errores, ultimo = res
+            eliminados, n_ok, errores, ultimo = res
             self._ultimo_borrado = eliminados or None
             if eliminados:
                 self.btn_deshacer.pack(side="right", padx=4)
             if errores:
                 messagebox.showwarning(
                     "Eliminado con errores",
-                    f"Eliminados: {len(eliminados)}. Con errores: {errores}.\n"
+                    f"Eliminados: {n_ok}. Con errores: {errores}.\n"
                     f"Último error: {ultimo}")
-            self._msg_pendiente = ("Apunte eliminado." if len(eliminados) == 1
-                                   else f"{len(eliminados)} apuntes eliminados.")
+            self._msg_pendiente = ("Apunte eliminado." if n_ok == 1
+                                   else f"{n_ok} apuntes eliminados.")
             self.refrescar()
 
         self._en_hilo(trabajo, al_terminar)

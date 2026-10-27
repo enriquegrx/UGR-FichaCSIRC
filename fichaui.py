@@ -9,6 +9,7 @@ piezas transversales (tooltips, ejecucion en hilo, rutas de recursos) para que
 """
 
 import os
+import subprocess
 import sys
 import threading
 import tkinter as tk
@@ -36,6 +37,29 @@ COLOR_TELE_BG = "#eceff3"          # chip teletrabajo (fondo gris)
 COLOR_TELE_FG = "#44484f"          # chip teletrabajo (texto gris)
 COLOR_PERMISO_BG = "#fdf3e3"       # chip permiso por horas (fondo ambar suave)
 COLOR_PERMISO_FG = "#8a5a12"       # chip permiso por horas (texto ambar oscuro)
+
+
+def bind_menu_contextual(widget, callback):
+    """Enlaza el menu del boton derecho de forma que funcione tambien en Mac.
+
+    En macOS, Tk 8.6 entrega el boton derecho como Button-2 (no Button-3) y el
+    gesto clasico es Ctrl+clic: enlazando solo Button-3, como antes, ningun menu
+    contextual se abria en Mac (festivos, permisos, guardia, plantillas...)."""
+    widget.bind("<Button-3>", callback)
+    if sys.platform == "darwin":
+        widget.bind("<Button-2>", callback)
+        widget.bind("<Control-Button-1>", callback)
+
+
+def abrir_con_sistema(ruta):
+    """Abre un fichero con la aplicacion por defecto (Excel para un CSV...).
+    os.startfile solo existe en Windows: en Mac el boton no hacia nada."""
+    if os.name == "nt":
+        os.startfile(ruta)
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", ruta])
+    else:
+        subprocess.Popen(["xdg-open", ruta])
 
 
 def recurso(carpeta, nombre):

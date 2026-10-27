@@ -10,7 +10,6 @@ Ejecuta:  pythonw configurar_gui.py   (o "FichaCSIRC - Configurar.bat")
 
 import os
 import sys
-import json
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -513,8 +512,7 @@ class Wizard:
             "favoritos": self.favoritos,
         })
         try:
-            with open(ccore.CONFIG_PATH, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            ccore.escribir_config(cfg)
             escribir_lanzadores()
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo guardar:\n{e}")

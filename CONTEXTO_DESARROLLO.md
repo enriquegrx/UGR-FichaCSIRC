@@ -408,19 +408,79 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     Windows: en Mac *Ayuda -> Novedades* salia con el texto de fallback. Al
     tocar las opciones de empaquetado hay que mirar **los dos** sitios, porque
     Windows empaqueta desde el workflow y macOS desde el script.
+  - **Mac en `.dmg`** (`hdiutil`, con reintento: falla a veces en los runners con
+    "Resource busy"). El usuario reporto **5 iconos de FichaCSIRC en Launchpad**:
+    con el zip cada actualizacion se descomprimia en otra carpeta de Descargas y
+    Launchpad indexa toda `.app` del disco. Ademas: la app se actualiza sola en
+    Mac (`MAC_INSTALLER_ASSET`, abre el dmg y se cierra porque el Finder no deja
+    reemplazar una app abierta; bajado por la app no lleva cuarentena), elige la
+    arquitectura por **hardware** (`sysctl hw.optional.arm64`: con Rosetta
+    `platform.machine()` miente) y avisa si corre fuera de Aplicaciones
+    (`fuera_de_aplicaciones`: dmg / *App Translocation* / otra ruta). No se mueve
+    sola: translocada no conoce la ruta de su original.
+  - **Revision completa** (con Opus 5.5). Corregido:
+    - `entradas_dia` sin filtro de usuario si fallaba `/users/me`: devolvia los
+      apuntes de todo el equipo visible (sumados a tu jornada y borrables). Un
+      test fijaba ese comportamiento; ahora exige lo contrario. `_me(estricto)`.
+    - Menus contextuales muertos en Mac: Tk 8.6/Aqua entrega el boton derecho
+      como **Button-2**. `fichaui.bind_menu_contextual` (Button-3 + en darwin
+      Button-2 y Control-Button-1). Usarlo SIEMPRE para menus nuevos.
+    - `configurar.guardar` (consola) volcaba solo sus claves y borraba el resto
+      de la config; el wizard grafico ya fusionaba. Ahora ambos fusionan.
+    - `config.json` se escribe de forma atomica (`escribir_json_atomico`:
+      temporal + fsync + `os.replace`); antes un corte lo dejaba truncado.
+    - `_actividad_href` se tragaba el error de red y el apunte se creaba con la
+      actividad por defecto. Ahora el error se propaga y no se crea nada.
+    - Copiar dia/semana y plantillas escribian a ciegas en un dia que no se pudo
+      leer (cache `None` tratada como vacia -> duplicados). Ahora se saltan.
+    - Aviso diario: la tarea guarda la ruta del ejecutable y el paso a onedir
+      (2.6.4) la dejo apuntando a un .exe borrado. `reparar_recordatorio` al
+      arrancar: si `recordatorio_ejecutable` (config) no es el actual, lee la
+      HORA de schtasks/launchd y reprograma. La ruta de schtasks no es fiable
+      (sale en la codificacion de la consola, comprobado), por eso se anota en
+      config en vez de compararla.
+    - CSV con coma decimal (`horas_csv`), abrir CSV en Mac (`abrir_con_sistema`),
+      "7.0h" en tarjetas (usar `_fmt` tambien para el objetivo), contador de
+      borrados de INARI.
+  - **Permisos: saldo continuo** (decision del usuario). Antes cupo = todas las
+    concesiones pero usadas = solo el año natural: en enero "volvian" las horas
+    gastadas. Ahora usadas = todo desde `permisos_desde` y lo de cada año se
+    SUMA a lo que quede. Al empezar el año (`permisos_anio_revisado` < año) la
+    app ofrece, opcional, añadir los permisos nuevos con la ultima concesion de
+    cada tipo como propuesta. `inicializar_permisos_anuales` da por revisado el
+    año en curso en el primer arranque, para no preguntar en octubre.
+  - **Permiso imputado como actividad**: segun el servicio, los asuntos propios
+    se marcan en local o se imputan como actividad de una tarea (ATE). Clave
+    `actividad` por tipo en `permisos_tipos`; `actualizar_usadas_proyectostic`
+    suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
+    y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
 ## Tests
-- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
+- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la
   red mockeada, repartidos así:
-  - `test_fichacsirc.py` (81) — motor: duraciones ISO, jornada/verano, parsing y
-    paginación de la API, payloads, pendientes, festivos, franjas y permisos.
+  - `test_fichacsirc.py` (109) — motor: duraciones ISO, jornada/verano, parsing y
+    paginación de la API, payloads, pendientes, festivos, franjas, permisos
+    (saldo, actividad, año nuevo), instalacion en Mac y aviso diario.
   - `test_inari.py` (23) — cliente JSON-RPC de INARI (lectura y escritura).
   - `test_destinos.py` (9) — puente ProyectosTIC/INARI.
-  - `test_gui_acciones.py` (9) — acciones reales de la GUI (con `en_hilo` síncrono).
+  - `test_gui_acciones.py` (37) — acciones reales de la GUI (con `en_hilo` síncrono).
   - `test_gui_smoke.py` (1) — arranque de la ventana; se salta sin display.
 - Ejecutarlos tras tocar el motor o la GUI.
 
 ## Pendiente / ideas
+- **INARI** (revisarlo junto con la validacion contra el servidor real):
+  - El aviso diario (`dias_pendientes_semana`) solo mira ProyectosTic: en dias
+    de teletrabajo ya registrados en INARI avisa de horas pendientes. El
+    docstring de `destinos.py` dice que el aviso usa INARI, y no es cierto.
+  - Añadir/copiar/plantilla en un dia de teletrabajo con INARI crea el apunte en
+    ProyectosTic, pero ese dia se pinta solo con INARI: el apunte no se ve y es
+    facil duplicarlo.
+  - `slots_dia` busca `status:open`: un slot cerrado en Kanboard deja de contar.
+  - Guardar como plantilla un dia de INARI guarda apuntes con `wp_id` None.
+- Exportar CSV y el resumen del mes hacen una consulta POR DIA (un año = 365):
+  pasarlos a `entradas_rango`.
+- CI: correr en macOS los tests del motor (no los de GUI, que se colgaban).
+- Credenciales (API key, token INARI) en el llavero del sistema, no en el JSON.
 - Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
   (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
 - Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.

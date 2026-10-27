@@ -42,9 +42,14 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - 🕐 Registrar **permisos por horas** (asuntos particulares, conciliación,
   compensación por servicios mínimos): restan horas al objetivo de ese día. Cada
   tipo se nutre de **concesiones** (bolsas de horas con su fecha límite, que se
-  van añadiendo, p. ej. por servicios extraordinarios); el total es su suma y las
-  usadas se calculan solas. La caducidad avisa, pero no descuenta sola. Se
-  introducen a mano: el portal de personal no las expone por API.
+  van añadiendo, p. ej. por servicios extraordinarios). Es un **saldo continuo**:
+  lo que no se usa se arrastra y, a partir del 1 de enero, la app ofrece añadir
+  los permisos del año nuevo, que se suman a lo que quede (`permisos_desde`,
+  `permisos_anio_revisado`). Las usadas se calculan solas: lo marcado en el día
+  y, en los servicios donde el permiso se imputa como **actividad de una tarea**,
+  lo imputado en ProyectosTic con esa actividad (clave `actividad` de cada tipo
+  en `permisos_tipos`). La caducidad avisa, pero no descuenta sola. Las
+  concesiones se introducen a mano: el portal de personal no las expone por API.
 - ☕ Distinguir la **jornada oficial** de la que se ficha: si media hora es de
   desayuno, fichas 6,5 h al día pero **un día completo de permiso cuenta como 7 h**,
   que es como lo descuenta el portal (`desayuno` y `horas_dia_permiso`).
@@ -116,23 +121,36 @@ El instalador deja dos accesos: la aplicación de registro y el configurador.
 
 ### macOS
 
-Descargar el ZIP correspondiente desde la última release:
+Descargar el `.dmg` correspondiente desde la última release:
 
-- `FichaCSIRC-mac-arm64.zip` para Apple Silicon.
-- `FichaCSIRC-mac-x64.zip` para Intel.
+- `FichaCSIRC-mac-arm64.dmg` para Apple Silicon.
+- `FichaCSIRC-mac-x64.dmg` para Intel.
 
-El ZIP contiene:
+Al abrirlo aparecen `FichaCSIRC.app` y `FichaCSIRC-Configurar.app` junto a un
+acceso a **Aplicaciones**: hay que arrastrarlas ahí (si ya estaban, elegir
+*Reemplazar*). Desde la 2.9.2 se distribuye como `.dmg` y no como `.zip`: con el
+zip cada actualización se descomprimía en otra carpeta de Descargas y Launchpad
+acababa mostrando un icono por copia. La app avisa si se abre fuera de
+Aplicaciones y, al actualizarse, descarga el `.dmg` de la arquitectura del Mac
+(mirando el hardware, no el proceso: una app Intel bajo Rosetta pasa a arm64).
 
-- `FichaCSIRC.app`
-- `FichaCSIRC-Configurar.app`
-
-Las apps no están firmadas ni notarizadas por Apple. La primera apertura puede
-requerir clic derecho sobre la app, `Abrir` y confirmar de nuevo. Si macOS marca
-la descarga con cuarentena y no permite abrirla, se puede limpiar desde Terminal:
+Las apps no están firmadas ni notarizadas por Apple. La primera vez macOS las
+bloquea; se abren en *Ajustes del Sistema → Privacidad y seguridad → Abrir
+igualmente* (desde macOS 15 ya no vale el clic derecho → *Abrir*). Si macOS
+marca la descarga con cuarentena y no permite abrirla, se puede limpiar desde
+Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine FichaCSIRC.app FichaCSIRC-Configurar.app
+xattr -dr com.apple.quarantine /Applications/FichaCSIRC.app /Applications/FichaCSIRC-Configurar.app
 ```
+
+Para localizar copias antiguas (las que generaban iconos repetidos):
+
+```bash
+find ~ /Applications -maxdepth 4 -name "FichaCSIRC*.app" -prune 2>/dev/null
+```
+
+En Mac el menú contextual se abre con clic secundario o con **Ctrl+clic**.
 
 ## 🗂️ Configuración y datos locales
 
@@ -173,7 +191,7 @@ configuración.
 | `instalador.iss` | Instalador Windows con Inno Setup. |
 | `build_exe.bat` | Compilación local de los `.exe` de Windows en modo carpeta (`--onedir`). |
 | `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
-| `build_macos.sh` | Compilación local de apps macOS y ZIP. |
+| `build_macos.sh` | Compilación local de apps macOS y su `.dmg`. |
 | `NOVEDADES.md` | Changelog para usuarios; se empaqueta y se ve en Ayuda → Novedades. |
 | `.github/workflows/` | Tests y publicación automática de releases. |
 | `tests/` | Tests del motor, del cliente INARI, del puente de destinos y de flujos de la GUI. |
@@ -262,7 +280,7 @@ Artefactos generados:
 
 - `dist/FichaCSIRC.app`
 - `dist/FichaCSIRC-Configurar.app`
-- `dist/FichaCSIRC-mac-arm64.zip` o `dist/FichaCSIRC-mac-x64.zip`
+- `dist/FichaCSIRC-mac-arm64.dmg` o `dist/FichaCSIRC-mac-x64.dmg`
 
 Para empaquetar en macOS hace falta un Python con Tk moderno; el script rechaza
 Tk anterior a 8.6. En Homebrew:

@@ -7,9 +7,38 @@ instalada aparece en el pie de la ventana.
 
 ## 2.9.2
 
+**Mejoras**
+- **Permisos: lo que no usas ya no se pierde en enero.** El saldo es continuo:
+  a partir del 1 de enero la app te ofrece **añadir los permisos del año nuevo**
+  (con las horas del año anterior ya puestas) y se **suman a lo que te quede**.
+  Es opcional y lo tienes también en *Herramientas → Permisos (horas)*.
+- **Permisos que se imputan como actividad.** Si en tu servicio los asuntos
+  propios se imputan en ProyectosTic con una actividad dentro de una tarea,
+  indícalo en *Herramientas → Permisos (horas)* («Se imputa como actividad») y
+  esas horas también te descontarán del saldo.
+- **Mac: ahora se instala con un `.dmg`.** Lo abres y arrastras las apps a
+  Aplicaciones. Las actualizaciones se descargan solas y sustituyen a la versión
+  anterior, en vez de dejar otra copia (y otro icono en Launchpad).
+
 **Correcciones**
-- En **Mac**, *Ayuda → Novedades* estaba en blanco: esta ventana no se incluía
-  al empaquetar la aplicación. Ya se incluye, igual que en Windows.
+- **En Mac no se abría ningún menú con el botón derecho** (festivos, permisos,
+  guardia, plantillas…). Ya funciona, también con **Ctrl+clic**.
+- Si la conexión fallaba en el momento justo, la app podía mostrar en tu día
+  **apuntes de otras personas** del proyecto. Ya no: si no puede saber quién
+  eres, no consulta.
+- Si no se podía consultar la lista de actividades, el apunte se guardaba con
+  **otra actividad** sin avisar. Ahora te avisa del error y no guarda nada.
+- **Copiar día, copiar semana y plantillas** ya no escriben en un día que no se
+  ha podido leer (podían duplicar apuntes): ese día se salta y se avisa.
+- El **aviso diario de fichaje** dejaba de saltar si se activó con una versión
+  antigua. Ahora la app lo detecta al abrirse y lo reprograma sola.
+- El **CSV exportado** pone los decimales con coma (6,5) para que Excel los sume.
+- En Mac, *Abrir el archivo* tras exportar no hacía nada, y *Ayuda → Novedades*
+  salía en blanco.
+- Pequeños: las tarjetas decían «7.0h» en vez de «7h», y al borrar un slot de
+  INARI el mensaje decía «0 apuntes eliminados».
+- La configuración se guarda de forma segura: un corte de luz a mitad ya no
+  puede dejarla estropeada.
 
 ## 2.9.1
 

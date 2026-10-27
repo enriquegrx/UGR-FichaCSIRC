@@ -132,11 +132,60 @@ class TestApi(unittest.TestCase):
 
     @mock.patch.object(core, "_user_id", return_value="")
     @mock.patch.object(core, "_get")
-    def test_entradas_dia_sin_usuario_no_filtra(self, m_get, _m_uid):
-        m_get.return_value = {"_embedded": {"elements": []}}
-        core.entradas_dia("2026-07-01")
-        filtros = json.loads(m_get.call_args.kwargs["params"]["filters"])
-        self.assertEqual(len(filtros), 1)  # solo la fecha
+    def test_entradas_dia_sin_usuario_no_consulta(self, m_get, _m_uid):
+        # Sin usuario NO se pide el dia: sin el filtro la API devolveria los
+        # apuntes de todos los compañeros visibles y se tomarian por propios.
+        with self.assertRaises(RuntimeError):
+            core.entradas_dia("2026-07-01")
+        m_get.assert_not_called()
+
+    def test_entradas_dia_si_falla_users_me_no_consulta(self):
+        # Un corte puntual en /users/me debe propagarse, no degradar a una
+        # consulta sin filtro de usuario.
+        llamadas = []
+
+        def falso_get(path, params=None):
+            llamadas.append(path)
+            if path == "/api/v3/users/me":
+                raise core.requests.ConnectionError("corte")
+            return {"_embedded": {"elements": []}}
+
+        with mock.patch.object(core, "_ME", None), \
+             mock.patch.object(core, "_get", side_effect=falso_get):
+            with self.assertRaises(core.requests.ConnectionError):
+                core.entradas_dia("2026-07-01")
+            # y el nombre para la cabecera sigue sin romper nada
+            self.assertEqual(core.nombre_usuario(), "")
+        self.assertNotIn("/api/v3/time_entries", llamadas)
+
+    def test_crear_entrada_no_cambia_de_actividad_si_falla_la_consulta(self):
+        # Si no se pueden consultar las actividades, el apunte NO se crea: antes
+        # se creaba sin actividad y OpenProject le ponia la de por defecto.
+        with mock.patch.object(core, "_actividades_disponibles",
+                               side_effect=core.requests.ConnectionError("corte")), \
+             mock.patch.object(core.requests, "post") as m_post:
+            with self.assertRaises(core.requests.ConnectionError):
+                core.crear_entrada("2026-07-01", 5, 2, "", "Asuntos propios")
+        m_post.assert_not_called()
+
+    def test_horas_csv_con_coma_decimal(self):
+        self.assertEqual(core.horas_csv(6.5), "6,5")
+        self.assertEqual(core.horas_csv(7), "7")
+        self.assertEqual(core.horas_csv(0.25), "0,25")
+
+    def test_escribir_json_atomico(self):
+        ruta = os.path.join(_TMP, "atomico.json")
+        core.escribir_json_atomico(ruta, {"a": 1})
+        core.escribir_json_atomico(ruta, {"a": 2, "ñ": "sí"})
+        with open(ruta, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"a": 2, "ñ": "sí"})
+        self.assertFalse(os.path.exists(ruta + ".tmp"))
+        # si el volcado falla, el fichero bueno sigue intacto
+        with self.assertRaises(TypeError):
+            core.escribir_json_atomico(ruta, {"x": object()})
+        with open(ruta, encoding="utf-8") as f:
+            self.assertEqual(json.load(f), {"a": 2, "ñ": "sí"})
+        self.assertFalse(os.path.exists(ruta + ".tmp"))  # sin restos
 
     def test_actividad_href(self):
         core._ACT_CACHE = {"1": {"Soporte": "/href/s",
@@ -339,6 +388,167 @@ class TestRecordatorioMac(unittest.TestCase):
         self.assertIn("<integer>5</integer>", plist)
 
 
+class TestInstalacionMac(unittest.TestCase):
+    """Distribucion en macOS: .dmg por arquitectura y aviso si la app no esta
+    en Aplicaciones (origen del bug de los 5 iconos en Launchpad)."""
+
+    EXE = "/Contents/MacOS/FichaCSIRC"
+
+    def test_fuera_de_aplicaciones(self):
+        f = core.fuera_de_aplicaciones
+        self.assertIsNone(f("/Applications/FichaCSIRC.app" + self.EXE))
+        self.assertIsNone(f("/Applications/UGR/FichaCSIRC.app" + self.EXE))
+        self.assertEqual(f("/Volumes/FichaCSIRC/FichaCSIRC.app" + self.EXE), "dmg")
+        self.assertEqual(
+            f("/private/var/folders/xy/T/AppTranslocation/ABC-123/d/FichaCSIRC.app"
+              + self.EXE), "translocada")
+        self.assertEqual(
+            f("/Users/ana/Downloads/FichaCSIRC-mac-arm64 2/FichaCSIRC.app"
+              + self.EXE), "otra")
+        # sin bundle .app (p.ej. ejecutado como script): no aplica
+        self.assertIsNone(f("/usr/local/bin/python3"))
+
+    def test_fuera_de_aplicaciones_carpeta_del_usuario(self):
+        with mock.patch.dict(os.environ, {"HOME": "/Users/ana"}):
+            self.assertIsNone(core.fuera_de_aplicaciones(
+                "/Users/ana/Applications/FichaCSIRC.app" + self.EXE))
+
+    def test_fuera_de_aplicaciones_solo_mac_empaquetado(self):
+        # sin ruta explicita, fuera de un .app de macOS nunca avisa
+        with mock.patch.object(core.sys, "platform", "win32"):
+            self.assertIsNone(core.fuera_de_aplicaciones())
+
+    def test_arquitectura_mac(self):
+        res = mock.Mock(stdout="1\n")
+        with mock.patch.object(core.subprocess, "run", return_value=res), \
+             mock.patch.object(core.platform, "machine", return_value="x86_64"):
+            # Rosetta: el proceso dice x86_64 pero el hardware es Apple Silicon
+            self.assertEqual(core.arquitectura_mac(), "arm64")
+        res = mock.Mock(stdout="")
+        with mock.patch.object(core.subprocess, "run", return_value=res), \
+             mock.patch.object(core.platform, "machine", return_value="x86_64"):
+            self.assertEqual(core.arquitectura_mac(), "x64")
+        with mock.patch.object(core.subprocess, "run", side_effect=OSError), \
+             mock.patch.object(core.platform, "machine", return_value="arm64"):
+            self.assertEqual(core.arquitectura_mac(), "arm64")
+
+    def test_asset_instalador_mac(self):
+        data = {"assets": [
+            {"name": "FichaCSIRC-Instalador.exe", "browser_download_url": "https://x/exe"},
+            {"name": "FichaCSIRC-mac-arm64.dmg", "browser_download_url": "https://x/arm"},
+            {"name": "FichaCSIRC-mac-x64.dmg", "browser_download_url": "https://x/intel"},
+        ]}
+        with mock.patch.object(core.os, "name", "posix"), \
+             mock.patch.object(core.sys, "platform", "darwin"):
+            with mock.patch.object(core, "arquitectura_mac", return_value="arm64"):
+                self.assertEqual(core._asset_instalador(data), "https://x/arm")
+            with mock.patch.object(core, "arquitectura_mac", return_value="x64"):
+                self.assertEqual(core._asset_instalador(data), "https://x/intel")
+            # release antigua con zip: no hay dmg -> se cae a abrir la pagina
+            antigua = {"assets": [{"name": "FichaCSIRC-mac-arm64.zip",
+                                   "browser_download_url": "https://x/zip"}]}
+            with mock.patch.object(core, "arquitectura_mac", return_value="arm64"):
+                self.assertEqual(core._asset_instalador(antigua), "")
+        with mock.patch.object(core.os, "name", "posix"), \
+             mock.patch.object(core.sys, "platform", "linux"):
+            self.assertEqual(core._asset_instalador(data), "")
+
+
+class TestRepararRecordatorio(unittest.TestCase):
+    """El aviso diario guarda la ruta del ejecutable: si la instalacion se mueve
+    (onefile -> onedir en 2.6.4, o una copia de Descargas en Mac) se repara."""
+
+    NUEVO = r"C:\Users\ana\AppData\Local\Programs\FichaCSIRC\FichaCSIRC\FichaCSIRC.exe"
+    VIEJO = r"C:\Users\ana\AppData\Local\Programs\FichaCSIRC\FichaCSIRC.exe"
+
+    def _xml(self, ejecutable):
+        xml = ('<?xml version="1.0" encoding="UTF-16"?><Task><Triggers><CalendarTrigger>'
+               '<StartBoundary>2025-03-01T16:30:00</StartBoundary></CalendarTrigger>'
+               f'</Triggers><Actions><Exec><Command>"{ejecutable}"</Command>'
+               '<Arguments>--recordatorio</Arguments></Exec></Actions></Task>')
+        return xml.encode("utf-16")          # con BOM, como schtasks
+
+    def _reparar(self, salida, plataforma="win32", ejecutable=None, cfg=None):
+        import recordatorio
+        res = mock.Mock(returncode=0, stdout=salida)
+        cfg = {} if cfg is None else cfg
+        with mock.patch.object(core, "config_valor", lambda c, d=None: cfg.get(c, d)), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: cfg.update({k: v})), \
+             mock.patch.object(recordatorio.sys, "frozen", True, create=True), \
+             mock.patch.object(recordatorio.sys, "executable", ejecutable or self.NUEVO), \
+             mock.patch.object(recordatorio.sys, "platform", plataforma), \
+             mock.patch.object(recordatorio.os, "name", "nt"), \
+             mock.patch.object(recordatorio.subprocess, "run", return_value=res), \
+             mock.patch.object(recordatorio, "activar_recordatorio") as m_act:
+            hecho = recordatorio.reparar_recordatorio()
+        return hecho, m_act
+
+    def test_windows_ruta_vieja_se_reprograma_a_la_misma_hora(self):
+        hecho, m_act = self._reparar(self._xml(self.VIEJO))
+        self.assertTrue(hecho)
+        m_act.assert_called_once_with("16:30")
+
+    def test_windows_ruta_buena_no_toca_nada(self):
+        cfg = {}
+        hecho, m_act = self._reparar(self._xml(self.NUEVO), cfg=cfg)
+        self.assertFalse(hecho)
+        m_act.assert_not_called()
+        self.assertEqual(cfg["recordatorio_ejecutable"], self.NUEVO)  # anotada
+
+    def test_ruta_anotada_ni_siquiera_consulta_schtasks(self):
+        # Con la ruta ya anotada no se depende de como codifique schtasks las
+        # tildes (p. ej. C:\Users\Pérez): sin esto se reprogramaria siempre.
+        import recordatorio
+        cfg = {"recordatorio_ejecutable": self.NUEVO}
+        with mock.patch.object(core, "config_valor", lambda c, d=None: cfg.get(c, d)), \
+             mock.patch.object(recordatorio.sys, "frozen", True, create=True), \
+             mock.patch.object(recordatorio.sys, "executable", self.NUEVO), \
+             mock.patch.object(recordatorio.subprocess, "run") as m_run:
+            self.assertFalse(recordatorio.reparar_recordatorio())
+        m_run.assert_not_called()
+
+    def test_salida_real_de_schtasks_sin_utf16(self):
+        # Asi sale de verdad al redirigirse (comprobado en Windows 11).
+        import recordatorio
+        xml = self._xml(self.VIEJO).decode("utf-16").encode("utf-8")
+        self.assertIn("<Command>", recordatorio._decodificar(xml))
+        hecho, m_act = self._reparar(xml)
+        self.assertTrue(hecho)
+        m_act.assert_called_once_with("16:30")
+
+    def test_windows_sin_tarea_no_toca_nada(self):
+        import recordatorio
+        with mock.patch.object(recordatorio.sys, "frozen", True, create=True), \
+             mock.patch.object(recordatorio.os, "name", "nt"), \
+             mock.patch.object(recordatorio.sys, "platform", "win32"), \
+             mock.patch.object(recordatorio.subprocess, "run",
+                               return_value=mock.Mock(returncode=1, stdout=b"")), \
+             mock.patch.object(recordatorio, "activar_recordatorio") as m_act:
+            self.assertFalse(recordatorio.reparar_recordatorio())
+        m_act.assert_not_called()
+
+    def test_mac_copia_borrada_se_reprograma(self):
+        import plistlib
+        import recordatorio
+        ruta = os.path.join(_TMP, "aviso.plist")
+        with open(ruta, "wb") as f:
+            plistlib.dump({"ProgramArguments": [
+                "/Users/ana/Downloads/FichaCSIRC-mac-arm64 2/FichaCSIRC.app/Contents/MacOS/FichaCSIRC",
+                "--recordatorio"],
+                "StartCalendarInterval": [{"Weekday": 1, "Hour": 9, "Minute": 5}]}, f)
+        actual = "/Applications/FichaCSIRC.app/Contents/MacOS/FichaCSIRC"
+        for motivo, esperado in ((None, True), ("translocada", False)):
+            with mock.patch.object(recordatorio, "_plist_path", return_value=ruta), \
+                 mock.patch.object(core, "fuera_de_aplicaciones", return_value=motivo):
+                hecho, m_act = self._reparar(b"", plataforma="darwin", ejecutable=actual)
+            self.assertEqual(hecho, esperado)
+            if esperado:
+                m_act.assert_called_once_with("09:05")
+            else:
+                m_act.assert_not_called()   # no fijar una ruta temporal
+
+
 class TestNoLaborables(unittest.TestCase):
     def test_ciclo_completo(self):
         f = "2026-07-06"
@@ -501,33 +711,41 @@ class TestPermisos(unittest.TestCase):
             self.assertEqual(core.permisos_dia(self.LUNES), [])
             self.assertFalse(core.quitar_permiso(self.LUNES, 0))  # ya no hay
 
-    def test_usadas_y_disponibles_por_anio(self):
+    def test_saldo_continuo_no_se_reinicia_en_enero(self):
+        # Lo usado se cuenta desde que se lleva el saldo, NO por año natural: en
+        # enero no "vuelven" las horas gastadas el año anterior.
         permisos = {
+            "2025-05-05": [{"tipo": "asuntos_particulares", "horas": 10.0}],  # antes
             "2026-03-02": [{"tipo": "asuntos_particulares", "horas": 3.0}],
             "2026-04-01": [{"tipo": "asuntos_particulares", "horas": 2.0},
                            {"tipo": "conciliacion", "horas": 1.0}],
-            "2025-05-05": [{"tipo": "asuntos_particulares", "horas": 10.0}],  # otro año
+            "2027-01-12": [{"tipo": "asuntos_particulares", "horas": 4.0}],  # año sig.
         }
-        with mock.patch.object(core, "PERMISOS", permisos):
+        with mock.patch.object(core, "PERMISOS", permisos), \
+             mock.patch.object(core, "permisos_desde",
+                               return_value=dt.date(2026, 1, 1)):
+            self.assertEqual(core.permiso_usadas("asuntos_particulares"), 9.0)
             self.assertEqual(core.permiso_usadas("asuntos_particulares", 2026), 5.0)
-            self.assertEqual(core.permiso_usadas("conciliacion", 2026), 1.0)
-            self.assertEqual(core.permiso_disponible("asuntos_particulares", 2026), 65.0)
-            self.assertEqual(core.permiso_disponible("no_existe", 2026), 0.0)
+            self.assertEqual(core.permiso_usadas("conciliacion"), 1.0)
+            self.assertEqual(core.permiso_disponible("asuntos_particulares"), 61.0)
+            self.assertEqual(core.permiso_disponible("no_existe"), 0.0)
 
     def test_resumen_permisos(self):
         with mock.patch.object(core, "PERMISOS",
-                               {"2026-01-05": [{"tipo": "conciliacion", "horas": 4.0}]}):
-            filas = {f["id"]: f for f in core.resumen_permisos(2026)}
+                               {"2026-01-05": [{"tipo": "conciliacion", "horas": 4.0}]}), \
+             mock.patch.object(core, "permisos_desde",
+                               return_value=dt.date(2026, 1, 1)):
+            filas = {f["id"]: f for f in core.resumen_permisos()}
         self.assertEqual(filas["conciliacion"]["usadas"], 4.0)
         self.assertEqual(filas["conciliacion"]["disponibles"], 26.0)   # 30 - 4
         self.assertEqual(filas["asuntos_particulares"]["disponibles"], 70.0)
         self.assertEqual(filas["asuntos_particulares"]["usadas"], 0.0)
 
     def _con(self, tipos):
-        """Parchea el catalogo de tipos de permiso."""
+        """Parchea el catalogo de tipos de permiso (saldo desde 2026-01-01)."""
+        valores = {"permisos_tipos": tipos, "permisos_desde": "2026-01-01"}
         return mock.patch.object(
-            core, "config_valor",
-            lambda c, d=None: tipos if c == "permisos_tipos" else d)
+            core, "config_valor", lambda c, d=None: valores.get(c, d))
 
     def test_compat_modelo_viejo_de_cupo_unico(self):
         """Una config antigua con 'cupo' se lee como una unica concesion."""
@@ -537,7 +755,7 @@ class TestPermisos(unittest.TestCase):
             self.assertEqual(core.cupo_total("mio"), 10.5)     # "10:30" -> 10.5
             cs = core.concesiones("mio")
             self.assertEqual(cs, [{"horas": 10.5, "fecha_limite": "2027-01-07"}])
-            self.assertEqual(core.resumen_permisos(2026)[0]["cupo"], 10.5)
+            self.assertEqual(core.resumen_permisos()[0]["cupo"], 10.5)
 
     def test_cupo_total_suma_las_concesiones(self):
         tipos = [{"id": "sm", "nombre": "Servicios mínimos", "concesiones": [
@@ -547,7 +765,7 @@ class TestPermisos(unittest.TestCase):
                 core, "PERMISOS", {"2026-02-02": [{"tipo": "sm", "horas": 38.0}]}):
             self.assertEqual(core.cupo_total("sm"), 56.0)
             self.assertEqual(core.permiso_usadas("sm", 2026), 38.0)
-            self.assertEqual(core.permiso_disponible("sm", 2026), 18.0)  # como el portal
+            self.assertEqual(core.permiso_disponible("sm"), 18.0)  # como el portal
 
     def test_anadir_concesion_suma_horas(self):
         tipos = [{"id": "sm", "nombre": "SM", "concesiones": [{"horas": 28}]}]
@@ -596,7 +814,124 @@ class TestPermisos(unittest.TestCase):
                               core.concesiones_por_caducar("sm", hoy=hoy)], [20.0])
             # la caducada SIGUE sumando: solo avisamos
             self.assertEqual(core.cupo_total("sm"), 65.0)
-            self.assertEqual(core.permiso_disponible("sm", 2026), 65.0)
+            self.assertEqual(core.permiso_disponible("sm"), 65.0)
+
+
+class TestPermisosPorActividad(unittest.TestCase):
+    """Servicios donde el permiso se imputa como ACTIVIDAD de una tarea en
+    ProyectosTic (no se marca en local): esas horas tambien gastan el saldo."""
+
+    TIPOS = [{"id": "ap", "nombre": "Asuntos propios", "actividad": "Asuntos propios",
+              "concesiones": [{"horas": 70, "fecha_limite": ""}]},
+             {"id": "conc", "nombre": "Conciliación",
+              "concesiones": [{"horas": 30, "fecha_limite": ""}]}]
+
+    def setUp(self):
+        valores = {"permisos_tipos": self.TIPOS, "permisos_desde": "2026-01-01"}
+        for parche in (
+                mock.patch.object(core, "config_valor",
+                                  lambda c, d=None: valores.get(c, d)),
+                mock.patch.object(core, "PERMISOS",
+                                  {"2026-02-02": [{"tipo": "ap", "horas": 2.0}]}),
+                mock.patch.dict(core._USADAS_PT, {}, clear=True)):
+            parche.start()
+            self.addCleanup(parche.stop)
+
+    def test_suma_lo_imputado_con_la_actividad(self):
+        apuntes = [{"horas": 1.0, "actividad": "Asuntos propios"},
+                   {"horas": 3.5, "actividad": "asuntos propios "},  # sin distinguir
+                   {"horas": 7.0, "actividad": "Soporte"}]          # no cuenta
+        with mock.patch.object(core, "entradas_rango",
+                               return_value=apuntes) as m_rango:
+            self.assertEqual(core.actualizar_usadas_proyectostic(), {"ap": 4.5})
+        desde, hasta = m_rango.call_args.args
+        self.assertEqual(desde, "2026-01-01")
+        self.assertTrue(hasta.endswith("-12-31"))
+        self.assertEqual(core.permiso_usadas_total("ap"), 6.5)     # 2 local + 4,5
+        self.assertEqual(core.permiso_disponible("ap"), 63.5)
+        fila = {f["id"]: f for f in core.resumen_permisos()}["ap"]
+        self.assertEqual((fila["usadas_local"], fila["usadas_pt"]), (2.0, 4.5))
+        # un tipo sin actividad no consulta ni suma nada de ProyectosTic
+        self.assertEqual(core.permiso_usadas_proyectostic("conc"), 0.0)
+
+    def test_sin_actividades_enlazadas_no_hay_red(self):
+        sin = [dict(t, actividad="") for t in self.TIPOS]
+        with mock.patch.object(core, "permisos_tipos", lambda: sin), \
+             mock.patch.object(core, "entradas_rango") as m_rango:
+            self.assertEqual(core.actualizar_usadas_proyectostic(), {})
+        m_rango.assert_not_called()
+
+    def test_entradas_rango_filtra_por_usuario_y_fechas(self):
+        elem = {"id": 1, "hours": "PT1H", "spentOn": "2026-03-04",
+                "_links": {"activity": {"title": "Asuntos propios"}}}
+        with mock.patch.object(core, "_user_id", return_value="42"), \
+             mock.patch.object(core, "_get_todos", return_value=[elem]) as m_todos:
+            out = core.entradas_rango("2026-01-01", "2027-12-31")
+        filtros = json.loads(m_todos.call_args.args[1]["filters"])
+        self.assertIn({"spent_on": {"operator": "<>d",
+                                    "values": ["2026-01-01", "2027-12-31"]}}, filtros)
+        self.assertIn({"user": {"operator": "=", "values": ["42"]}}, filtros)
+        self.assertEqual((out[0]["fecha"], out[0]["horas"]), ("2026-03-04", 1.0))
+        with mock.patch.object(core, "_user_id", return_value=""), \
+             mock.patch.object(core, "_get_todos") as m_todos:
+            with self.assertRaises(RuntimeError):
+                core.entradas_rango("2026-01-01", "2026-12-31")
+        m_todos.assert_not_called()
+
+    def test_fijar_actividad_conserva_las_concesiones(self):
+        guardado = {}
+        with mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})):
+            core.fijar_actividad_permiso("conc", "Conciliación familiar")
+        tipos = {t["id"]: t for t in guardado["permisos_tipos"]}
+        self.assertEqual(tipos["conc"]["actividad"], "Conciliación familiar")
+        self.assertEqual(tipos["conc"]["concesiones"], [{"horas": 30.0, "fecha_limite": ""}])
+        self.assertEqual(tipos["ap"]["actividad"], "Asuntos propios")   # intacto
+        with mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})):
+            core.fijar_actividad_permiso("ap", "")                       # quitar
+        self.assertNotIn("actividad", {t["id"]: t for t in guardado["permisos_tipos"]}["ap"])
+
+
+class TestPermisosAnioNuevo(unittest.TestCase):
+    def _cfg(self, valores):
+        guardado = dict(valores)
+        return guardado, (
+            mock.patch.object(core, "config_valor",
+                              lambda c, d=None: guardado.get(c, d)),
+            mock.patch.object(core, "guardar_config_valores", guardado.update),
+            mock.patch.object(core, "guardar_config_valor",
+                              lambda k, v: guardado.update({k: v})))
+
+    def test_primer_arranque_no_pregunta_a_mitad_de_año(self):
+        guardado, parches = self._cfg({})
+        with parches[0], parches[1], parches[2]:
+            core.inicializar_permisos_anuales(hoy=dt.date(2026, 10, 27))
+            self.assertEqual(guardado["permisos_desde"], "2026-01-01")
+            self.assertEqual(guardado["permisos_anio_revisado"], 2026)
+            self.assertFalse(core.toca_anadir_permisos_del_anio(dt.date(2026, 12, 31)))
+            self.assertTrue(core.toca_anadir_permisos_del_anio(dt.date(2027, 1, 1)))
+            # y no pisa lo que ya hubiera
+            core.inicializar_permisos_anuales(hoy=dt.date(2027, 1, 1))
+            self.assertEqual(guardado["permisos_desde"], "2026-01-01")
+            core.marcar_permisos_anio_revisado(2027)
+            self.assertFalse(core.toca_anadir_permisos_del_anio(dt.date(2027, 1, 1)))
+
+    def test_propuesta_repite_la_ultima_concesion_un_año_despues(self):
+        tipos = [{"id": "ap", "nombre": "AP", "concesiones": [
+                    {"horas": 35, "fecha_limite": "2026-06-30"},
+                    {"horas": 70, "fecha_limite": "2027-01-15"}]},
+                 {"id": "x", "nombre": "X", "concesiones": [
+                    {"horas": 5, "fecha_limite": "2028-02-29"}]},
+                 {"id": "vacio", "nombre": "V", "concesiones": []}]
+        _g, parches = self._cfg({"permisos_tipos": tipos})
+        with parches[0]:
+            prop = {p["id"]: p for p in core.propuesta_permisos_del_anio()}
+        self.assertEqual((prop["ap"]["horas"], prop["ap"]["fecha_limite"]),
+                         (70.0, "2028-01-15"))
+        self.assertEqual(prop["x"]["fecha_limite"], "2029-02-28")    # bisiesto
+        self.assertEqual((prop["vacio"]["horas"], prop["vacio"]["fecha_limite"]),
+                         (0.0, ""))
 
 
 class TestPendientes(unittest.TestCase):
@@ -831,6 +1166,22 @@ class TestConfigPersistente(unittest.TestCase):
             cfg.pop("clave_b", None)
             with open(core.CONFIG_PATH, "w", encoding="utf-8") as fh:
                 json.dump(cfg, fh)
+
+    def test_configurador_consola_no_borra_el_resto(self):
+        # El asistente de consola solo pregunta conexion/jornada/favoritas;
+        # guardar NO puede tirar los festivos, permisos, plantillas...
+        import configurar
+        ruta = os.path.join(_TMP, "config_consola.json")
+        with open(ruta, "w", encoding="utf-8") as fh:
+            json.dump({"api_key": "vieja", "no_laborables": {"2026-12-08": "festivo"},
+                       "plantillas": [{"nombre": "p", "apuntes": []}]}, fh)
+        with mock.patch.object(configurar, "CONFIG_PATH", ruta),              mock.patch.object(configurar, "escribir_lanzador", return_value=None),              mock.patch("builtins.print"):
+            configurar.guardar({"api_key": "nueva", "favoritos": []})
+        with open(ruta, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        self.assertEqual(cfg["api_key"], "nueva")
+        self.assertEqual(cfg["no_laborables"], {"2026-12-08": "festivo"})
+        self.assertEqual(cfg["plantillas"], [{"nombre": "p", "apuntes": []}])
 
     def test_anadir_favorito_no_duplica(self):
         antes = len(core.FAVORITOS)
