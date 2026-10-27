@@ -5,6 +5,12 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 2.9.2
+
+**Correcciones**
+- En **Mac**, *Ayuda → Novedades* estaba en blanco: esta ventana no se incluía
+  al empaquetar la aplicación. Ya se incluye, igual que en Windows.
+
 ## 2.9.1
 
 **Correcciones**

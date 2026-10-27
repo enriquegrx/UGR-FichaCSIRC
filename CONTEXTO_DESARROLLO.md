@@ -393,6 +393,21 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   de tests de `build-macos` (esos jobs solo empaquetan) y se anade
   `timeout-minutes` a los dos jobs (25 Windows / 20 macOS) para que un cuelgue
   futuro muera solo en vez de dejar el run abierto 6 horas.
+- v2.9.2 (oct 2026): **la cola de releases ya no se puede atascar**, y arreglado
+  *Novedades* en Mac.
+  - `concurrency: {group: release, cancel-in-progress: false}` en `release.yml`.
+    El arreglo de 2.9.1 solo valia para runs *nuevos*, y esos no arrancaban: los
+    4 jobs de Intel colgados (sin `timeout-minutes`, porque el workflow que corre
+    es el del commit de la etiqueta) ocupaban los pocos runners de macOS que da
+    la cuenta, asi que 2.9.0 y 2.9.1 se quedaron en **queued 2-3 horas sin
+    empezar** y sus apps de macOS no se publicaron. Con el grupo de concurrencia
+    las releases van **en fila de una en una**, nunca se pelean por los runners y
+    un cuelgue solo retrasa, no bloquea. `cancel-in-progress: false` a proposito:
+    cancelar la anterior dejaria una release sin sus artefactos.
+  - `build_macos.sh` no pasaba `--add-data NOVEDADES.md`, que si pasa el job de
+    Windows: en Mac *Ayuda -> Novedades* salia con el texto de fallback. Al
+    tocar las opciones de empaquetado hay que mirar **los dos** sitios, porque
+    Windows empaqueta desde el workflow y macOS desde el script.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la

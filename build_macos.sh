@@ -65,12 +65,14 @@ echo "Construyendo FichaCSIRC.app..."
 "$PY" -m PyInstaller --noconfirm --clean --windowed \
   --name "FichaCSIRC" --icon "$ICNS" \
   --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
+  --add-data "NOVEDADES.md:." \
   registrar_gui.py
 
 echo "Construyendo FichaCSIRC-Configurar.app..."
 "$PY" -m PyInstaller --noconfirm --clean --windowed \
   --name "FichaCSIRC-Configurar" --icon "$ICNS" \
   --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
+  --add-data "NOVEDADES.md:." \
   configurar_gui.py
 
 ZIP="dist/FichaCSIRC-mac-${ARCH_LABEL}.zip"

@@ -12,6 +12,17 @@ on:
 permissions:
   contents: write
 
+# Una release a la vez. GitHub solo da unos pocos runners de macOS a la cuenta,
+# asi que si se etiquetan varias versiones seguidas y un job de macOS se cuelga,
+# ocupa su sitio hasta el corte duro de las 6 horas y las releases siguientes se
+# quedan en "queued" sin arrancar nunca (paso de verdad: 6 runs abiertos, 4 jobs
+# de Intel colgados y las apps de macOS de 2.9.0 y 2.9.1 sin publicarse).
+# Con esto los runs se ponen en fila en vez de pelearse por los runners, y
+# cancel-in-progress a false para no dejar una release a medias.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   build-windows:
     runs-on: windows-latest
