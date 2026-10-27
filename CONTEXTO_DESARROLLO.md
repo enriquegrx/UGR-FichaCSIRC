@@ -368,6 +368,20 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   comprobación automática sigue callando para no molestar. Tests:
   `TestComprobarActualizacion` (4). 143 tests.
 
+- v2.9.0 (oct 2026): **acciones sobre los apuntes desde el día**. El usuario no
+  conseguía crear una plantilla: el diálogo exige marcar *exactamente un día*, la
+  lista vacía no explicaba nada y acabó pulsando «Aplicar» (que responde «elige
+  una plantilla de la lista»). No era un bug del código —se reprodujo y guardaba
+  bien— sino de la interfaz. Ahora el menú del día tiene un submenú **Apuntes del
+  día** con *Guardar este día como plantilla* (`dialogos.guardar_dia_como_plantilla`,
+  extraída de `abrir_plantillas` para no duplicar) y *Eliminar apuntes de este día*
+  (`dialogos.abrir_eliminar_dia`: casillas por apunte + «Todos»). Ambas
+  deshabilitadas si el día no tiene apuntes. Para el borrado se extrajo
+  `App._borrar_lote` y `App._datos_para_deshacer` de `_eliminar`, de modo que el
+  enrutado a INARI y el Deshacer son los mismos vengan de la tabla o del menú.
+  `abrir_plantillas` con la lista vacía explica cómo crear la primera y desactiva
+  Aplicar/Eliminar. Tests: `TestAccionesDelDia` (4). 147 tests.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
   red mockeada, repartidos así:

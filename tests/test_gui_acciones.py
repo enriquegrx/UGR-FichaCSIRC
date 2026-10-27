@@ -392,6 +392,95 @@ def _barras_en_riesgo(widget, ruta="root"):
     return fallos
 
 
+class TestAccionesDelDia(unittest.TestCase):
+    """Guardar como plantilla y eliminar apuntes desde el día, sin tener que
+    marcar nada ni buscar en la tabla."""
+
+    def setUp(self):
+        import tkinter as tk
+        import registrar_gui
+        import dialogos
+        try:
+            self.root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("sin entorno grafico")
+        self.root.withdraw()
+        self.addCleanup(self.root.destroy)
+        self.dialogos = dialogos
+        h = dt.date.today()
+        self.lunes_d = h - dt.timedelta(days=h.weekday())
+        self.lunes = self.lunes_d.isoformat()
+        self.apuntes = [
+            {"id": 1, "wp_id": 111, "horas": 6.0, "wp_titulo": "Mantenimientos",
+             "actividad": "Actuaciones técnicas", "comentario": ""},
+            {"id": 2, "wp_id": 111, "horas": 1.0, "wp_titulo": "Mantenimientos",
+             "actividad": "Asuntos propios", "comentario": "permiso"},
+        ]
+        parches = [
+            mock.patch.object(core, "entradas_dia",
+                              lambda f: self.apuntes if f == self.lunes else []),
+            mock.patch.object(core, "nombre_usuario", lambda: "T"),
+            mock.patch.object(core, "_actividades_disponibles",
+                              lambda wp: {"soporte": "/x"}),
+            mock.patch.object(core, "FAVORITOS", [{"id": 111, "nombre": "M"}]),
+            mock.patch.object(core, "NO_LABORABLES", {}),
+            mock.patch.object(core, "PLANTILLAS", []),
+            mock.patch.object(registrar_gui, "en_hilo", _en_hilo_sync),
+            mock.patch.object(dialogos, "en_hilo", _en_hilo_sync),
+        ]
+        for p in parches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.app = registrar_gui.App(self.root)
+        self.addCleanup(setattr, self.app, "_logo_img", None)
+
+    def test_guardar_el_dia_como_plantilla(self):
+        with mock.patch.object(self.dialogos.simpledialog, "askstring",
+                               lambda *a, **k: "Mi día tipo"), \
+             mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            nombre = self.dialogos.guardar_dia_como_plantilla(self.app, self.lunes_d)
+        self.assertEqual(nombre, "Mi día tipo")
+        self.assertEqual(len(core.PLANTILLAS), 1)
+        self.assertEqual(len(core.PLANTILLAS[0]["apuntes"]), 2)
+
+    def test_dia_sin_apuntes_avisa_y_no_guarda(self):
+        otro = self.lunes_d + dt.timedelta(days=1)
+        vistos = []
+        with mock.patch.object(self.dialogos.messagebox, "showinfo",
+                               lambda t, m, **k: vistos.append(m)):
+            self.assertIsNone(
+                self.dialogos.guardar_dia_como_plantilla(self.app, otro))
+        self.assertTrue(vistos and "no tiene" in vistos[0])
+        self.assertEqual(core.PLANTILLAS, [])
+
+    def test_eliminar_solo_lo_marcado(self):
+        top = self.dialogos.abrir_eliminar_dia(self.app, self.lunes_d)
+        self.assertEqual(len(top._marcas), 2)
+        top._marcas[1][0].set(True)          # solo el permiso de 1h
+        borrados = []
+        with mock.patch.object(core, "eliminar_entrada", borrados.append), \
+             mock.patch.object(self.app.__class__, "refrescar", lambda s: None), \
+             mock.patch.object(_mb(), "askyesno", lambda *a, **k: True):
+            [b for b in _botones(top) if "Eliminar" in b.cget("text")][0].invoke()
+        self.assertEqual(borrados, ["2"])     # NO se borra el de 6h
+
+    def test_eliminar_todos_de_una(self):
+        top = self.dialogos.abrir_eliminar_dia(self.app, self.lunes_d)
+        for v, _a in top._marcas:
+            v.set(True)
+        borrados = []
+        with mock.patch.object(core, "eliminar_entrada", borrados.append), \
+             mock.patch.object(self.app.__class__, "refrescar", lambda s: None), \
+             mock.patch.object(_mb(), "askyesno", lambda *a, **k: True):
+            [b for b in _botones(top) if "Eliminar" in b.cget("text")][0].invoke()
+        self.assertEqual(sorted(borrados), ["1", "2"])
+
+
+def _mb():
+    import registrar_gui
+    return registrar_gui.messagebox
+
+
 class TestAsociacionActividadTarea(unittest.TestCase):
     """El caso real: elegir «Asuntos propios» debe llevar el apunte a la tarea
     de Permisos, no quedarse en Mantenimientos. OpenProject no sabe de esa

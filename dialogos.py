@@ -279,6 +279,103 @@ def abrir_resumen_mes(app):
     return top
 
 
+def abrir_eliminar_dia(app, dia):
+    """Elimina apuntes de UN dia, eligiendo uno, varios o todos.
+
+    Desde el menu del boton derecho: senalas el dia y marcas que borrar, sin
+    tener que buscarlos en la tabla ni acordarte de Ctrl+clic."""
+    fecha = dia.isoformat()
+    apuntes = app._cache_dia.get(fecha) or []
+    cabecera = f"{core.DIAS_ES[dia.weekday()]} {dia.strftime('%d/%m/%Y')}"
+    if not apuntes:
+        messagebox.showinfo("Eliminar apuntes",
+                            f"{cabecera} no tiene apuntes.", parent=app.root)
+        return None
+
+    top = tk.Toplevel(app.root)
+    top.title("Eliminar apuntes del día")
+    top.transient(app.root)
+    top.grab_set()
+    frm = ttk.Frame(top, padding=14)
+    frm.pack(fill="both", expand=True)
+
+    # Pie primero: los botones nunca se quedan sin hueco al encoger.
+    btns = ttk.Frame(frm)
+    btns.pack(fill="x", side="bottom", pady=(12, 0))
+    ttk.Label(frm, text=cabecera,
+              font=("TkDefaultFont", 11, "bold")).pack(anchor="w")
+    ttk.Label(frm, text="Marca lo que quieras eliminar:",
+              foreground=COLOR_MUTED).pack(anchor="w", pady=(0, 8))
+
+    marcas = []
+    for a in apuntes:
+        v = tk.BooleanVar(value=False)
+        txt = (f"{core._fmt(a['horas'])}  ·  {str(a.get('wp_titulo') or '')[:42]}"
+               f"  ·  {str(a.get('actividad') or '')[:24]}")
+        if a.get("comentario"):
+            txt += f"  ·  «{str(a['comentario'])[:28]}»"
+        ttk.Checkbutton(frm, text=txt, variable=v).pack(anchor="w", pady=1)
+        marcas.append((v, a))
+
+    v_todos = tk.BooleanVar(value=False)
+
+    def alternar_todos():
+        for v, _a in marcas:
+            v.set(v_todos.get())
+    ttk.Separator(frm, orient="horizontal").pack(fill="x", pady=8)
+    ttk.Checkbutton(frm, text=f"Todos ({len(apuntes)})", variable=v_todos,
+                    command=alternar_todos).pack(anchor="w")
+
+    def eliminar():
+        elegidos = [a for v, a in marcas if v.get()]
+        if not elegidos:
+            messagebox.showinfo("Eliminar apuntes",
+                                "No has marcado ningún apunte.", parent=top)
+            return
+        lote = []
+        for a in elegidos:
+            destino = a.get("destino", "op")
+            lote.append((str(a["id"]), destino,
+                         app._datos_para_deshacer(str(a["id"]), fecha, destino)))
+        top.destroy()
+        app._borrar_lote(lote)
+
+    ttk.Button(btns, text="Eliminar marcados", command=eliminar).pack(side="right", padx=4)
+    ttk.Button(btns, text="Cancelar", command=top.destroy).pack(side="right")
+    no_encoger(top)
+    top._marcas = marcas      # para los tests
+    return top
+
+
+def guardar_dia_como_plantilla(app, dia, parent=None):
+    """Guarda los apuntes de UN dia como plantilla. Devuelve su nombre o None.
+
+    Se usa desde el menu del boton derecho de la tarjeta (lo natural: senalas el
+    dia que quieres) y desde el dialogo de Plantillas."""
+    ventana = parent or app.root
+    apuntes = app._cache_dia.get(dia.isoformat()) or []
+    if not apuntes:
+        messagebox.showinfo(
+            "Plantilla",
+            f"{core.DIAS_ES[dia.weekday()]} {dia.strftime('%d/%m')} no tiene "
+            "apuntes que guardar.", parent=ventana)
+        return None
+    sugerido = f"Día tipo ({core._fmt(sum(a['horas'] for a in apuntes))})"
+    nombre = simpledialog.askstring(
+        "Plantilla", f"Nombre para la plantilla del "
+                     f"{core.DIAS_ES[dia.weekday()]} {dia.strftime('%d/%m')}:",
+        initialvalue=sugerido, parent=ventana)
+    if not nombre or not nombre.strip():
+        return None
+    core.guardar_plantilla(nombre.strip(), [
+        {"id": a["wp_id"], "nombre": a["wp_titulo"], "horas": a["horas"],
+         "comentario": a["comentario"], "actividad": a["actividad"]}
+        for a in apuntes])
+    app.status.config(text=f"Plantilla «{nombre.strip()}» guardada "
+                           f"({len(apuntes)} apuntes).")
+    return nombre.strip()
+
+
 def abrir_plantillas(app):
     top = tk.Toplevel(app.root)
     top.title("Plantillas de apuntes")
@@ -291,6 +388,14 @@ def abrir_plantillas(app):
               foreground="#666").pack(anchor="w")
     lb = tk.Listbox(frm, height=8, exportselection=False)
     lb.pack(fill="both", expand=True, pady=6)
+    # Con la lista vacia hay que decir COMO se crea la primera: un recuadro en
+    # blanco no explica nada y se acaba pulsando "Aplicar", que no es el camino.
+    lbl_vacia = ttk.Label(
+        frm, foreground=COLOR_MUTED, justify="left", wraplength=420,
+        text="Todavía no tienes plantillas.\n\nPara crear una: marca el día con "
+             "las horas que quieras guardar y pulsa «Guardar día marcado como "
+             "plantilla».\nTambién con botón derecho sobre el día → Apuntes del "
+             "día → Guardar este día como plantilla.")
 
     def repintar():
         lb.delete(0, "end")
@@ -298,6 +403,14 @@ def abrir_plantillas(app):
             n = len(p.get("apuntes", []))
             tot = sum(a.get("horas", 0) for a in p.get("apuntes", []))
             lb.insert("end", f"{p['nombre']}  ({n} apuntes, {core._fmt(tot)})")
+        vacia = not core.PLANTILLAS
+        if vacia:
+            lbl_vacia.pack(anchor="w", pady=(0, 6))
+        else:
+            lbl_vacia.pack_forget()
+        # Aplicar y Eliminar no tienen sentido sin plantillas: desactivados.
+        for b in getattr(top, "_botones_plantilla", ()):
+            b.configure(state=("disabled" if vacia else "normal"))
     repintar()
 
     def guardar_actual():
@@ -307,20 +420,8 @@ def abrir_plantillas(app):
                 "Plantilla", "Marca exactamente un día (el que quieres guardar).",
                 parent=top)
             return
-        d = marcados[0]
-        apuntes = app._cache_dia.get(d.isoformat()) or []
-        if not apuntes:
-            messagebox.showinfo("Plantilla", "Ese día no tiene apuntes.", parent=top)
-            return
-        nombre = simpledialog.askstring("Plantilla", "Nombre de la plantilla:",
-                                        parent=top)
-        if not nombre or not nombre.strip():
-            return
-        core.guardar_plantilla(nombre.strip(), [
-            {"id": a["wp_id"], "nombre": a["wp_titulo"], "horas": a["horas"],
-             "comentario": a["comentario"], "actividad": a["actividad"]}
-            for a in apuntes])
-        repintar()
+        if guardar_dia_como_plantilla(app, marcados[0], parent=top):
+            repintar()
 
     def aplicar():
         sel = lb.curselection()
@@ -394,11 +495,14 @@ def abrir_plantillas(app):
 
     btns = ttk.Frame(frm)
     btns.pack(fill="x")
-    ttk.Button(btns, text="Aplicar a días marcados",
-               command=aplicar).pack(side="left")
+    b_aplicar = ttk.Button(btns, text="Aplicar a días marcados", command=aplicar)
+    b_aplicar.pack(side="left")
     ttk.Button(btns, text="Guardar día marcado como plantilla",
                command=guardar_actual).pack(side="left", padx=6)
-    ttk.Button(btns, text="Eliminar", command=borrar).pack(side="left")
+    b_borrar = ttk.Button(btns, text="Eliminar", command=borrar)
+    b_borrar.pack(side="left")
+    top._botones_plantilla = (b_aplicar, b_borrar)
+    repintar()            # ya con los botones creados, para poder desactivarlos
     ttk.Button(btns, text="Cerrar", command=top.destroy).pack(side="right")
 
 

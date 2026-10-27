@@ -116,7 +116,12 @@ Abre **FichaCSIRC (Registrar horas)**:
 - 🗓️ **Toda la semana**: marca los 5 días y añade el mismo apunte a todos de golpe.
 - 🔄 **Copiar semana anterior**: repite la semana pasada entera, día a día.
 - 📄 **Copiar día anterior**: repite el último día que fichaste en los días marcados.
-- 🧩 **Plantillas…**: guarda tu «día típico» y aplícalo con un clic.
+- 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
+  más rápida de crear una: **botón derecho sobre el día** → *Apuntes del día*
+  → *Guardar este día como plantilla*.
+- 🗑️ **Eliminar apuntes de un día**: botón derecho sobre el día → *Apuntes del
+  día* → *Eliminar apuntes de este día*. Te los lista y eliges uno, varios o
+  todos (se puede deshacer).
 - ✏️ **Doble clic** en un apunte lo edita; **Supr** lo borra (con botón *Deshacer* 🔙).
 - 🖱️ **Botón derecho** sobre un día: marcarlo como festivo, vacaciones, guardia o
   teletrabajo, o **añadir un permiso por horas** (los colores y etiquetas te lo

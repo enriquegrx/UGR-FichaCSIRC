@@ -1207,6 +1207,20 @@ class App:
         else:
             menu.add_command(label="Marcar teletrabajo",
                              command=lambda: self._marcar_teletrabajo(d))
+        # --- Acciones sobre los apuntes de ESE dia ---
+        # Ir por el dia es mas natural que marcarlo y buscar el boton: se señala
+        # el dia y se actua sobre el.
+        hay_apuntes = bool(self._cache_dia.get(fecha))
+        menu.add_separator()
+        m_ap = tk.Menu(menu, tearoff=0)
+        m_ap.add_command(label="Guardar este día como plantilla...",
+                         command=lambda: dialogos.guardar_dia_como_plantilla(self, d),
+                         state=("normal" if hay_apuntes else "disabled"))
+        m_ap.add_command(label="Eliminar apuntes de este día...",
+                         command=lambda: dialogos.abrir_eliminar_dia(self, d),
+                         state=("normal" if hay_apuntes else "disabled"))
+        menu.add_cascade(label="Apuntes del día", menu=m_ap)
+
         # --- Registro en INARI (solo dia de teletrabajo, con integracion lista) ---
         if core.es_teletrabajo(fecha) and destinos.configurado():
             menu.add_separator()
@@ -1594,36 +1608,30 @@ class App:
 
         self._en_hilo(trabajo, al_terminar)
 
-    def _eliminar(self):
-        """Elimina TODOS los apuntes seleccionados (Ctrl/Mayús: varios)."""
-        sel = self.tree.selection()
-        if not sel:
-            messagebox.showinfo("Eliminar", "Selecciona uno o más apuntes en la lista.")
-            return
-        # (entry_id, datos-para-deshacer) de cada apunte seleccionado
-        apuntes = []
-        for item in sel:
-            tags = self.tree.item(item, "tags")
-            if not tags:
-                continue
-            entry_id = tags[0]
-            fecha = tags[1] if len(tags) > 1 else ""
-            destino = tags[3] if len(tags) > 3 else "op"
-            datos = None
-            # Deshacer solo para ProyectosTIC (recrear un slot de INARI no es 1:1)
-            if destino == "op":
-                for a in (self._cache_dia.get(fecha) or []):
-                    if str(a["id"]) == str(entry_id):
-                        datos = {"fecha": fecha, "wp_id": a["wp_id"], "horas": a["horas"],
-                                 "comentario": a["comentario"], "actividad": a["actividad"]}
-                        break
-            apuntes.append((entry_id, destino, datos))
+    def _datos_para_deshacer(self, entry_id, fecha, destino):
+        """Datos para recrear un apunte borrado. Solo ProyectosTIC: recrear un
+        slot de INARI no seria 1:1."""
+        if destino != "op":
+            return None
+        for a in (self._cache_dia.get(fecha) or []):
+            if str(a["id"]) == str(entry_id):
+                return {"fecha": fecha, "wp_id": a["wp_id"], "horas": a["horas"],
+                        "comentario": a["comentario"], "actividad": a["actividad"]}
+        return None
+
+    def _borrar_lote(self, apuntes, confirmar=True):
+        """Borra una lista de (entry_id, destino, datos_para_deshacer).
+
+        Lo usan el boton Eliminar (seleccion de la tabla) y el menu del dia.
+        Centralizado para que el enrutado a INARI y el Deshacer sean iguales
+        vengan de donde vengan."""
         if not apuntes:
             return
-        pregunta = ("¿Seguro que quieres eliminar este apunte?" if len(apuntes) == 1
-                    else f"¿Seguro que quieres eliminar estos {len(apuntes)} apuntes?")
-        if not messagebox.askyesno("Eliminar", pregunta):
-            return
+        if confirmar:
+            pregunta = ("¿Seguro que quieres eliminar este apunte?" if len(apuntes) == 1
+                        else f"¿Seguro que quieres eliminar estos {len(apuntes)} apuntes?")
+            if not messagebox.askyesno("Eliminar", pregunta):
+                return
         self.status.config(text="Eliminando...")
 
         def trabajo():
@@ -1660,6 +1668,24 @@ class App:
             self.refrescar()
 
         self._en_hilo(trabajo, al_terminar)
+
+    def _eliminar(self):
+        """Elimina TODOS los apuntes seleccionados en la tabla (Ctrl/Mayus)."""
+        sel = self.tree.selection()
+        if not sel:
+            messagebox.showinfo("Eliminar", "Selecciona uno o más apuntes en la lista.")
+            return
+        apuntes = []
+        for item in sel:
+            tags = self.tree.item(item, "tags")
+            if not tags:
+                continue
+            entry_id = tags[0]
+            fecha = tags[1] if len(tags) > 1 else ""
+            destino = tags[3] if len(tags) > 3 else "op"
+            apuntes.append((entry_id, destino,
+                            self._datos_para_deshacer(entry_id, fecha, destino)))
+        self._borrar_lote(apuntes)
 
 
 def main():

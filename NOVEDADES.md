@@ -5,6 +5,18 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 2.9.0
+
+**Mejoras**
+- **Botón derecho sobre un día → Apuntes del día**, con dos acciones nuevas:
+  - *Guardar este día como plantilla*: crea la plantilla directamente desde el
+    día, sin tener que marcarlo ni buscar el botón.
+  - *Eliminar apuntes de este día*: te lista lo que tiene ese día y eliges **uno,
+    varios o todos** con casillas. Se puede deshacer, como siempre.
+- La ventana de **Plantillas**, cuando no tienes ninguna, ahora **explica cómo
+  crear la primera** en vez de mostrar un recuadro vacío, y deja *Aplicar* y
+  *Eliminar* desactivados hasta que haya algo que aplicar o borrar.
+
 ## 2.8.1
 
 **Correcciones**
