@@ -98,8 +98,14 @@ class App:
     def _comprobar_actualizacion(self, forzar=False):
         """Avisa (una vez al dia, sin molestar) si hay una version nueva."""
         def al_terminar(res, err):
-            if err or not res:
-                if forzar and not err:
+            if err:
+                # Solo al pedirlo a mano: en la comprobacion automatica no se
+                # molesta al usuario, pero tampoco se le dice que esta al dia.
+                if forzar:
+                    messagebox.showinfo("No se pudo comprobar", str(err))
+                return
+            if not res:
+                if forzar:
                     messagebox.showinfo(
                         "Actualizaciones",
                         f"Ya tienes la última versión (v{core.VERSION}).")

@@ -355,6 +355,56 @@ class TestNoLaborables(unittest.TestCase):
         self.assertEqual(core.objetivo_de(dt.date(2026, 7, 6)), 5)  # verano
 
 
+class TestComprobarActualizacion(unittest.TestCase):
+    """No es lo mismo «no hay versión nueva» que «no he podido mirar».
+
+    Pasó de verdad: se agotó el límite de la API de GitHub y la app decía «ya
+    tienes la última versión» mientras existía una más nueva publicada."""
+
+    def _respuesta(self, status, headers=None, body=None):
+        r = mock.Mock(status_code=status, headers=headers or {})
+        r.json.return_value = body if body is not None else {}
+        return r
+
+    def test_limite_de_github_al_forzar_avisa_y_no_miente(self):
+        reset = int(dt.datetime(2026, 10, 27, 8, 0).timestamp())
+        r = self._respuesta(403, {"X-RateLimit-Remaining": "0",
+                                  "X-RateLimit-Reset": str(reset)})
+        with mock.patch.object(core, "GITHUB_REPO", "u/r"), \
+             mock.patch.object(core.requests, "get", return_value=r):
+            with self.assertRaises(core.ComprobacionFallida) as ctx:
+                core.buscar_actualizacion(forzar=True)
+        msg = str(ctx.exception)
+        self.assertIn("límite", msg.lower())
+        self.assertIn("08:00", msg)          # dice cuándo se podrá reintentar
+        self.assertIn("misma dirección", msg)  # explica que la IP es compartida
+
+    def test_limite_en_la_comprobacion_automatica_no_molesta(self):
+        """Sin forzar, sigue callando: no se interrumpe al usuario cada rato."""
+        r = self._respuesta(403, {"X-RateLimit-Remaining": "0"})
+        with mock.patch.object(core, "GITHUB_REPO", "u/r"), \
+             mock.patch.object(core, "_chequeo_update_reciente", lambda: False), \
+             mock.patch.object(core.requests, "get", return_value=r):
+            self.assertIsNone(core.buscar_actualizacion())
+
+    def test_sin_red_al_forzar_lo_dice(self):
+        with mock.patch.object(core, "GITHUB_REPO", "u/r"), \
+             mock.patch.object(core.requests, "get",
+                               side_effect=OSError("boom")):
+            with self.assertRaises(core.ComprobacionFallida) as ctx:
+                core.buscar_actualizacion(forzar=True)
+        self.assertIn("conectar", str(ctx.exception).lower())
+
+    def test_si_todo_va_bien_sigue_detectando_la_version_nueva(self):
+        r = self._respuesta(200, {}, {"tag_name": "v99.0.0",
+                                      "html_url": "http://x", "assets": []})
+        with mock.patch.object(core, "GITHUB_REPO", "u/r"), \
+             mock.patch.object(core, "guardar_config_valor", lambda *a: None):
+            with mock.patch.object(core.requests, "get", return_value=r):
+                res = core.buscar_actualizacion(forzar=True)
+        self.assertEqual(res[0], "99.0.0")
+
+
 class TestPermisos(unittest.TestCase):
     """Permisos por horas: restan horas al objetivo del dia y consumen cupo."""
 

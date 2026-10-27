@@ -46,7 +46,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.8.0"
+VERSION = "2.8.1"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -54,12 +54,41 @@ UPDATE_CHECK_INTERVAL_HOURS = 4
 WINDOWS_INSTALLER_ASSET = "FichaCSIRC-Instalador.exe"
 
 
+class ComprobacionFallida(RuntimeError):
+    """No se pudo comprobar si hay version nueva (red caida, limite de GitHub...).
+
+    Importa distinguirlo de "no hay version nueva": antes ambos casos devolvian
+    None y la app acababa diciendo "ya tienes la ultima version" aunque en
+    realidad no hubiera podido preguntar."""
+
+
+def _motivo_http(r):
+    """Mensaje claro para el usuario segun por que fallo la consulta."""
+    limite = r.headers.get("X-RateLimit-Remaining") == "0"
+    if r.status_code in (403, 429) and limite:
+        cuando = ""
+        try:
+            reset = int(r.headers.get("X-RateLimit-Reset", 0))
+            if reset:
+                cuando = (" Podrás intentarlo a partir de las "
+                          + dt.datetime.fromtimestamp(reset).strftime("%H:%M") + ".")
+        except (TypeError, ValueError):
+            pass
+        return ("Se ha alcanzado el límite de consultas de GitHub." + cuando
+                + "\n\nEl límite es por conexión y lo comparten todos los equipos "
+                  "que salen a internet por la misma dirección, así que puede "
+                  "deberse a otro uso de la red.")
+    return f"GitHub respondió con un error (HTTP {r.status_code})."
+
+
 def buscar_actualizacion(forzar=False):
     """Devuelve (version, pagina, instalador) si hay release nueva, o None.
 
     Comprueba como mucho cada pocas horas (para no gastar el limite de la API de
     GitHub, sobre todo si varios usuarios salen por la misma IP). Con
-    forzar=True salta esa restriccion (util para un boton "comprobar ahora")."""
+    forzar=True salta esa restriccion (util para un boton "comprobar ahora") y,
+    si no se puede comprobar, lanza ComprobacionFallida en vez de callarse: al
+    pedirlo a mano el usuario merece saber que no se pudo mirar."""
     if not GITHUB_REPO:
         return None
     if not forzar and _chequeo_update_reciente():
@@ -68,11 +97,22 @@ def buscar_actualizacion(forzar=False):
         r = requests.get(
             f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
             timeout=10)
-        if r.status_code != 200:
-            return None
-        data = r.json()
     except Exception:
-        return None  # sin conexion: no marcamos el dia, se reintenta luego
+        # Sin conexion: no marcamos el dia, se reintenta luego.
+        if forzar:
+            raise ComprobacionFallida(
+                "No se pudo conectar con GitHub. Comprueba tu red o la VPN.")
+        return None
+    if r.status_code != 200:
+        if forzar:
+            raise ComprobacionFallida(_motivo_http(r))
+        return None
+    try:
+        data = r.json()
+    except ValueError:
+        if forzar:
+            raise ComprobacionFallida("La respuesta de GitHub no era válida.")
+        return None
     try:
         guardar_config_valor("ultimo_chequeo_update_ts",
                              dt.datetime.now().isoformat(timespec="seconds"))

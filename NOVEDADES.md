@@ -5,6 +5,14 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 2.8.1
+
+**Correcciones**
+- Al pulsar *Ayuda → Comprobar actualizaciones*, si no se puede consultar (sin
+  red, o porque se ha alcanzado el **límite de consultas de GitHub**) la app te
+  lo dice. Antes se quedaba callada y respondía «ya tienes la última versión»
+  aunque hubiera una más nueva publicada.
+
 ## 2.8.0
 
 **Mejoras**

@@ -356,6 +356,18 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   `jinv` muestra la oficial (fichada + desayuno), así que es compatible con las
   configuraciones que ya existían. 139 tests.
 
+- v2.8.1 (oct 2026): **la comprobación de actualizaciones ya no miente**.
+  `buscar_actualizacion` devolvía `None` tanto si no había versión nueva como si
+  no había podido preguntar, y la GUI (`if err or not res` con
+  `forzar and not err`) acababa diciendo «ya tienes la última versión» con una
+  release más nueva publicada; si además había excepción, no mostraba **nada**.
+  Paso en real: se agoto el limite de la API de GitHub (60/h **por IP, compartida
+  por toda la salida de la UGR**) y el usuario no entendia por que no le bajaba la
+  2.8.0. Ahora hay `ComprobacionFallida`: con `forzar=True` se lanza con el motivo
+  (sin red / límite, con la hora de reintento sacada de `X-RateLimit-Reset`), y la
+  comprobación automática sigue callando para no molestar. Tests:
+  `TestComprobarActualizacion` (4). 143 tests.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
   red mockeada, repartidos así:
