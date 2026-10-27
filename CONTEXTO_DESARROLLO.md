@@ -382,6 +382,18 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   `abrir_plantillas` con la lista vacía explica cómo crear la primera y desactiva
   Aplicar/Eliminar. Tests: `TestAccionesDelDia` (4). 147 tests.
 
+- v2.9.1 (oct 2026): **arreglado el job de macOS Intel**, que llevaba ~6 releases
+  colgado y dejaba sin publicar `FichaCSIRC-mac-x64.zip`. **No era el runner**:
+  el diagnostico por la API (steps del job) mostro que se quedaba en el paso
+  **«Ejecutar tests»** 19+ minutos, cuando el build entero tarda 1 min en arm64.
+  Causa: los tests de GUI abren ventanas Tk y en ese runner **se bloquean** en vez
+  de saltarse — el guard `except tk.TclError: skipTest` cubre que Tk *falle*, no
+  que se *quede esperando*. Ademas eran **redundantes**: ya corren en el workflow
+  de Tests en cada push y en el job de Windows de cada release. Se retira el paso
+  de tests de `build-macos` (esos jobs solo empaquetan) y se anade
+  `timeout-minutes` a los dos jobs (25 Windows / 20 macOS) para que un cuelgue
+  futuro muera solo en vez de dejar el run abierto 6 horas.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **123 tests** con la
   red mockeada, repartidos así:

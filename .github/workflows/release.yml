@@ -15,6 +15,9 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    # Si algo se cuelga, que muera solo: una release a medias es mejor que
+    # un run abierto 6 horas bloqueando la vista de Actions.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
@@ -79,6 +82,7 @@ jobs:
           - runner: macos-26-intel
             arch: x64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -89,8 +93,12 @@ jobs:
       - name: Instalar dependencias
         run: pip install requests
 
-      - name: Ejecutar tests
-        run: python -m unittest discover -s tests -t . -v
+      # Aqui NO se ejecutan los tests a proposito. Colgaban el job de Intel
+      # indefinidamente (19+ min en el paso "Ejecutar tests", cuando el build
+      # entero tarda 1 min): los tests de GUI abren ventanas Tk y en ese runner
+      # se quedan esperando en vez de saltarse. Ademas son redundantes: ya corren
+      # en el workflow de Tests en cada push y en el job de Windows de cada
+      # release. Estos jobs solo tienen que EMPAQUETAR.
 
       - name: Construir apps macOS
         run: ARCH_LABEL=${{ matrix.arch }} ./build_macos.sh

@@ -5,6 +5,12 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 2.9.1
+
+**Correcciones**
+- Vuelve a generarse la versión para **Mac con procesador Intel**, que llevaba
+  varias versiones sin publicarse.
+
 ## 2.9.0
 
 **Mejoras**
