@@ -122,16 +122,31 @@ def _horas(h):
     return core._fmt(h).replace(".", ",")
 
 
-def estado_dia(d, apuntes, hoy=None):
+def actividades_de_permiso():
+    """Nombres (en minusculas) de las actividades enlazadas a algun permiso."""
+    return {core.actividad_de_permiso(t["id"]).lower()
+            for t in core.permisos_tipos()} - {""}
+
+
+def estado_dia(d, apuntes, hoy=None, acts_permiso=None):
     """Lo que necesita la tarjeta de un dia. Misma logica que
     registrar_gui._pintar_semana, pero devuelta como datos: el HTML no decide
-    nada, solo pinta segun 'estado'."""
+    nada, solo pinta segun 'estado'.
+
+    Un dia cubierto por un permiso IMPUTADO como actividad (p. ej. 7 h de
+    "Asuntos propios") es un dia de permiso completo, no "7h · +0,5h": el
+    permiso vale la jornada oficial y el objetivo es la fichada."""
     hoy = hoy or dt.date.today()
     iso = d.isoformat()
     obj = core.objetivo_de(d)
     nolab = core.es_no_laborable(iso)
     reg = round(sum(a["horas"] for a in apuntes), 2) if apuntes else 0.0
     h_permiso = 0 if nolab else core.horas_permiso(iso)
+    if acts_permiso is None:
+        acts_permiso = actividades_de_permiso()
+    h_permiso_pt = sum(a["horas"] for a in (apuntes or [])
+                       if str(a.get("actividad") or "").strip().lower() in acts_permiso)
+    dia_permiso_pt = bool(h_permiso_pt) and h_permiso_pt >= core.horas_dia_permiso() - 0.01
     if nolab:
         estado = "vacaciones" if core.es_vacaciones(iso) else "nolab"
         frac = 1.0
@@ -140,7 +155,7 @@ def estado_dia(d, apuntes, hoy=None):
             texto = f"{_horas(reg)} · {texto}"
     elif apuntes is None:
         estado, frac, texto = "error", 0.0, "sin conexión"
-    elif h_permiso and obj == 0:
+    elif (h_permiso and obj == 0) or dia_permiso_pt:
         estado, frac, texto = "permiso", 1.0, "Permiso (día completo)"
         if reg:
             texto = f"{_horas(reg)} · {texto}"
@@ -166,8 +181,8 @@ def estado_dia(d, apuntes, hoy=None):
         "texto": texto,
         "reg": reg,
         "obj": obj,
-        "falta": round(obj - reg, 2) if not nolab else 0.0,
-        "exceso": round(reg - obj, 2) if (not nolab and reg > obj) else 0.0,
+        "falta": round(obj - reg, 2) if not (nolab or dia_permiso_pt) else 0.0,
+        "exceso": round(reg - obj, 2) if (not (nolab or dia_permiso_pt) and reg > obj) else 0.0,
         "no_laborable": nolab,
         "motivo": core.motivo_no_laborable(iso) if nolab else "",
         "guardia": core.es_guardia(iso),
@@ -327,7 +342,9 @@ class Api:
         return self._pintar([lunes + dt.timedelta(days=i) for i in range(5)], 0)
 
     def _pintar(self, dias, fallos):
-        tarjetas = [estado_dia(d, self._cache.get(d.isoformat())) for d in dias]
+        acts = actividades_de_permiso()
+        tarjetas = [estado_dia(d, self._cache.get(d.isoformat()), acts_permiso=acts)
+                    for d in dias]
         reg = sum(t["reg"] for t in tarjetas)
         obj = sum(core.objetivo_de(d) for d in dias)
         dom = dias[0] + dt.timedelta(days=6)
@@ -404,12 +421,13 @@ class Api:
 
     def _pintar_mes(self, anio, mes, semanas, fallos):
         hoy = dt.date.today()
+        acts = actividades_de_permiso()
         filas, reg, obj, obj_hoy = [], 0.0, 0.0, 0.0
         for lunes in semanas:
             fila = []
             for i in range(5):
                 d = lunes + dt.timedelta(days=i)
-                t = estado_dia(d, self._cache.get(d.isoformat()), hoy)
+                t = estado_dia(d, self._cache.get(d.isoformat()), hoy, acts)
                 t.update(dia=d.day, del_mes=(d.month == mes), futuro=(d > hoy))
                 fila.append(t)
                 if d.month == mes:          # los totales, solo los del mes
@@ -431,6 +449,65 @@ class Api:
             "conexion": "error" if fallos >= total_dias else ("warn" if fallos else "ok"),
             "semanas": filas,
         }
+
+    NOMBRES_CORTOS = {"asuntos_particulares": "Asuntos particulares",
+                      "servicios_minimos": "Servicios mínimos",
+                      "conciliacion": "Conciliación"}
+
+    def _estado_mes(self, anio, mes, por_dia, hasta):
+        """(registrado, objetivo hasta 'hasta') de un mes con los apuntes ya
+        leidos. Teletrabajo con INARI: cuentan sus horas (cubos disjuntos)."""
+        inari_cfg = destinos.configurado()
+        reg = obj = 0.0
+        for n in range(1, calendar.monthrange(anio, mes)[1] + 1):
+            d = dt.date(anio, mes, n)
+            if d.weekday() >= 5 or d > hasta:
+                continue
+            iso = d.isoformat()
+            obj += core.objetivo_de(d)
+            if inari_cfg and core.es_teletrabajo(iso):
+                try:
+                    reg += destinos.horas_dia(iso)
+                except Exception:
+                    pass
+            else:
+                reg += sum(a["horas"] for a in por_dia.get(iso, []))
+        return reg, obj
+
+    def resumen_franja(self):
+        """La franja de resumen: como va el mes, si el anterior quedo a medias,
+        el saldo de cada permiso y las vacaciones que quedan. UNA consulta por
+        rango para los dos meses."""
+        hoy = dt.date.today()
+        ant = (hoy.replace(day=1) - dt.timedelta(days=1))
+        out = {"permisos": [], "meses": []}
+        try:
+            por_dia = {}
+            for a in core.entradas_rango(ant.replace(day=1).isoformat(), hoy.isoformat()):
+                por_dia.setdefault(a["fecha"], []).append(a)
+            for anio, mes, hasta, siempre in ((hoy.year, hoy.month, hoy, True),
+                                              (ant.year, ant.month, ant, False)):
+                reg, obj = self._estado_mes(anio, mes, por_dia, hasta)
+                al_dia = reg >= obj - 0.001
+                if siempre or not al_dia:      # el anterior, solo si quedo a medias
+                    out["meses"].append({
+                        "titulo": self.MESES[mes - 1].capitalize(), "anio": anio, "mes": mes,
+                        "al_dia": al_dia,
+                        "texto": "al día ✔" if al_dia else f"faltan {_horas(obj - reg)}"})
+        except Exception:
+            out["meses"] = []                  # sin red: el resto sigue valiendo
+        for t in core.permisos_tipos():
+            if not core.concesiones(t["id"]):
+                continue
+            disp = core.permiso_disponible(t["id"])
+            out["permisos"].append({
+                "nombre": self.NOMBRES_CORTOS.get(t["id"], t.get("nombre", t["id"])[:26]),
+                "disponible": core.fmt_horas_hhmm(disp), "negativo": disp < 0})
+        cupo = core.cupo_vacaciones()
+        if cupo:
+            usadas = core.vacaciones_usadas(hoy.year)
+            out["vacaciones"] = {"quedan": cupo - usadas, "cupo": cupo}
+        return out
 
     def vista(self):
         v = core.config_valor("vista_inicio", "semana")

@@ -135,6 +135,7 @@ async function arrancar() {
   ponerTareas(ini.tareas);
   ponerActividades(ini.actividades, ini.actividad_preferida);
   await cargarSemana({ marcarHoy: true });
+  refrescarFranja();
   if (st.tareas.size) elegirTarea();
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
   // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
@@ -168,6 +169,9 @@ async function cargarSemana({ marcarHoy = false, marcar = null } = {}) {
   const datos = st.vista === "mes" ? await llamar("mes", st.mesSel.anio, st.mesSel.mes)
                                    : await llamar("semana", st.lunes);
   pintarVista(datos, marcarHoy, marcar);
+  // Navegar (marcarHoy/marcar) no cambia los datos; recargar tras añadir,
+  // borrar, editar, copiar o F5 si: entonces se rehace la franja.
+  if (!marcarHoy && !marcar) refrescarFranja();
 }
 
 // Repinta sin red tras una marca local (festivo, guardia, permiso...).
@@ -175,6 +179,49 @@ async function repintarLocal() {
   const datos = st.vista === "mes" ? await llamar("repintar_mes", st.mesSel.anio, st.mesSel.mes)
                                    : await llamar("repintar", st.lunes);
   pintarVista(datos, false);
+  refrescarFranja();
+}
+
+// ---------------------------------------------------------------- franja de resumen
+
+let franjaSeq = 0;
+async function refrescarFranja() {
+  const mio = ++franjaSeq;
+  let r;
+  try {
+    r = await api().resumen_franja();       // sin modal: si falla, no se pinta
+  } catch (_e) {
+    return;
+  }
+  if (mio !== franjaSeq) return;
+  const items = [el("span", { class: "franja-titulo", text: "Resumen" })];
+  for (const m of r.meses) {
+    items.push(el("button", {
+      class: `franja-item ${m.al_dia ? "ok" : "aviso"}`, title: `Ver ${m.titulo} en la vista mensual`,
+      onclick: () => irAMes(m.anio, m.mes),
+    }, el("span", { class: "tenue", text: `${m.titulo}: ` }), el("span", { text: m.texto })));
+  }
+  for (const p of r.permisos) {
+    items.push(el("button", { class: `franja-item${p.negativo ? " aviso" : ""}`,
+                              title: "Herramientas > Permisos", onclick: () => dlgPermisos() },
+      el("span", { class: "tenue", text: `${p.nombre}: ` }), el("span", { text: `${p.disponible} h` })));
+  }
+  if (r.vacaciones) {
+    items.push(el("button", { class: "franja-item", title: "Herramientas > Vacaciones y teletrabajo",
+                              onclick: () => dlgAjustesDias() },
+      el("span", { class: "tenue", text: "Vacaciones: " }),
+      el("span", { text: `quedan ${r.vacaciones.quedan} de ${r.vacaciones.cupo} días` })));
+  }
+  $("franja").replaceChildren(...items);
+  $("franja").hidden = items.length < 2;
+}
+
+function irAMes(anio, mes) {
+  st.vista = "mes";
+  st.mesSel = { anio, mes };
+  pintarSelectorVista();
+  llamar("guardar_vista", "mes").catch(() => {});
+  cargarSemana({ marcarHoy: true });
 }
 
 function pintarVista(datos, marcarHoy, marcar = null) {
@@ -238,11 +285,28 @@ function pintarDiasSemana(s) {
       el("div", { class: "titulo", text: `${d.nombre} ${d.fecha}${d.es_hoy ? "  · hoy" : ""}` }),
       barra,
       el("div", { class: "cifra", text: d.texto }),
-      chips.childElementCount ? chips : null);
+      chips.childElementCount ? chips : null,
+      ...apuntesTarjeta(d));
     eventosDia(tarjeta, d);
     cont.append(tarjeta);
     requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
   });
+}
+
+// Lo que se hizo ese dia, dentro de la tarjeta de la semana: con 1-2 apuntes
+// habituales se ve la semana entera sin ir marcando dia a dia.
+const MAX_APUNTES_TARJETA = 3;
+function apuntesTarjeta(d) {
+  if (d.estado === "vacio") return [el("div", { class: "sin-apuntes", text: "Sin apuntes" })];
+  const out = d.apuntes.slice(0, MAX_APUNTES_TARJETA).map((a) =>
+    el("div", { class: "ap-tarjeta" },
+      el("div", { class: "linea-ap" },
+        el("span", { class: "linea-h", text: a.horas_txt }),
+        el("span", { class: "linea-t", text: a.tarea })),
+      a.actividad ? el("div", { class: "linea-act", text: a.actividad }) : null));
+  const resto = d.apuntes.length - MAX_APUNTES_TARJETA;
+  if (resto > 0) out.push(el("div", { class: "linea-mas", text: `+${resto} más` }));
+  return out;
 }
 
 // Texto corto de una celda del mes (la tarjeta de la semana tiene sitio para
@@ -250,7 +314,7 @@ function pintarDiasSemana(s) {
 function cifraMes(d) {
   if (d.no_laborable) return d.motivo.charAt(0).toUpperCase() + d.motivo.slice(1);
   if (d.estado === "error") return "sin conexión";
-  if (d.estado === "permiso") return "Permiso";
+  if (d.estado === "permiso") return "Permiso ✔";
   if (d.estado === "completo") return `${fmtHoras(d.reg)}h ✔`;
   if (d.estado === "pasado") return `${fmtHoras(d.reg)}h · +${fmtHoras(d.exceso)}h`;
   if (d.estado === "vacio" && d.futuro) return "";

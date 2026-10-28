@@ -26,6 +26,14 @@ instalada aparece en el pie de la ventana.
   **azul** y con cuánto («7h · +0,5h»). El rojo queda para cuando no se pudo leer.
 - **Mayús+clic** marca un **rango de días** (unas vacaciones de dos semanas, de
   un clic), en la semana y en el mes.
+- **Las tarjetas de la semana enseñan sus apuntes** (tarea y actividad): ves la
+  semana entera sin ir marcando día a día.
+- **Franja de resumen** bajo los días: cómo va el mes (y el anterior, si quedó a
+  medias), lo que te queda de cada permiso y tus vacaciones. Cada dato te lleva
+  a su sitio con un clic.
+- Si en tu servicio los asuntos propios se imputan como actividad y la tienes
+  enlazada (*Herramientas → Permisos*), **un día entero de permiso sale como
+  «Permiso ✔»**, no como «7h · +0,5h».
 - **Más compacta**: el formulario y los apuntes van **uno al lado del otro**, y
   cada apunte tiene sus botones de **editar** y **borrar**. El botón de añadir
   dice a qué días lo hace («Añadir a lun 26/10», «Añadir a 3 días»).

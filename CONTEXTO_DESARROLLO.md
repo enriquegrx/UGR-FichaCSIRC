@@ -517,8 +517,15 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     objetivo) en AZUL con `exceso` ("+0,5h"): no es un error. Rojo solo "error".
   - Visto con datos reales: los "+0,5h" eran días completos de asuntos propios
     imputados como actividad con 7 h (jornada oficial) contra un objetivo de
-    6,5 h (fichada). Pendiente decidir: que un día cubierto por un permiso
-    imputado como actividad cuente como completo.
+    6,5 h (fichada). Ahora `estado_dia`: si las horas de actividades enlazadas
+    a un permiso (`actividades_de_permiso`) llegan a `horas_dia_permiso`, el día
+    es "permiso" (completo, sin falta ni exceso). Solo con el enlace hecho.
+  - Tarjetas de la semana con sus apuntes (hasta 3, "+N más") y franja de
+    resumen (`Api.resumen_franja`: UNA consulta por rango desde el día 1 del mes
+    anterior; el anterior solo si quedó a medias; permisos con concesiones y
+    vacaciones). Se rehace al arrancar, al recargar tras un cambio y tras una
+    marca local, NO al navegar (no cambian los datos). Con datos reales, a
+    1920x1030 quedan ~280 px libres bajo el formulario en la vista semana.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la
@@ -530,7 +537,7 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   - `test_destinos.py` (9) — puente ProyectosTIC/INARI.
   - `test_gui_acciones.py` (37) — acciones reales de la GUI (con `en_hilo` síncrono).
   - `test_gui_smoke.py` (1) — arranque de la ventana Tk; se salta sin display.
-  - `test_web_api.py` (46) — la `Api` web, el asistente, el modo experimento y
+  - `test_web_api.py` (51) — la `Api` web, el asistente, el modo experimento y
     los ficheros de `web/` (enlazados, sin `innerHTML`, y que todo lo que llama el
     JS exista en la `Api` y en la demo).
 - Ejecutarlos tras tocar el motor o la GUI.

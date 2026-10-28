@@ -347,3 +347,24 @@ body.aviso h2 { font-size: 16px; }
 @media (max-width: 1000px) {
   .dias.mes { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
+
+/* ---------- apuntes dentro de las tarjetas de la semana ---------- */
+.dia .ap-tarjeta { border-top: 1px solid #eef1f4; padding: 4px 0 3px; }
+/* el primer apunte, separado de la cifra (o de los chips) */
+.dia .cifra + .ap-tarjeta, .dia .chips + .ap-tarjeta { margin-top: 6px; }
+.dia .linea-ap { color: var(--texto); }
+.linea-act { font-size: 12px; color: var(--tenue); padding-left: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sin-apuntes { margin-top: 6px; font-size: 12px; color: var(--tenue); }
+.dia .linea-mas { margin-top: 2px; }
+
+/* ---------- franja de resumen ---------- */
+.franja {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+  box-shadow: var(--sombra); padding: 7px 12px; font-size: 13px;
+}
+.franja-titulo { font-size: 12px; color: var(--tenue); text-transform: uppercase; letter-spacing: .5px; margin-right: 4px; }
+.franja-item { border: 1px solid var(--borde); border-radius: 999px; padding: 3px 11px; background: var(--panel); font-size: 13px; }
+.franja-item:hover { background: var(--fondo); }
+.franja-item.ok span:last-child { color: var(--exito); }
+.franja-item.aviso span:last-child { color: var(--aviso); }

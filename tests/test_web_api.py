@@ -64,6 +64,60 @@ class TestEstadoDia(Base):
                          ("5", "2,5h", "<b>hola</b>"))   # el JS lo pinta como texto
 
 
+class TestDiaDePermisoImputado(Base):
+    """Un dia cubierto por un permiso imputado como ACTIVIDAD (asi se hace en
+    ATE) es un dia de permiso completo, no "7h · +0,5h"."""
+
+    def _con_enlace(self):
+        tipos = [{"id": "ap", "nombre": "AP", "actividad": "Asuntos propios",
+                  "concesiones": [{"horas": 70, "fecha_limite": ""}]}]
+        return mock.patch.object(core, "permisos_tipos", lambda: tipos)
+
+    def test_dia_completo_de_asuntos_propios(self):
+        ap = [apunte(1, 7, wp="99", act="Asuntos propios")]
+        with self._con_enlace(), mock.patch.object(core, "horas_dia_permiso", return_value=7.0):
+            e = web.estado_dia(L, ap)
+        self.assertEqual(e["estado"], "permiso")
+        self.assertEqual((e["falta"], e["exceso"]), (0.0, 0.0))
+        self.assertIn("Permiso (día completo)", e["texto"])
+
+    def test_un_rato_de_permiso_no_es_dia_completo(self):
+        ap = [apunte(1, 2, wp="99", act="asuntos propios "),   # sin distinguir mayusculas
+              apunte(2, 3, wp="10")]
+        with self._con_enlace(), mock.patch.object(core, "horas_dia_permiso", return_value=7.0):
+            self.assertEqual(web.estado_dia(L, ap)["estado"], "parcial")
+
+    def test_sin_enlace_se_compara_como_siempre(self):
+        ap = [apunte(1, 8, wp="99", act="Asuntos propios")]
+        e = web.estado_dia(L, ap)                 # catalogo por defecto: sin actividad
+        self.assertEqual((e["estado"], e["exceso"]), ("pasado", 1.0))
+        self.assertIn("+1h", e["texto"])
+
+
+class TestFranja(Base):
+    def test_una_consulta_y_mes_anterior_solo_si_quedo_a_medias(self):
+        hoy = dt.date(2026, 10, 2)                  # viernes
+        apuntes = [dict(apunte(1, 7), fecha="2026-10-01"),
+                   dict(apunte(2, 7), fecha="2026-10-02")]   # octubre al dia; septiembre vacio
+        with mock.patch.object(core, "entradas_rango", return_value=apuntes) as m_rango, \
+             mock.patch.object(web.dt, "date", wraps=dt.date) as m_date:
+            m_date.today.return_value = hoy
+            r = self.api.resumen_franja()
+        m_rango.assert_called_once_with("2026-09-01", "2026-10-02")
+        self.assertEqual([(m["titulo"], m["al_dia"]) for m in r["meses"]],
+                         [("Octubre", True), ("Septiembre", False)])
+        self.assertTrue(r["meses"][1]["texto"].startswith("faltan"))
+        self.assertIn("vacaciones", r)
+        nombres = [p["nombre"] for p in r["permisos"]]
+        self.assertIn("Asuntos particulares", nombres)        # nombre corto
+
+    def test_sin_red_sigue_mostrando_permisos(self):
+        with mock.patch.object(core, "entradas_rango", side_effect=RuntimeError("red")):
+            r = self.api.resumen_franja()
+        self.assertEqual(r["meses"], [])
+        self.assertTrue(r["permisos"])
+
+
 class TestSemana(Base):
     def test_semana_y_conexion(self):
         datos = {L.isoformat(): [apunte(1, 7)], M.isoformat(): [apunte(2, 2)]}

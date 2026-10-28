@@ -136,8 +136,13 @@ Abre **FichaCSIRC (Registrar horas)**:
    qué días va: «Añadir a lun 26/10», «Añadir a 3 días».
 3. Listo. La tarjeta se pone verde cuando completas tu jornada. 🎉
 
-A la derecha del formulario ves los **apuntes de los días marcados**, cada uno
-con su ✏️ **editar** y 🗑️ **borrar**.
+Cada tarjeta enseña **lo que imputaste ese día**. A la derecha del formulario
+ves los **apuntes de los días marcados**, cada uno con su ✏️ **editar** y 🗑️
+**borrar**.
+
+Bajo los días, la **franja de resumen** te dice cómo va el mes (y el anterior si
+quedó a medias), lo que te queda de cada permiso y tus vacaciones. Pulsa
+cualquiera para ir a su sitio.
 
 ### 📆 Vista mensual
 
@@ -233,7 +238,9 @@ lo tienes a mano en *Herramientas → Permisos (horas) → Añadir los permisos 
   ProyectosTic como una actividad** dentro de una tarea, dile a la app cuál: en
   *Herramientas → Permisos (horas)*, en ese permiso, elige la actividad en
   **«Se imputa como actividad»** (por ejemplo *Asuntos propios*). Desde entonces
-  las horas que imputes con esa actividad también te descuentan del saldo. 🔗
+  las horas que imputes con esa actividad también te descuentan del saldo, y un
+  día entero imputado así sale como **«Permiso ✔»** en el calendario (en vez de
+  «7h · +0,5h», porque el permiso cuenta la jornada oficial). 🔗
   En ese caso no marques además el permiso en el día, o contará dos veces.
 - ⏳ La app **avisa** cuando una concesión está a punto de caducar, y ⚠️ marca las
   ya caducadas — pero **no te resta horas sola**: tú decides qué hacer.

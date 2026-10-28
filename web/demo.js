@@ -311,6 +311,12 @@
     mes: (a, m) => espera(mesDemo(a, m)),
     repintar_mes: (a, m) => espera(mesDemo(a, m)),
     guardar_vista: () => espera({ ok: true }),
+    resumen_franja: () => espera({
+      meses: [{ titulo: "Octubre", anio: 2026, mes: 10, al_dia: false, texto: "faltan 4h" },
+              { titulo: "Septiembre", anio: 2026, mes: 9, al_dia: false, texto: "faltan 17,5h" }],
+      permisos: [{ nombre: "Asuntos particulares", disponible: "63:30", negativo: false },
+                 { nombre: "Servicios mínimos", disponible: "18:00", negativo: false }],
+      vacaciones: { quedan: 21, cupo: 22 } }),
     aviso_aplicaciones: () => espera(""),
     abrir_aplicaciones: () => espera({ ok: true }),
   });
