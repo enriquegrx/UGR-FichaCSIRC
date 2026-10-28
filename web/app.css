@@ -203,6 +203,7 @@ td { padding: 7px 8px; border-bottom: 1px solid #eef1f4; vertical-align: top; }
 }
 .menu button { display: block; width: 100%; text-align: left; border: 0; border-radius: 5px; padding: 7px 10px; background: none; }
 .menu button:hover:not(:disabled) { background: var(--seleccion); }
+.menu button.destacado { font-weight: 700; color: #111827; }
 .menu .titulo-menu { padding: 6px 10px 4px; font-size: 11px; color: var(--tenue); text-transform: uppercase; letter-spacing: .5px; }
 .menu hr { border: 0; border-top: 1px solid var(--borde); margin: 4px 0; }
 

@@ -180,8 +180,10 @@ function dlgBuscar() {
 
 // ================================================================ copiar
 
-async function dlgCopiarDia() {
-  const dias = [...st.marcados];
+// Destino: los dias marcados (desde Copiar / Plantillas) o el dia sobre el que
+// se hizo clic derecho (menuDia), sin tener que marcarlo antes.
+async function dlgCopiarDia(destino = null) {
+  const dias = destino || [...st.marcados];
   if (!dias.length) { await avisar("Falta día", "Marca al menos un día de destino."); return; }
   estado("Buscando el último día con horas…");
   const r = await llamar("preparar_copia_dia", dias);

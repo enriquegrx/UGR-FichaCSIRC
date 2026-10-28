@@ -24,6 +24,8 @@ instalada aparece en el pie de la ventana.
   plantilla a todos de una vez. La app recuerda la vista que usaste.
 - Pasarte de la jornada ya **no sale en rojo**, como si fuera un error: sale en
   **azul** y con cuánto («7h · +0,5h»). El rojo queda para cuando no se pudo leer.
+- **Botón derecho sobre un día → «Copiar día anterior»**, la primera opción y
+  destacada: copia a ESE día lo del último día con horas, sin tener que marcarlo.
 - **Mayús+clic** marca un **rango de días** (unas vacaciones de dos semanas, de
   un clic), en la semana y en el mes.
 - **Las tarjetas de la semana enseñan sus apuntes** (tarea y actividad): ves la

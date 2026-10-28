@@ -160,7 +160,10 @@ La app recuerda la vista que dejaste.
 - ⇧ **Mayús+clic** sobre un día marca **todo el rango** desde el último que
   pulsaste: unas vacaciones de dos semanas, de un clic.
 - 🔄 **Copiar semana anterior**: repite la semana pasada entera, día a día.
-- 📄 **Copiar día anterior**: repite el último día que fichaste en los días marcados.
+- 📄 **Copiar día anterior**: repite el último día que fichaste. Lo más rápido:
+  **botón derecho sobre el día → «Copiar día anterior»** (la primera opción, en
+  negrita): lo copia a ese día sin tener que marcarlo. También desde *Copiar /
+  Plantillas*, a todos los días marcados.
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
   más rápida de crear una: **botón derecho sobre el día** → *Apuntes del día*
   → *Guardar este día como plantilla*.

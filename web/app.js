@@ -78,7 +78,7 @@ function mostrarMenu(x, y, items) {
     if (it === "-") { m.append(el("hr")); continue; }
     if (it.titulo) { m.append(el("div", { class: "titulo-menu", text: it.titulo })); continue; }
     m.append(el("button", {
-      text: it.texto, disabled: !!it.desactivado,
+      text: it.texto, disabled: !!it.desactivado, class: it.clase,
       onclick: () => { cerrarMenu(); it.accion(); },
     }));
   }
@@ -416,7 +416,12 @@ function pintarMarcados() {
 }
 
 function menuDia(x, y, d) {
-  const items = [{ titulo: `${d.nombre} ${d.fecha}` }];
+  // Lo mas repetido del dia a dia, lo primero y destacado (en negrita, no en
+  // rojo: el rojo en la app es borrar).
+  const items = [{ titulo: `${d.nombre} ${d.fecha}` },
+                 { texto: "⧉ Copiar día anterior", clase: "destacado",
+                   accion: () => dlgCopiarDia([d.iso]) },
+                 "-"];
   const marca = (accion, motivo = "") => async () => {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
         && !(await preguntar("Teletrabajo",
