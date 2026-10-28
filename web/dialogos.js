@@ -198,7 +198,7 @@ async function dlgCopiarDia() {
 
 async function dlgCopiarSemana() {
   estado("Leyendo la semana anterior…");
-  const r = await llamar("preparar_copia_semana", st.lunes);
+  const r = await llamar("preparar_copia_semana", lunesReferencia());
   if (r.vacio) { await avisar("Copiar semana", r.vacio); actualizarTotales(); return; }
   if (!(await preguntar("Copiar semana anterior",
       `¿Copiar los ${r.n} apuntes de la semana del ${r.origen} a esta semana, día a día?\n\n`
@@ -325,7 +325,9 @@ function dlgEliminarDia(dia) {
 // ================================================================ resumen del mes
 
 function dlgResumen() {
-  const ref = sumarDias(st.lunes, 3);   // jueves: el mes que domina la semana
+  // el mes visible; en la vista semana, el que domina la semana (su jueves)
+  const ref = st.vista === "mes" ? `${st.mesSel.anio}-${String(st.mesSel.mes).padStart(2, "0")}-15`
+                                 : sumarDias(st.lunes, 3);
   const est = { anio: Number(ref.slice(0, 4)), mes: Number(ref.slice(5, 7)), seq: 0 };
   const titulo = el("strong", { class: "mes", text: "…" });
   const barra = el("div", { class: "barra grande" }, el("i"));

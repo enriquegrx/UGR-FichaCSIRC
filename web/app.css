@@ -21,6 +21,9 @@
 }
 
 * { box-sizing: border-box; }
+/* hidden oculta SIEMPRE: si no, una regla con display (p. ej. .chip) le gana y
+   el elemento se ve vacio. */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -307,3 +310,34 @@ body.aviso h2 { font-size: 16px; }
 .texto-aviso { white-space: pre-line; font-variant-numeric: tabular-nums; }
 .pequeno { font-size: 12px; }
 .pie-aviso { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--borde); }
+
+/* ---------- selector Semana | Mes y vista mensual ---------- */
+.selector-vista { display: inline-flex; border: 1px solid var(--borde); border-radius: 6px; overflow: hidden; }
+.selector-vista button { border: 0; border-radius: 0; padding: 6px 12px; }
+.selector-vista button + button { border-left: 1px solid var(--borde); }
+.selector-vista button.activo { background: var(--seleccion); color: var(--primario); font-weight: 600; }
+.chip-estado { font-size: 12px; padding: 2px 9px; border-radius: 999px; }
+.chip-estado.ok { background: #e7f4ec; color: var(--exito); }
+.chip-estado.aviso { background: var(--permiso-bg); color: var(--permiso-fg); }
+
+.dias.mes { gap: 6px; }
+.cab-mes { font-size: 12px; color: var(--tenue); text-align: center; padding-bottom: 2px; }
+.celda {
+  position: relative; overflow: hidden; cursor: pointer; user-select: none;
+  border: 1px solid var(--borde); border-radius: 6px; background: var(--panel);
+  padding: 5px 8px 6px; min-height: 58px; transition: background .12s, border-color .12s;
+}
+.celda:hover { border-color: #b8c2cc; }
+.celda.marcado { background: var(--seleccion); border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); }
+.celda.hoy::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--primario); }
+.celda.fuera { opacity: .45; }
+.celda.fuera.marcado { opacity: .8; }
+.celda .num-dia { display: flex; justify-content: space-between; font-size: 12px; color: #111827; }
+.celda.hoy .num-dia { font-weight: 700; color: var(--primario); }
+.celda .iconos { color: var(--tenue); letter-spacing: 1px; }
+.celda .barra { height: 5px; margin: 5px 0 4px; }
+.celda .cifra { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.4em; }
+.celda.futuro .cifra { font-weight: 400; }
+@media (max-width: 1000px) {
+  .dias.mes { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

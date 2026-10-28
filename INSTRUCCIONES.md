@@ -132,12 +132,28 @@ Abre **FichaCSIRC (Registrar horas)**:
    (🟢 verde = día completo, 🟠 ámbar = a medias). Haz **clic en el día** que
    quieras rellenar (hoy ya viene marcado).
 2. Elige la **tarea**, revisa las **horas** (vienen pre-rellenas con lo que te
-   falta) y la **actividad**, y pulsa **Añadir a días marcados** (o Enter). ↵
+   falta) y la **actividad**, y pulsa **Añadir a…** (o Enter). ↵ El botón dice a
+   qué días va: «Añadir a lun 26/10», «Añadir a 3 días».
 3. Listo. La tarjeta se pone verde cuando completas tu jornada. 🎉
+
+A la derecha del formulario ves los **apuntes de los días marcados**, cada uno
+con su ✏️ **editar** y 🗑️ **borrar**.
+
+### 📆 Vista mensual
+
+Arriba, el botón **Semana | Mes** cambia las tarjetas por el **calendario del
+mes** (de lunes a viernes). Cada día enseña lo que llevas y, arriba, ves si vas
+**al día ✔** o cuántas horas te faltan: los huecos saltan a la vista. Funciona
+igual que la semana: marcas días (de **cualquier semana**) y añades, copias o
+aplicas una plantilla a todos a la vez. Las flechas ← → y *Hoy* cambian de mes.
+La app recuerda la vista que dejaste.
 
 ### ✨ Trucos que ahorran tiempo
 
-- 🗓️ **Toda la semana**: marca los 5 días y añade el mismo apunte a todos de golpe.
+- 🗓️ **Toda la semana** (o **Todo el mes**): marca todos los días y añade el
+  mismo apunte de golpe.
+- ⇧ **Mayús+clic** sobre un día marca **todo el rango** desde el último que
+  pulsaste: unas vacaciones de dos semanas, de un clic.
 - 🔄 **Copiar semana anterior**: repite la semana pasada entera, día a día.
 - 📄 **Copiar día anterior**: repite el último día que fichaste en los días marcados.
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma

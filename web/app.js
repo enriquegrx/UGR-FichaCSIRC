@@ -16,7 +16,11 @@ const st = {
   ini: null,            // respuesta de api.inicio()
   lunes: null,          // "AAAA-MM-DD"
   hoyLunes: null,
-  semana: null,         // ultima respuesta de api.semana()
+  semana: null,         // ultima respuesta de api.semana() o api.mes()
+  dias: [],             // dias visibles (5 en la semana; semanas enteras en el mes)
+  vista: "semana",      // "semana" | "mes" (se recuerda entre sesiones)
+  mesSel: null,         // {anio, mes} del mes visible
+  ancla: null,          // ultimo dia pulsado (Mayus+clic marca el rango)
   marcados: new Set(),  // iso de los dias marcados
   seleccion: new Set(), // "fecha|id" de las filas seleccionadas
   tareas: new Map(),    // texto -> id
@@ -41,7 +45,7 @@ function lunesDe(iso) {
 }
 
 function diasMarcados() {
-  return (st.semana?.dias || []).filter((d) => st.marcados.has(d.iso));
+  return st.dias.filter((d) => st.marcados.has(d.iso));
 }
 
 // Resultado de crear apuntes en lote (anadir, copiar, plantilla): avisa de
@@ -120,6 +124,9 @@ const MENUS = {
 async function arrancar() {
   const ini = st.ini = await llamar("inicio");
   st.lunes = st.hoyLunes = ini.lunes;
+  st.mesSel = mesDe(hoyIso());
+  st.vista = ini.vista === "mes" ? "mes" : "semana";
+  pintarSelectorVista();
   st.asociaciones = ini.asociaciones || {};
   $("version").textContent = `${ini.plataforma} · v${ini.version}${ini.experimento ? " · prototipo web" : ""}`;
   document.querySelector(".etiqueta-prototipo").hidden = !ini.experimento;
@@ -138,34 +145,82 @@ async function arrancar() {
   llamar("aviso_aplicaciones").then((m) => { if (m) dlgAplicaciones(m); }).catch(() => {});
 }
 
-// ---------------------------------------------------------------- semana
+// ---------------------------------------------------------------- semana / mes
 
+function hoyIso() {
+  const h = new Date();
+  return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, "0")}-${String(h.getDate()).padStart(2, "0")}`;
+}
+const mesDe = (iso) => ({ anio: Number(iso.slice(0, 4)), mes: Number(iso.slice(5, 7)) });
+
+// Lunes de la semana "de trabajo": la visible en vista semana; en la mensual,
+// la del primer dia marcado (o la actual). Lo usa "Copiar semana anterior".
+function lunesReferencia() {
+  if (st.vista === "semana") return st.lunes;
+  const marcados = [...st.marcados].sort();
+  return marcados.length ? lunesDe(marcados[0]) : st.hoyLunes;
+}
+
+// Recarga la vista actual (semana o mes) desde ProyectosTic.
 async function cargarSemana({ marcarHoy = false, marcar = null } = {}) {
-  estado("Cargando semana…");
+  estado(st.vista === "mes" ? "Cargando mes…" : "Cargando semana…");
   $("conn").className = "conn";
-  const s = await llamar("semana", st.lunes);
-  pintarSemana(s, marcarHoy, marcar);
+  const datos = st.vista === "mes" ? await llamar("mes", st.mesSel.anio, st.mesSel.mes)
+                                   : await llamar("semana", st.lunes);
+  pintarVista(datos, marcarHoy, marcar);
 }
 
+// Repinta sin red tras una marca local (festivo, guardia, permiso...).
 async function repintarLocal() {
-  pintarSemana(await llamar("repintar", st.lunes), false);
+  const datos = st.vista === "mes" ? await llamar("repintar_mes", st.mesSel.anio, st.mesSel.mes)
+                                   : await llamar("repintar", st.lunes);
+  pintarVista(datos, false);
 }
 
-function pintarSemana(s, marcarHoy, marcar = null) {
-  st.semana = s;
-  $("titulo-semana").textContent = s.titulo;
-  $("total-semana").textContent = s.total;
-  $("tt-semana").hidden = !s.teletrabajo;
-  $("tt-semana").textContent = `⌂ ${s.teletrabajo}`;
-  $("conn").className = `conn ${s.conexion}`;
+function pintarVista(datos, marcarHoy, marcar = null) {
+  st.semana = datos;
+  st.dias = st.vista === "mes" ? datos.semanas.flat() : datos.dias;
+  $("titulo-semana").textContent = datos.titulo;
+  $("total-semana").textContent = datos.total;
+  $("tt-semana").hidden = st.vista === "mes" || !datos.teletrabajo;
+  $("tt-semana").textContent = `⌂ ${datos.teletrabajo || ""}`;
+  $("estado-vista").hidden = st.vista !== "mes";
+  if (st.vista === "mes") {
+    $("estado-vista").textContent = datos.estado;
+    $("estado-vista").className = `chip-estado ${datos.al_dia ? "ok" : "aviso"}`;
+  }
+  $("conn").className = `conn ${datos.conexion}`;
   $("conn").title = { ok: "Conectado", warn: "Algún día no se pudo leer",
-                      error: "Sin conexión con ProyectosTic" }[s.conexion];
+                      error: "Sin conexión con ProyectosTic" }[datos.conexion];
   if (marcar) st.marcados = new Set(marcar);
-  else if (marcarHoy) st.marcados = new Set(s.dias.filter((d) => d.es_hoy).map((d) => d.iso));
-  st.marcados = new Set([...st.marcados].filter((i) => s.dias.some((d) => d.iso === i)));
+  else if (marcarHoy) st.marcados = new Set(st.dias.filter((d) => d.es_hoy).map((d) => d.iso));
+  st.marcados = new Set([...st.marcados].filter((i) => st.dias.some((d) => d.iso === i)));
   st.seleccion.clear();
+  $("lbl-todo").textContent = st.vista === "mes" ? " Todo el mes" : " Toda la semana";
+  if (st.vista === "mes") pintarMes(datos); else pintarDiasSemana(datos);
+  pintarMarcados();
+}
 
+// Comportamiento comun de una tarjeta o celda de dia.
+function eventosDia(nodo, d) {
+  nodo.tabIndex = 0;
+  nodo.setAttribute("role", "button");
+  nodo.dataset.iso = d.iso;
+  nodo.addEventListener("click", (e) => alternarDia(d.iso, e));
+  nodo.addEventListener("contextmenu", (e) => { e.preventDefault(); menuDia(e.clientX, e.clientY, d); });
+  nodo.addEventListener("keydown", (e) => {
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); alternarDia(d.iso, e); }
+    if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+      e.preventDefault();
+      const r = nodo.getBoundingClientRect();
+      menuDia(r.left + 20, r.bottom - 10, d);
+    }
+  });
+}
+
+function pintarDiasSemana(s) {
   const cont = $("dias");
+  cont.className = "dias";
   cont.replaceChildren();
   s.dias.forEach((d, i) => {
     const chips = el("div", { class: "chips" });
@@ -178,38 +233,103 @@ function pintarSemana(s, marcarHoy, marcar = null) {
     const barra = el("div", { class: "barra" }, el("i"));
     const tarjeta = el("div", {
       class: `dia ${d.estado}${d.es_hoy ? " hoy" : ""}`,
-      tabindex: "0", role: "button",
-      title: `${d.nombre} ${d.fecha} · Alt+${i + 1} · botón derecho: más opciones`,
-      onclick: () => alternarDia(d.iso),
-      oncontextmenu: (e) => { e.preventDefault(); menuDia(e.clientX, e.clientY, d); },
-      onkeydown: (e) => {
-        if (e.key === " " || e.key === "Enter") { e.preventDefault(); alternarDia(d.iso); }
-        if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
-          e.preventDefault();
-          const r = tarjeta.getBoundingClientRect();
-          menuDia(r.left + 20, r.bottom - 10, d);
-        }
-      },
+      title: `${d.nombre} ${d.fecha} · Alt+${i + 1} · Mayús+clic: rango · botón derecho: más opciones`,
     },
       el("div", { class: "titulo", text: `${d.nombre} ${d.fecha}${d.es_hoy ? "  · hoy" : ""}` }),
       barra,
       el("div", { class: "cifra", text: d.texto }),
       chips.childElementCount ? chips : null);
-    tarjeta.dataset.iso = d.iso;
+    eventosDia(tarjeta, d);
     cont.append(tarjeta);
     requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
   });
+}
+
+// Texto corto de una celda del mes (la tarjeta de la semana tiene sitio para
+// mas; aqui caben unas pocas letras).
+function cifraMes(d) {
+  if (d.no_laborable) return d.motivo.charAt(0).toUpperCase() + d.motivo.slice(1);
+  if (d.estado === "error") return "sin conexión";
+  if (d.estado === "permiso") return "Permiso";
+  if (d.estado === "completo") return `${fmtHoras(d.reg)}h ✔`;
+  if (d.estado === "vacio" && d.futuro) return "";
+  return `${fmtHoras(d.reg)}/${fmtHoras(d.obj)}h`;
+}
+
+function pintarMes(m) {
+  const cont = $("dias");
+  cont.className = "dias mes";
+  cont.replaceChildren(...["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"].map((n) =>
+    el("div", { class: "cab-mes", text: n })));
+  for (const d of m.semanas.flat()) {
+    const iconos = [d.guardia ? "⚙" : "", d.teletrabajo ? "⌂" : "", d.permiso ? "🕐" : ""].join(" ").trim();
+    const barra = el("div", { class: "barra" }, el("i"));
+    const celda = el("div", {
+      class: `celda ${d.estado}${d.es_hoy ? " hoy" : ""}${d.del_mes ? "" : " fuera"}${d.futuro ? " futuro" : ""}`,
+      title: [`${d.nombre} ${d.fecha}`, d.texto, d.guardia ? "Guardia" : "", d.teletrabajo ? "Teletrabajo" : "",
+              ...(d.permiso_detalle || [])].filter(Boolean).join("\n")
+             + "\nMayús+clic: rango · botón derecho: más opciones",
+    },
+      el("div", { class: "num-dia" }, el("span", { text: String(d.dia) }),
+        iconos ? el("span", { class: "iconos", text: iconos }) : null),
+      barra,
+      el("div", { class: "cifra", text: cifraMes(d) }));
+    eventosDia(celda, d);
+    cont.append(celda);
+    requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
+  }
+}
+
+// Clic marca/desmarca; Mayus+clic marca todo el rango desde el ultimo dia
+// pulsado (vacaciones de dos semanas, o rellenar huecos, de una vez).
+function alternarDia(iso, e = null) {
+  if (e?.shiftKey && st.ancla && st.ancla !== iso) {
+    const orden = st.dias.map((d) => d.iso);
+    const [a, b] = [orden.indexOf(st.ancla), orden.indexOf(iso)].sort((x, y) => x - y);
+    if (a >= 0) {
+      for (const i of orden.slice(a, b + 1)) st.marcados.add(i);
+      st.ancla = iso;
+      pintarMarcados();
+      return;
+    }
+  }
+  if (st.marcados.has(iso)) st.marcados.delete(iso); else st.marcados.add(iso);
+  st.ancla = iso;
   pintarMarcados();
 }
 
-function alternarDia(iso) {
-  if (st.marcados.has(iso)) st.marcados.delete(iso); else st.marcados.add(iso);
-  pintarMarcados();
+function pintarSelectorVista() {
+  for (const b of document.querySelectorAll(".selector-vista button")) {
+    const activo = b.dataset.vista === st.vista;
+    b.classList.toggle("activo", activo);
+    b.setAttribute("aria-pressed", String(activo));
+  }
+  $("b-ant").title = st.vista === "mes" ? "Mes anterior (Ctrl+←)" : "Semana anterior (Ctrl+←)";
+  $("b-sig").title = st.vista === "mes" ? "Mes siguiente (Ctrl+→)" : "Semana siguiente (Ctrl+→)";
+  $("b-hoy").title = st.vista === "mes" ? "Volver al mes actual" : "Volver a la semana actual";
+}
+
+async function cambiarVista(vista) {
+  if (vista === st.vista) return;
+  // Se conserva lo marcado; se abre el periodo que lo contiene (o el actual).
+  const ref = [...st.marcados].sort()[0] || hoyIso();
+  st.vista = vista;
+  if (vista === "mes") st.mesSel = mesDe(ref); else st.lunes = lunesDe(ref);
+  pintarSelectorVista();
+  llamar("guardar_vista", vista).catch(() => {});
+  await cargarSemana({ marcar: [...st.marcados] });
+}
+
+function diasDelPeriodo() {
+  return st.vista === "mes" ? st.dias.filter((d) => d.del_mes) : st.dias;
 }
 
 function pintarMarcados() {
-  for (const t of $("dias").children) t.classList.toggle("marcado", st.marcados.has(t.dataset.iso));
-  $("toda-semana").checked = !!st.semana && st.marcados.size === st.semana.dias.length;
+  for (const t of $("dias").children) {
+    if (t.dataset.iso) t.classList.toggle("marcado", st.marcados.has(t.dataset.iso));
+  }
+  const todos = diasDelPeriodo();
+  $("toda-semana").checked = todos.length > 0 && todos.every((d) => st.marcados.has(d.iso));
   pintarApuntes();
   pintarBotonAnadir();
   actualizarTotales();
@@ -577,13 +697,22 @@ function enCampo(e) {
 }
 
 function navegar(delta) {
-  st.lunes = delta === 0 ? st.hoyLunes : sumarDias(st.lunes, 7 * delta);
+  if (st.vista === "mes") {
+    if (delta === 0) st.mesSel = mesDe(hoyIso());
+    else {
+      const m = st.mesSel.mes - 1 + delta;
+      st.mesSel = { anio: st.mesSel.anio + Math.floor(m / 12), mes: ((m % 12) + 12) % 12 + 1 };
+    }
+  } else {
+    st.lunes = delta === 0 ? st.hoyLunes : sumarDias(st.lunes, 7 * delta);
+  }
   $("b-deshacer").hidden = true;
+  st.ancla = null;
   cargarSemana({ marcarHoy: true });
 }
 
 function irADia(iso) {
-  st.lunes = lunesDe(iso);
+  if (st.vista === "mes") st.mesSel = mesDe(iso); else st.lunes = lunesDe(iso);
   $("b-deshacer").hidden = true;
   cargarSemana({ marcar: [iso] });
 }
@@ -608,9 +737,12 @@ $("tarea").addEventListener("change", elegirTarea);
 $("actividad").addEventListener("change", tareaDeActividad);
 $("actividad").addEventListener("contextmenu", menuActividad);
 $("toda-semana").addEventListener("change", (e) => {
-  st.marcados = new Set(e.target.checked ? st.semana.dias.map((d) => d.iso) : []);
+  st.marcados = new Set(e.target.checked ? diasDelPeriodo().map((d) => d.iso) : []);
   pintarMarcados();
 });
+for (const b of document.querySelectorAll(".selector-vista button")) {
+  b.addEventListener("click", () => cambiarVista(b.dataset.vista));
+}
 for (const b of document.querySelectorAll(".menubar button")) {
   b.addEventListener("click", (e) => { e.stopPropagation(); menuBajo(b, MENUS[b.dataset.menu]()); });
 }
@@ -628,9 +760,9 @@ document.addEventListener("keydown", (e) => {
     return;                                   // con un dialogo abierto, nada mas
   }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
-  if (e.altKey && /^[1-5]$/.test(e.key)) {
+  if (e.altKey && /^[1-5]$/.test(e.key) && st.vista === "semana") {
     e.preventDefault();
-    const d = st.semana?.dias[Number(e.key) - 1];
+    const d = st.dias[Number(e.key) - 1];
     if (d) alternarDia(d.iso);
     return;
   }

@@ -498,6 +498,20 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     marcarla como latest.
   - De paso: `build_instalador.bat` buscaba `dist\FichaCSIRC.exe` (ruta de
     `--onefile`, rota desde 2.6.4) y no pasaba la versión a Inno Setup.
+  - **Pantalla principal más compacta**: los apuntes eran una tabla que se
+    estiraba (`flex: 1`) para rellenar la ventana aunque lo normal sean 1-2 por
+    día. Ahora formulario y apuntes van lado a lado (`.zona-trabajo`, una sola
+    columna por debajo de 1050 px), la lista mide lo que sus filas y cada
+    apunte tiene editar/borrar. Horas con coma en toda la interfaz (`_horas`).
+  - **Vista mensual** (`Api.mes`): semanas L-V completas que tocan el mes
+    (`_semanas_de`), con los días de relleno de los meses vecinos atenuados pero
+    funcionales; UNA consulta por rango para todo el grid y la MISMA caché que
+    la semana, así que añadir, avisos, plantillas y copiar funcionan en
+    cualquier celda. Totales solo de los días del mes. `repintar_mes` sin red.
+    La vista se guarda en `vista_inicio`. Mayús+clic marca rangos (también en la
+    semana). "Copiar semana anterior" en vista mes usa la semana del primer día
+    marcado (`lunesReferencia`). OJO aprendido: `.chip { display: inline-block }`
+    le ganaba al atributo `hidden`; ahora `[hidden] { display: none !important }`.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la
@@ -509,7 +523,7 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   - `test_destinos.py` (9) — puente ProyectosTIC/INARI.
   - `test_gui_acciones.py` (37) — acciones reales de la GUI (con `en_hilo` síncrono).
   - `test_gui_smoke.py` (1) — arranque de la ventana Tk; se salta sin display.
-  - `test_web_api.py` (41) — la `Api` web, el asistente, el modo experimento y
+  - `test_web_api.py` (46) — la `Api` web, el asistente, el modo experimento y
     los ficheros de `web/` (enlazados, sin `innerHTML`, y que todo lo que llama el
     JS exista en la `Api` y en la demo).
 - Ejecutarlos tras tocar el motor o la GUI.

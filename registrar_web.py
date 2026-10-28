@@ -278,6 +278,8 @@ class Api:
             "actividad_preferida": core.config_valor("ultima_actividad")
                                    or core.ACTIVIDAD_DEFECTO or "",
             "comentario_guardia": core.comentario_guardia(),
+            # Ultima vista elegida (semana/mes): se abre como se dejo.
+            "vista": self.vista(),
         }
 
     def usuario(self):
@@ -336,6 +338,110 @@ class Api:
             "conexion": "error" if fallos >= len(dias) else ("warn" if fallos else "ok"),
             "dias": tarjetas,
         }
+
+    # ---- mes ----
+    MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
+             "septiembre", "octubre", "noviembre", "diciembre"]
+
+    @staticmethod
+    def _semanas_de(anio, mes):
+        """Lunes de cada semana (L-V) que toca el mes: la cuadricula completa,
+        con los dias del mes anterior/siguiente que la rellenan."""
+        primero = dt.date(anio, mes, 1)
+        ultimo = dt.date(anio, mes, calendar.monthrange(anio, mes)[1])
+        lunes = primero - dt.timedelta(days=primero.weekday())
+        out = []
+        while lunes <= ultimo:
+            if lunes + dt.timedelta(days=4) >= primero:   # semana con algun L-V del mes
+                out.append(lunes)
+            lunes += dt.timedelta(days=7)
+        return out
+
+    def mes(self, anio, mes):
+        """Vista mensual: semanas completas de L-V con el estado de cada dia, en
+        UNA consulta por rango (no una por dia). Rellena la misma cache que la
+        semana, asi que anadir, borrar, plantillas y avisos funcionan igual
+        sobre cualquier dia de la cuadricula, tambien los de los meses vecinos."""
+        anio, mes = int(anio), int(mes)
+        semanas = self._semanas_de(anio, mes)
+        dias = [l + dt.timedelta(days=i) for l in semanas for i in range(5)]
+        inari_cfg = destinos.configurado()
+        fallos = 0
+        try:
+            por_dia = {}
+            for a in core.entradas_rango(dias[0].isoformat(), dias[-1].isoformat()):
+                por_dia.setdefault(a["fecha"], []).append(a)
+            for d in dias:
+                self._cache[d.isoformat()] = [dict(a, destino="op")
+                                              for a in por_dia.get(d.isoformat(), [])]
+        except Exception:
+            for d in dias:
+                self._cache[d.isoformat()] = None
+            fallos = len(dias)
+        if inari_cfg and not fallos:
+            # Teletrabajo con INARI: esas horas son las de INARI (cubos disjuntos).
+            for d in dias:
+                iso = d.isoformat()
+                if not core.es_teletrabajo(iso):
+                    continue
+                try:
+                    self._cache[iso] = [
+                        {"id": s["id"], "horas": s["horas"], "wp_titulo": s["titulo"],
+                         "actividad": "INARI · Teletrabajo", "comentario": "",
+                         "wp_id": None, "destino": "inari"}
+                        for s in destinos.slots_dia(iso)]
+                except Exception:
+                    self._cache[iso] = None
+                    fallos += 1
+        return self._pintar_mes(anio, mes, semanas, fallos)
+
+    def repintar_mes(self, anio, mes):
+        """Sin red: tras una marca local (festivo, guardia, permiso...)."""
+        anio, mes = int(anio), int(mes)
+        return self._pintar_mes(anio, mes, self._semanas_de(anio, mes), 0)
+
+    def _pintar_mes(self, anio, mes, semanas, fallos):
+        hoy = dt.date.today()
+        filas, reg, obj, obj_hoy = [], 0.0, 0.0, 0.0
+        for lunes in semanas:
+            fila = []
+            for i in range(5):
+                d = lunes + dt.timedelta(days=i)
+                t = estado_dia(d, self._cache.get(d.isoformat()), hoy)
+                t.update(dia=d.day, del_mes=(d.month == mes), futuro=(d > hoy))
+                fila.append(t)
+                if d.month == mes:          # los totales, solo los del mes
+                    reg += t["reg"]
+                    o = core.objetivo_de(d)
+                    obj += o
+                    if d <= hoy:
+                        obj_hoy += o
+            filas.append(fila)
+        al_dia = reg >= obj_hoy - 0.001
+        total_dias = len(semanas) * 5
+        return {
+            "titulo": f"{self.MESES[mes - 1].capitalize()} {anio}",
+            "anio": anio, "mes": mes,
+            "total": f"{_horas(reg)} / {_horas(obj)}",
+            "al_dia": al_dia,
+            "estado": "Al día ✔" if al_dia else f"Te faltan {_horas(obj_hoy - reg)}",
+            "frac": round(max(0.0, min(reg / obj if obj else 0.0, 1.0)), 3),
+            "conexion": "error" if fallos >= total_dias else ("warn" if fallos else "ok"),
+            "semanas": filas,
+        }
+
+    def vista(self):
+        v = core.config_valor("vista_inicio", "semana")
+        return v if v in ("semana", "mes") else "semana"
+
+    def guardar_vista(self, vista):
+        if vista not in ("semana", "mes"):
+            return {"error": "Vista desconocida."}
+        try:
+            core.guardar_config_valor("vista_inicio", vista)
+        except Exception:
+            pass      # comodidad: nunca debe romper nada
+        return {"ok": True}
 
     # ---- formulario ----
     def actividades(self, wp_id):

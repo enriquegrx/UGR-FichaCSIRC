@@ -86,6 +86,74 @@ class TestSemana(Base):
             self.assertEqual(self.api.semana(L.isoformat())["conexion"], "error")
 
 
+class TestMes(Base):
+    def test_cuadricula_de_semanas_completas(self):
+        sem = web.Api._semanas_de
+        # octubre 2026 empieza en jueves: la 1a semana trae lun 28/9..mie 30/9
+        self.assertEqual([l.isoformat() for l in sem(2026, 10)],
+                         ["2026-09-28", "2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26"])
+        # noviembre empieza en domingo: la semana del 26/10 no tiene L-V de noviembre
+        self.assertEqual(sem(2026, 11)[0].isoformat(), "2026-11-02")
+        self.assertEqual(sem(2026, 11)[-1].isoformat(), "2026-11-30")
+        self.assertEqual(len(sem(2026, 2)), 4)
+        self.assertEqual(sem(2027, 1)[0].isoformat(), "2026-12-28")   # 1 de enero, viernes
+
+    def test_mes_con_una_consulta_y_cache_para_todo_el_grid(self):
+        apuntes = [dict(apunte(1, 7), fecha="2026-10-01"),
+                   dict(apunte(2, 3), fecha="2026-10-02"),
+                   dict(apunte(3, 5), fecha="2026-09-30")]       # de relleno: no suma
+        with mock.patch.object(core, "entradas_rango", return_value=apuntes) as m_rango, \
+             mock.patch.object(core, "entradas_dia") as m_dia, \
+             mock.patch.object(web.dt, "date", wraps=dt.date) as m_date:
+            m_date.today.return_value = dt.date(2026, 10, 2)
+            r = self.api.mes(2026, 10)
+        m_rango.assert_called_once_with("2026-09-28", "2026-10-30")
+        m_dia.assert_not_called()
+        self.assertEqual(r["titulo"], "Octubre 2026")
+        self.assertEqual(len(r["semanas"]), 5)
+        self.assertTrue(all(len(f) == 5 for f in r["semanas"]))
+        primera = r["semanas"][0]
+        self.assertEqual([(d["dia"], d["del_mes"]) for d in primera],
+                         [(28, False), (29, False), (30, False), (1, True), (2, True)])
+        self.assertEqual(primera[2]["reg"], 5)          # el de relleno SI se pinta...
+        self.assertTrue(r["total"].startswith("10h /"))  # ...pero no suma al mes
+        self.assertFalse(r["al_dia"])                    # 1/10 ok, 2/10 a medias
+        self.assertEqual(r["estado"], "Te faltan 4h")
+        self.assertEqual(r["conexion"], "ok")
+        # la cache cubre todo el grid: anadir/avisos funcionan en cualquier celda
+        self.assertEqual(len(self.api._cache.get("2026-09-30")), 1)
+        self.assertEqual(self.api._cache.get("2026-10-30"), [])
+        self.assertTrue(r["semanas"][4][4]["futuro"])
+
+    def test_mes_sin_conexion(self):
+        with mock.patch.object(core, "entradas_rango", side_effect=RuntimeError("red")):
+            r = self.api.mes(2026, 10)
+        self.assertEqual(r["conexion"], "error")
+        self.assertEqual(r["semanas"][1][0]["estado"], "error")
+        self.assertIsNone(self.api._cache["2026-10-05"])   # anadir avisara "no se pudo leer"
+
+    def test_repintar_mes_no_usa_la_red(self):
+        with mock.patch.object(core, "entradas_rango", return_value=[]):
+            self.api.mes(2026, 10)
+        core.NO_LABORABLES["2026-10-12"] = "festivo"
+        with mock.patch.object(core, "entradas_rango") as m_rango:
+            r = self.api.repintar_mes(2026, 10)
+        m_rango.assert_not_called()
+        self.assertEqual(r["semanas"][2][0]["estado"], "nolab")
+
+    def test_vista_se_recuerda(self):
+        guardado = {}
+        with mock.patch.object(core, "config_valor", lambda c, d=None: guardado.get(c, d)), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.update({k: v})):
+            self.assertEqual(self.api.vista(), "semana")              # por defecto
+            self.assertEqual(self.api.guardar_vista("mes"), {"ok": True})
+            self.assertEqual(self.api.vista(), "mes")
+            self.assertIn("error", self.api.guardar_vista("año"))
+            guardado["vista_inicio"] = "rara"
+            self.assertEqual(self.api.vista(), "semana")
+
+
 class TestAnadir(Base):
     def _semana(self, datos):
         with mock.patch.object(core, "entradas_dia", lambda iso: datos.get(iso, [])):

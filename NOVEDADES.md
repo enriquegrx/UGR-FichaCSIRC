@@ -16,6 +16,16 @@ instalada aparece en el pie de la ventana.
   menú Inicio. La primera vez se abre solo.
 - **En Mac hay una sola aplicación**: puedes mandar a la Papelera la
   *FichaCSIRC-Configurar* antigua que tengas en Aplicaciones.
+- **Vista mensual**: el botón **Semana | Mes** cambia las tarjetas de la semana
+  por el **calendario del mes** (de lunes a viernes), con lo que llevas cada día
+  y si vas **al día** o cuántas horas te faltan. Se ven de un vistazo los huecos.
+  Puedes marcar días de **varias semanas** y añadir, copiar o aplicar una
+  plantilla a todos de una vez. La app recuerda la vista que usaste.
+- **Mayús+clic** marca un **rango de días** (unas vacaciones de dos semanas, de
+  un clic), en la semana y en el mes.
+- **Más compacta**: el formulario y los apuntes van **uno al lado del otro**, y
+  cada apunte tiene sus botones de **editar** y **borrar**. El botón de añadir
+  dice a qué días lo hace («Añadir a lun 26/10», «Añadir a 3 días»).
 
 **Mejoras**
 - El **resumen del mes** y **exportar a CSV** van mucho más rápido: consultan

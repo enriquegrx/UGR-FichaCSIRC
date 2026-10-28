@@ -82,6 +82,7 @@
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
       asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: true,
+      vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
     }),
     usuario: () => espera("Persona de Prueba"),
     semana: (lunes) => espera(semana(lunes)),
@@ -137,6 +138,33 @@
     },
     teletrabajo_lleno: () => espera(marcas.tele.size >= 1),
   } };
+
+  // ---- vista mensual: semanas L-V que tocan el mes (como Api._semanas_de) ----
+  function mesDemo(anio, mes) {
+    const primero = new Date(anio, mes - 1, 1);
+    const ultimo = new Date(anio, mes, 0);
+    const lunes = new Date(primero);
+    lunes.setDate(lunes.getDate() - ((lunes.getDay() + 6) % 7));
+    const semanas = [];
+    let reg = 0, obj = 0;
+    while (lunes <= ultimo) {
+      const viernes = new Date(lunes); viernes.setDate(viernes.getDate() + 4);
+      if (viernes >= primero) {
+        semanas.push([0, 1, 2, 3, 4].map((n) => {
+          const f = new Date(lunes); f.setDate(f.getDate() + n);
+          const t = tarjeta(iso(f), n);
+          const delMes = f.getMonth() === mes - 1;
+          if (delMes) { reg += t.reg; obj += t.obj; }
+          return { ...t, dia: f.getDate(), del_mes: delMes, futuro: iso(f) > hoyIso };
+        }));
+      }
+      lunes.setDate(lunes.getDate() + 7);
+    }
+    const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
+                   "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    return { titulo: `${MESES[mes - 1]} ${anio}`, anio, mes, total: `${fmt(reg)} / ${fmt(obj)}`,
+             al_dia: false, estado: "Te faltan 6h", frac: obj ? reg / obj : 0, conexion: "ok", semanas };
+  }
 
   // ---- dialogos ----
   const asoc = { "Asuntos propios": 13001 };
@@ -280,6 +308,9 @@
     recordatorio_desactivar: () => espera({ error: "En el prototipo no se toca el aviso." }),
     aviso_datos: () => espera({ texto: "Te faltan horas por fichar esta semana (7h en total):\n\n  Miércoles 28/10: 0h de 6.5h\n  Jueves 29/10: 6h de 6.5h", minutos: 10 }),
     aviso_responder: () => espera({ ok: true }),
+    mes: (a, m) => espera(mesDemo(a, m)),
+    repintar_mes: (a, m) => espera(mesDemo(a, m)),
+    guardar_vista: () => espera({ ok: true }),
     aviso_aplicaciones: () => espera(""),
     abrir_aplicaciones: () => espera({ ok: true }),
   });

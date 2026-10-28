@@ -29,10 +29,15 @@
       <button id="b-hoy" title="Volver a la semana actual">Hoy</button>
       <button id="b-sig" title="Semana siguiente (Ctrl+→)">→</button>
     </div>
+    <div class="selector-vista" role="group" aria-label="Vista">
+      <button data-vista="semana" aria-pressed="true">Semana</button>
+      <button data-vista="mes" aria-pressed="false">Mes</button>
+    </div>
     <div class="titulo-semana">
       <strong id="titulo-semana">Cargando…</strong>
       <span id="total-semana" class="total"></span>
       <span id="tt-semana" class="chip chip-tele" hidden></span>
+      <span id="estado-vista" class="chip-estado" hidden></span>
     </div>
     <button id="b-resumen" title="Horas del mes: registradas, objetivo y días incompletos">Resumen</button>
     <button id="b-exportar" title="Exporta tus apuntes a CSV por rango de fechas">Exportar CSV…</button>
@@ -43,7 +48,7 @@
     <div class="cabeza-seccion">
       <h2>Días</h2>
       <div class="fila">
-        <label class="check"><input type="checkbox" id="toda-semana"> Toda la semana</label>
+        <label class="check"><input type="checkbox" id="toda-semana"><span id="lbl-todo"> Toda la semana</span></label>
         <button id="b-copiar" title="Repetir apuntes: el último día con horas, la semana pasada o una plantilla">Copiar / Plantillas ▾</button>
       </div>
     </div>
