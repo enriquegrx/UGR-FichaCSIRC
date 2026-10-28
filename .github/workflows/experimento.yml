@@ -1,0 +1,83 @@
+name: Prototipo web
+
+# SOLO para las ramas experimentales (experimento/...): compila el prototipo de
+# interfaz HTML (registrar_web.py + web/, con pywebview) y lo deja como
+# ARTEFACTO descargable en la pagina del run (Actions > run > Artifacts).
+# No crea release ni etiqueta: no llega a nadie y el actualizador no lo ve.
+
+on:
+  push:
+    branches: ["experimento/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un push nuevo a la misma rama cancela la compilacion anterior: aqui solo
+# interesa la ultima (al reves que en release.yml, que no debe cancelar nada).
+concurrency:
+  group: experimento-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-web.txt pyinstaller==6.21.0
+
+      - name: Ejecutar tests
+        run: python -m unittest discover -s tests -t . -v
+
+      # --onedir como la app de verdad (ver release.yml: --onefile daba
+      # "Failed to load Python DLL").
+      - name: Construir prototipo (carpeta)
+        run: >
+          pyinstaller --noconfirm --clean --onedir --windowed --noupx
+          --name "FichaCSIRC-Web" --icon "fichacsirc.ico"
+          --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          registrar_web.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FichaCSIRC-Web-windows
+          path: dist/FichaCSIRC-Web
+          retention-days: 30
+
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-web.txt pyinstaller==6.21.0
+
+      # Sin tests en macOS a proposito: ya corren en el job de Windows (y los de
+      # GUI Tk se colgaban en los runners de Mac, ver release.yml).
+      # El .app se comprime con ditto: subido tal cual, el artefacto perderia
+      # los enlaces simbolicos y los permisos de ejecucion del bundle.
+      - name: Construir prototipo (.app)
+        run: |
+          pyinstaller --noconfirm --clean --windowed \
+            --name "FichaCSIRC-Web" \
+            --add-data "web:web" --add-data "logo_ugr.png:." \
+            registrar_web.py
+          ditto -c -k --keepParent dist/FichaCSIRC-Web.app dist/FichaCSIRC-Web-mac-arm64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FichaCSIRC-Web-mac-arm64
+          path: dist/FichaCSIRC-Web-mac-arm64.zip
+          retention-days: 30

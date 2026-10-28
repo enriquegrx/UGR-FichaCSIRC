@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FichaCSIRC</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="cabecera">
+  <img id="logo" alt="" hidden>
+  <div class="marca">
+    <h1>FichaCSIRC</h1>
+    <span id="subtitulo">Registro de horas - ProyectosTIC</span>
+  </div>
+  <span class="etiqueta-prototipo" title="Rama experimental: interfaz HTML con pywebview">prototipo</span>
+  <span id="usuario" class="usuario"></span>
+</header>
+
+<main>
+  <section class="panel barra-semana">
+    <div class="nav">
+      <button id="b-ant" title="Semana anterior (Ctrl+←)">←</button>
+      <button id="b-hoy" title="Volver a la semana actual">Hoy</button>
+      <button id="b-sig" title="Semana siguiente (Ctrl+→)">→</button>
+    </div>
+    <div class="titulo-semana">
+      <strong id="titulo-semana">Cargando…</strong>
+      <span id="total-semana" class="total"></span>
+      <span id="tt-semana" class="chip chip-tele" hidden></span>
+    </div>
+    <button id="b-recargar" title="Recargar (F5)">⟳</button>
+  </section>
+
+  <section class="panel">
+    <div class="cabeza-seccion">
+      <h2>Días</h2>
+      <label class="check"><input type="checkbox" id="toda-semana"> Toda la semana</label>
+    </div>
+    <div id="dias" class="dias"></div>
+    <div class="leyenda">
+      <span><i class="muestra completo"></i>Completo</span>
+      <span><i class="muestra parcial"></i>Parcial</span>
+      <span><i class="muestra nolab"></i>Festivo / cierre</span>
+      <span><i class="muestra vacaciones"></i>Vacaciones</span>
+      <span class="chip chip-guardia">⚙ Guardia</span>
+      <span class="chip chip-tele">⌂ Teletrabajo</span>
+      <span class="chip chip-permiso">🕐 Permiso</span>
+      <span class="ayuda">Botón derecho sobre un día: más opciones</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Añadir apunte</h2>
+    <form id="form" class="form" autocomplete="off">
+      <label for="tarea">Tarea</label>
+      <div class="campo-tarea">
+        <input id="tarea" list="lista-tareas" placeholder="Escribe para filtrar tus favoritas">
+        <datalist id="lista-tareas"></datalist>
+      </div>
+      <label for="horas">Horas</label>
+      <div class="fila">
+        <input id="horas" class="horas" inputmode="decimal" placeholder="0">
+        <label for="actividad" class="sub">Actividad</label>
+        <select id="actividad"></select>
+      </div>
+      <label for="comentario">Comentario</label>
+      <div class="fila">
+        <input id="comentario" class="crece" placeholder="Opcional">
+        <button type="submit" id="b-anadir" class="primario">Añadir a días marcados</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel apuntes">
+    <div class="cabeza-seccion">
+      <h2>Apuntes de los días marcados</h2>
+      <button id="b-eliminar" class="peligro" disabled>Eliminar seleccionados</button>
+    </div>
+    <table>
+      <thead><tr><th>Día</th><th class="num">Horas</th><th>Tarea</th><th>Actividad</th><th>Comentario</th></tr></thead>
+      <tbody id="tabla"></tbody>
+    </table>
+    <p id="tabla-vacia" class="vacio">Marca un día para ver sus apuntes.</p>
+  </section>
+</main>
+
+<footer class="pie">
+  <span id="estado" class="estado"></span>
+  <button id="b-deshacer" class="enlace" hidden>Deshacer</button>
+  <span id="conn-inari" class="conn" hidden>● INARI</span>
+  <span id="conn" class="conn">● ProyectosTIC</span>
+  <span id="version" class="version"></span>
+</footer>
+
+<div id="menu" class="menu" hidden></div>
+<div id="modal" class="modal" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <h3 id="modal-titulo"></h3>
+    <p id="modal-texto"></p>
+    <div class="modal-botones">
+      <button id="modal-no">No</button>
+      <button id="modal-si" class="primario">Sí</button>
+    </div>
+  </div>
+</div>
+
+<script src="demo.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

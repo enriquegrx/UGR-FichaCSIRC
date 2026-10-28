@@ -1,0 +1,59 @@
+# Experimento: interfaz HTML con pywebview
+
+Rama **`experimento/pywebview`**. Es una prueba para decidir si la interfaz pasa
+de Tkinter a HTML. **No es una versión publicada**: no tiene etiqueta, no crea
+release y el actualizador de la app no la ve. Solo la usa quien la descarga a
+propósito.
+
+## Qué es
+
+- `registrar_web.py`: la ventana principal con pywebview. La clase `Api` es lo
+  único que ve el JavaScript; toda la lógica sigue en Python y el motor
+  (`rellenar_horas.py`, `destinos.py`, `inari.py`) **no se ha tocado**.
+- `web/`: `index.html`, `app.css` y `app.js`, sin librerías externas (funciona
+  sin internet). `demo.js` solo se activa abriendo la página con `?demo`.
+- La app Tkinter (`registrar_gui.py`) sigue intacta en la rama para comparar.
+
+## Qué incluye el prototipo
+
+Semana con sus tarjetas, totales y chips; marcar días (clic, *Toda la semana*,
+Alt+1..5); añadir apuntes con **los mismos avisos** que la app de verdad (día sin
+leer, no laborable, tarea repetida, jornada superada); lista de apuntes con
+selección múltiple, eliminar y deshacer; menú del botón derecho del día
+(festivo, vacaciones, apertura de curso, baja, guardia, teletrabajo).
+
+**Aún no:** plantillas, permisos, resumen del mes, exportar CSV, buscar tareas
+fuera de favoritas, editar un apunte, INARI más allá de leerlo, aviso diario.
+
+## Ojo al probarlo
+
+- Usa **su propia configuración** (`%APPDATA%\FichaCSIRC-experimento` o
+  `~/Library/Application Support/FichaCSIRC-experimento`), copiada de la real la
+  primera vez. Lo que marques en local (festivos, guardias…) no toca la app de
+  verdad. Para empezar de cero, borra esa carpeta.
+- Los **apuntes sí van a ProyectosTic**: es tu cuenta real.
+- No comprueba actualizaciones (no debe ofrecer instalar la de producción).
+
+## Cómo probarlo
+
+**Descargado de GitHub:** *Actions → Prototipo web → el último run → Artifacts*.
+En Windows, `FichaCSIRC-Web-windows` → descomprimir → `FichaCSIRC-Web.exe`. En Mac,
+`FichaCSIRC-Web-mac-arm64` (zip dentro de zip) → la primera vez *Ajustes del
+Sistema → Privacidad y seguridad → Abrir igualmente*.
+
+**Desde el código:**
+
+```bash
+pip install -r requirements-web.txt
+python registrar_web.py
+```
+
+Para ver solo el diseño en un navegador, sin red ni pywebview:
+`python -m http.server 8765 --directory web` y abrir
+`http://localhost:8765/index.html?demo`.
+
+## Medido hasta ahora (Windows 11)
+
+- Ejecutable `--onedir`: **25 MB** sin comprimir, como la app actual.
+- Con datos reales pinta la semana en **~2,5 s** (contando las 5 consultas).
+- Requiere WebView2 (viene con Windows 10/11 actualizados).
