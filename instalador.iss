@@ -8,9 +8,15 @@
 ; Compilar (necesita la carpeta dist\FichaCSIRC de PyInstaller --onedir):
 ;   iscc /DMyAppVersion=3.0.0 instalador.iss
 ; (si no se pasa /D, usa la version por defecto de abajo)
+; MyAppVersion es la version VISIBLE (puede llevar texto: "3.0.0-candidata").
+; VersionInfoVersion exige solo numeros (a.b.c.d): por eso va aparte, en
+; MyAppVersionNum; si no se pasa, se usa MyAppVersion (las releases: "3.0.0").
 
 #ifndef MyAppVersion
   #define MyAppVersion "2.1"
+#endif
+#ifndef MyAppVersionNum
+  #define MyAppVersionNum MyAppVersion
 #endif
 #define MyAppName "FichaCSIRC"
 #define MyPublisher "Universidad de Granada - CSIRC"
@@ -22,7 +28,7 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyPublisher}
 AppPublisherURL={#MyUrl}
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersionNum}
 ; Carpeta SIEMPRE por usuario, aunque el instalador se ejecute como
 ; administrador ({autopf} elevado apuntaria a C:\Program Files y dejaria
 ; dos instalaciones paralelas, con accesos directos a la copia vieja).
@@ -124,9 +130,6 @@ begin
   end;
 end;
 
-const
-  WEBVIEW2_CLAVE = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
-
 function VersionWebView2(Raiz: Integer; const Ruta: String): Boolean;
 var
   V: String;
@@ -135,13 +138,16 @@ begin
 end;
 
 function WebView2Instalado(): Boolean;
+var
+  Clave: String;
 begin
+  Clave := 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
   { La ventana de la 3.0 la dibuja WebView2 (Edge). Viene con Windows 11 y con
     Windows 10 actualizado; se busca donde lo registra Microsoft (equipo de 64
     o 32 bits, o instalado solo para el usuario). }
-  Result := VersionWebView2(HKLM, 'SOFTWARE\WOW6432Node\' + WEBVIEW2_CLAVE)
-         or VersionWebView2(HKLM, 'SOFTWARE\' + WEBVIEW2_CLAVE)
-         or VersionWebView2(HKCU, 'Software\' + WEBVIEW2_CLAVE);
+  Result := VersionWebView2(HKLM, 'SOFTWARE\WOW6432Node\' + Clave)
+         or VersionWebView2(HKLM, 'SOFTWARE\' + Clave)
+         or VersionWebView2(HKCU, 'Software\' + Clave);
 end;
 
 function InitializeSetup(): Boolean;
