@@ -145,8 +145,9 @@ def estado_dia(d, apuntes, hoy=None):
         if reg:
             texto = f"{_horas(reg)} · {texto}"
     elif reg > obj + 0.001:
+        # Pasarse no es un error: azul y "+0,5h", no rojo y "te pasas".
         estado, frac = "pasado", 1.0
-        texto = f"{_horas(reg)} / {_horas(obj)}  (te pasas)"
+        texto = f"{_horas(reg)} / {_horas(obj)} · +{_horas(reg - obj)}"
     elif reg >= obj - 0.001 and reg > 0:
         estado, frac = "completo", 1.0
         texto = f"{_horas(reg)} / {_horas(obj)}  ✔"
@@ -166,6 +167,7 @@ def estado_dia(d, apuntes, hoy=None):
         "reg": reg,
         "obj": obj,
         "falta": round(obj - reg, 2) if not nolab else 0.0,
+        "exceso": round(reg - obj, 2) if (not nolab and reg > obj) else 0.0,
         "no_laborable": nolab,
         "motivo": core.motivo_no_laborable(iso) if nolab else "",
         "guardia": core.es_guardia(iso),

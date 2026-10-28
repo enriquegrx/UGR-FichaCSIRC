@@ -119,8 +119,10 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--prima
 .completo .cifra { color: var(--exito); }
 .parcial .barra > i, i.muestra.parcial { background: var(--aviso); }
 .parcial .cifra { color: var(--aviso); }
-.pasado .barra > i { background: var(--peligro); }
-.pasado .cifra, .error .cifra { color: var(--peligro); }
+/* Pasarse de la jornada no es un error: azul (rojo solo para "sin conexion"). */
+.pasado .barra > i, i.muestra.pasado { background: var(--primario); }
+.pasado .cifra { color: var(--primario); }
+.error .cifra { color: var(--peligro); }
 .nolab .barra > i, .permiso .barra > i, i.muestra.nolab { background: var(--tenue); }
 .nolab .cifra, .permiso .cifra { color: var(--tenue); }
 .vacaciones .barra > i, i.muestra.vacaciones { background: var(--vacaciones); }
@@ -321,23 +323,27 @@ body.aviso h2 { font-size: 16px; }
 .chip-estado.aviso { background: var(--permiso-bg); color: var(--permiso-fg); }
 
 .dias.mes { gap: 6px; }
-.cab-mes { font-size: 12px; color: var(--tenue); text-align: center; padding-bottom: 2px; }
 .celda {
   position: relative; overflow: hidden; cursor: pointer; user-select: none;
   border: 1px solid var(--borde); border-radius: 6px; background: var(--panel);
-  padding: 5px 8px 6px; min-height: 58px; transition: background .12s, border-color .12s;
+  padding: 6px 9px 7px; min-height: 64px; transition: background .12s, border-color .12s;
 }
 .celda:hover { border-color: #b8c2cc; }
 .celda.marcado { background: var(--seleccion); border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); }
 .celda.hoy::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--primario); }
 .celda.fuera { opacity: .45; }
 .celda.fuera.marcado { opacity: .8; }
-.celda .num-dia { display: flex; justify-content: space-between; font-size: 12px; color: #111827; }
-.celda.hoy .num-dia { font-weight: 700; color: var(--primario); }
+.cab-celda { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.dia-celda { font-weight: 600; color: #111827; white-space: nowrap; }
+.celda.hoy .dia-celda { color: var(--primario); }
 .celda .iconos { color: var(--tenue); letter-spacing: 1px; }
-.celda .barra { height: 5px; margin: 5px 0 4px; }
-.celda .cifra { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.4em; }
+.celda .cifra { margin-left: auto; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .celda.futuro .cifra { font-weight: 400; }
+.celda .barra { height: 4px; margin: 5px 0 4px; }
+.linea-ap { display: flex; gap: 6px; font-size: 12px; color: var(--tenue); white-space: nowrap; overflow: hidden; }
+.linea-h { min-width: 34px; color: var(--texto); font-variant-numeric: tabular-nums; }
+.linea-t { overflow: hidden; text-overflow: ellipsis; }
+.linea-mas { font-size: 11px; color: var(--tenue); padding-left: 40px; }
 @media (max-width: 1000px) {
   .dias.mes { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }

@@ -512,6 +512,13 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     semana). "Copiar semana anterior" en vista mes usa la semana del primer día
     marcado (`lunesReferencia`). OJO aprendido: `.chip { display: inline-block }`
     le ganaba al atributo `hidden`; ahora `[hidden] { display: none !important }`.
+  - Celdas del mes con el día ("Mié 14", sin fila de cabeceras) y hasta 2
+    apuntes (`MAX_APUNTES_CELDA`, el resto "+N más"). "pasado" (más horas que el
+    objetivo) en AZUL con `exceso` ("+0,5h"): no es un error. Rojo solo "error".
+  - Visto con datos reales: los "+0,5h" eran días completos de asuntos propios
+    imputados como actividad con 7 h (jornada oficial) contra un objetivo de
+    6,5 h (fichada). Pendiente decidir: que un día cubierto por un permiso
+    imputado como actividad cuente como completo.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la

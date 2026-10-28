@@ -17,10 +17,13 @@ instalada aparece en el pie de la ventana.
 - **En Mac hay una sola aplicación**: puedes mandar a la Papelera la
   *FichaCSIRC-Configurar* antigua que tengas en Aplicaciones.
 - **Vista mensual**: el botón **Semana | Mes** cambia las tarjetas de la semana
-  por el **calendario del mes** (de lunes a viernes), con lo que llevas cada día
-  y si vas **al día** o cuántas horas te faltan. Se ven de un vistazo los huecos.
+  por el **calendario del mes** (de lunes a viernes). Cada día dice qué día es
+  («Mié 14»), lo que llevas y **en qué lo imputaste**, y arriba ves si vas **al
+  día** o cuántas horas te faltan. Se ven de un vistazo los huecos.
   Puedes marcar días de **varias semanas** y añadir, copiar o aplicar una
   plantilla a todos de una vez. La app recuerda la vista que usaste.
+- Pasarte de la jornada ya **no sale en rojo**, como si fuera un error: sale en
+  **azul** y con cuánto («7h · +0,5h»). El rojo queda para cuando no se pudo leer.
 - **Mayús+clic** marca un **rango de días** (unas vacaciones de dos semanas, de
   un clic), en la semana y en el mes.
 - **Más compacta**: el formulario y los apuntes van **uno al lado del otro**, y

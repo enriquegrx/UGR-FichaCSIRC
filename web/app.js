@@ -252,28 +252,44 @@ function cifraMes(d) {
   if (d.estado === "error") return "sin conexión";
   if (d.estado === "permiso") return "Permiso";
   if (d.estado === "completo") return `${fmtHoras(d.reg)}h ✔`;
+  if (d.estado === "pasado") return `${fmtHoras(d.reg)}h · +${fmtHoras(d.exceso)}h`;
   if (d.estado === "vacio" && d.futuro) return "";
-  return `${fmtHoras(d.reg)}/${fmtHoras(d.obj)}h`;
+  return `${fmtHoras(d.reg)} / ${fmtHoras(d.obj)}h`;
 }
 
+// En la celda caben 2 apuntes; el resto, "+N más" (el detalle, en el panel de
+// la derecha al marcar el dia, o en el globo al pasar el raton).
+const MAX_APUNTES_CELDA = 2;
+
+// Cada celda dice que dia es ("Mié 14", sin tener que mirar una cabecera) y
+// QUE se hizo: lo habitual son 1-2 apuntes y el ancho de la celda sobraba.
 function pintarMes(m) {
   const cont = $("dias");
   cont.className = "dias mes";
-  cont.replaceChildren(...["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"].map((n) =>
-    el("div", { class: "cab-mes", text: n })));
+  cont.replaceChildren();
   for (const d of m.semanas.flat()) {
     const iconos = [d.guardia ? "⚙" : "", d.teletrabajo ? "⌂" : "", d.permiso ? "🕐" : ""].join(" ").trim();
     const barra = el("div", { class: "barra" }, el("i"));
+    const lineas = d.apuntes.slice(0, MAX_APUNTES_CELDA).map((a) =>
+      el("div", { class: "linea-ap" },
+        el("span", { class: "linea-h", text: a.horas_txt }),
+        el("span", { class: "linea-t", text: a.tarea })));
+    const resto = d.apuntes.length - MAX_APUNTES_CELDA;
     const celda = el("div", {
       class: `celda ${d.estado}${d.es_hoy ? " hoy" : ""}${d.del_mes ? "" : " fuera"}${d.futuro ? " futuro" : ""}`,
-      title: [`${d.nombre} ${d.fecha}`, d.texto, d.guardia ? "Guardia" : "", d.teletrabajo ? "Teletrabajo" : "",
+      title: [`${d.nombre} ${d.fecha}`, d.texto,
+              ...d.apuntes.map((a) => `${a.horas_txt}  ${a.tarea}${a.actividad ? ` · ${a.actividad}` : ""}`),
+              d.guardia ? "Guardia" : "", d.teletrabajo ? "Teletrabajo" : "",
               ...(d.permiso_detalle || [])].filter(Boolean).join("\n")
              + "\nMayús+clic: rango · botón derecho: más opciones",
     },
-      el("div", { class: "num-dia" }, el("span", { text: String(d.dia) }),
-        iconos ? el("span", { class: "iconos", text: iconos }) : null),
+      el("div", { class: "cab-celda" },
+        el("span", { class: "dia-celda", text: `${d.nombre.slice(0, 3)} ${d.dia}${d.es_hoy ? " · hoy" : ""}` }),
+        iconos ? el("span", { class: "iconos", text: iconos }) : null,
+        el("span", { class: "cifra", text: cifraMes(d) })),
       barra,
-      el("div", { class: "cifra", text: cifraMes(d) }));
+      ...lineas,
+      resto > 0 ? el("div", { class: "linea-mas", text: `+${resto} más` }) : null);
     eventosDia(celda, d);
     cont.append(celda);
     requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
