@@ -40,9 +40,28 @@ Mejoras respecto a la app Tkinter que ya vienen de serie:
 - El **botón derecho funciona igual en Windows y en Mac** (lo resuelve el visor
   web, sin el lío de Button-2/Button-3 de Tk).
 
-**A propósito no está:** el **aviso diario de fichaje**. Es la misma tarea
-programada que usa la app de verdad: activarlo aquí la haría apuntar al
-experimento. Se sigue gestionando desde la app normal.
+- **Asistente de configuración** (`web/configurar.html`) dentro de la misma app:
+  se abre **solo la primera vez** (sin config, en lugar de un error) y desde
+  *Herramientas → Configuración*. Al guardar recarga el motor sin reiniciar. La
+  API key no viaja a la pantalla (campo vacío = se conserva la guardada).
+- **Aviso diario** (`FichaCSIRC-Web.exe --recordatorio`, `web/aviso.html`) y su
+  configuración, y **actualizaciones** (comprobar, descargar e instalar).
+
+## El interruptor `EXPERIMENTO`
+
+`registrar_web.py` tiene `EXPERIMENTO = True`. Mientras lo esté:
+
+- usa su **propia configuración** (ver abajo);
+- **comprueba** si hay versión nueva pero **no la instala** (instalaría la de
+  producción encima);
+- **no programa ni repara el aviso diario**: es la misma tarea programada que la
+  app de verdad y la secuestraría. La ventanita del aviso sí se puede lanzar a
+  mano para verla: `FichaCSIRC-Web.exe --recordatorio`;
+- no avisa en Mac de mover la app a Aplicaciones.
+
+Pasarla a producción = `EXPERIMENTO = False` y empaquetarla en lugar de la
+Tkinter (instalador de Inno Setup y `.dmg`, con un solo `.app`: el asistente ya
+va dentro).
 
 ## Ojo al probarlo
 

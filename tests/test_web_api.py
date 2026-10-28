@@ -312,6 +312,130 @@ class TestDialogos(Base):
         m_open.assert_called_once_with(f"https://github.com/{core.GITHUB_REPO}/releases")
 
 
+class TestAsistente(unittest.TestCase):
+    """Asistente de configuracion web (Api.cfg_*): mismas reglas que configurar_gui."""
+
+    def setUp(self):
+        self.api = web.Api()
+        self.dir = tempfile.mkdtemp(prefix="fichacsirc_cfg_")
+        self.ruta = os.path.join(self.dir, "config.json")
+        with open(self.ruta, "w", encoding="utf-8") as f:
+            f.write('{"base_url": "https://op.test", "api_key": "guardada", '
+                    '"jornada_invierno": 6.5, "desayuno": 0.5, "favoritos": [], '
+                    '"no_laborables": {"2026-12-08": "festivo"}}')
+        p = mock.patch.object(web.ccore, "CONFIG_PATH", self.ruta)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _datos(self, **cambios):
+        d = {"url": "https://op.test/", "key": "", "jornada": "7", "desayuno_si": True,
+             "desayuno": "0,5", "verano_si": True, "verano": "5", "verano_inicio": "16/06",
+             "verano_fin": "15/09", "actividad": "soporte",
+             "favoritos": [{"id": 5, "nombre": "Tarea 5"}]}
+        d.update(cambios)
+        return d
+
+    def test_cargar_no_manda_la_api_key(self):
+        c = self.api.cfg_cargar()
+        self.assertNotIn("guardada", str(c))
+        self.assertTrue(c["hay_key"])
+        self.assertEqual((c["jornada"], c["desayuno"]), ("7", "0,5"))   # oficial = 6,5 + 0,5
+
+    def test_validar_jornada(self):
+        v = self.api.cfg_validar_jornada
+        self.assertIn("fichas 6,5 h", v(self._datos())["texto"])
+        self.assertIn("error", v(self._datos(jornada="0")))
+        self.assertIn("error", v(self._datos(desayuno="7")))
+        self.assertIn("error", v(self._datos(verano_inicio="32/13")))
+        self.assertNotIn("error", v(self._datos(verano_si=False, verano_inicio="x")))
+
+    def test_guardar_fusiona_conserva_la_key_y_recarga(self):
+        with mock.patch.object(web, "_cargar_motor", return_value=True) as m_motor:
+            self.assertEqual(self.api.cfg_guardar(self._datos()), {"ok": True})
+        m_motor.assert_called_once()
+        import json
+        with open(self.ruta, encoding="utf-8") as f:
+            cfg = json.load(f)
+        self.assertEqual(cfg["api_key"], "guardada")                    # campo vacio
+        self.assertEqual(cfg["base_url"], "https://op.test")            # sin barra final
+        self.assertEqual((cfg["jornada_invierno"], cfg["desayuno"], cfg["horas_dia_permiso"]),
+                         (6.5, 0.5, 7))
+        self.assertEqual(cfg["verano_inicio"], [6, 16])
+        self.assertEqual(cfg["no_laborables"], {"2026-12-08": "festivo"})   # no se pierde
+        self.assertEqual(cfg["favoritos"], [{"id": 5, "nombre": "Tarea 5"}])
+
+    def test_guardar_con_jornada_mala_no_escribe(self):
+        with open(self.ruta, encoding="utf-8") as f:
+            antes = f.read()
+        self.assertIn("error", self.api.cfg_guardar(self._datos(jornada="99")))
+        with open(self.ruta, encoding="utf-8") as f:
+            self.assertEqual(f.read(), antes)
+
+    def test_probar_usa_la_key_guardada_si_no_se_escribe(self):
+        with mock.patch.object(web.ccore, "_api_get", return_value={"name": "Ana"}) as m_get:
+            self.assertEqual(self.api.cfg_probar("https://op.test/", ""), {"nombre": "Ana"})
+        m_get.assert_called_once_with("https://op.test", "guardada", "/api/v3/users/me")
+
+    def test_motivos_de_conexion(self):
+        self.assertIn("401", web._motivo_conexion(RuntimeError("401 Client Error")))
+        self.assertIn("red", web._motivo_conexion(RuntimeError("Max retries exceeded")))
+
+
+class TestExperimento(unittest.TestCase):
+    """Con EXPERIMENTO = True no se toca nada de la app de produccion."""
+
+    def setUp(self):
+        self.api = web.Api()
+
+    def test_no_instala_actualizaciones(self):
+        self.api._actualizacion = ("9.9", "https://github.com/x/y/releases", "https://x/inst.exe")
+        with mock.patch.object(web, "EXPERIMENTO", True), \
+             mock.patch.object(core, "descargar_archivo") as m_bajar:
+            self.assertIn("error", self.api.instalar_actualizacion())
+        m_bajar.assert_not_called()
+
+    def test_comprobar_si_dice_que_hay_version_pero_no_deja_instalar(self):
+        with mock.patch.object(web, "EXPERIMENTO", True), \
+             mock.patch.object(core, "buscar_actualizacion",
+                               return_value=("9.9", "https://github.com/x/y", "https://x/i.exe")):
+            r = self.api.comprobar_actualizacion(True)
+        self.assertEqual((r["version"], r["puede_instalar"]), ("9.9", False))
+        with mock.patch.object(core, "buscar_actualizacion",
+                               side_effect=core.ComprobacionFallida("límite de GitHub")):
+            self.assertEqual(self.api.comprobar_actualizacion(True), {"error": "límite de GitHub"})
+        with mock.patch.object(core, "buscar_actualizacion", return_value=None):
+            self.assertTrue(self.api.comprobar_actualizacion(False)["al_dia"])
+
+    def test_no_programa_el_aviso_ni_avisa_de_aplicaciones(self):
+        import recordatorio
+        with mock.patch.object(web, "EXPERIMENTO", True), \
+             mock.patch.object(recordatorio, "activar_recordatorio") as m_act, \
+             mock.patch.object(recordatorio, "desactivar_recordatorio") as m_des, \
+             mock.patch.object(core, "fuera_de_aplicaciones", return_value="otra"):
+            self.assertIn("error", self.api.recordatorio_activar("16:00"))
+            self.assertIn("error", self.api.recordatorio_desactivar())
+            self.assertEqual(self.api.aviso_aplicaciones(), "")
+        m_act.assert_not_called()
+        m_des.assert_not_called()
+
+    def test_en_produccion_si(self):
+        import recordatorio
+        with mock.patch.object(web, "EXPERIMENTO", False), \
+             mock.patch.object(recordatorio, "activar_recordatorio") as m_act:
+            self.assertIn("error", self.api.recordatorio_activar("25:99"))
+            self.assertEqual(self.api.recordatorio_activar("16:30"), {"ok": True})
+        m_act.assert_called_once_with("16:30")
+
+    def test_pagina_de_actualizacion_solo_github(self):
+        with mock.patch.object(web.webbrowser, "open") as m_open:
+            self.api._actualizacion = ("9.9", "https://malo.example/x", "")
+            self.api.abrir_pagina_actualizacion()
+            m_open.assert_not_called()
+            self.api._actualizacion = ("9.9", "https://github.com/x/y/releases/tag/v9.9", "")
+            self.api.abrir_pagina_actualizacion()
+        m_open.assert_called_once()
+
+
 class TestConfigExperimento(unittest.TestCase):
     def test_copia_la_real_una_vez_y_no_la_pisa(self):
         tmp = tempfile.mkdtemp(prefix="fichacsirc_web_")
@@ -343,6 +467,14 @@ class TestConfigExperimento(unittest.TestCase):
 class TestFicherosWeb(unittest.TestCase):
     RAIZ = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 
+    def test_cada_pagina_carga_comun_antes_que_su_js(self):
+        for pagina, propio in (("index.html", "app.js"), ("configurar.html", "configurar.js"),
+                               ("aviso.html", "aviso.js")):
+            with open(os.path.join(self.RAIZ, pagina), encoding="utf-8") as f:
+                html = f.read()
+            self.assertLess(html.index("comun.js"), html.index(propio), pagina)
+            self.assertNotIn("http", html.replace("http-equiv", ""), pagina)  # sin CDN
+
     def test_existen_y_estan_enlazados(self):
         with open(os.path.join(self.RAIZ, "index.html"), encoding="utf-8") as f:
             html = f.read()
@@ -354,7 +486,7 @@ class TestFicherosWeb(unittest.TestCase):
     def test_el_js_no_usa_innerhtml(self):
         # Todo el texto de los datos se pinta con textContent: un comentario con
         # "<" no debe poder inyectar HTML en la ventana.
-        for fichero in ("app.js", "dialogos.js", "demo.js"):
+        for fichero in ("comun.js", "app.js", "dialogos.js", "configurar.js", "aviso.js", "demo.js"):
             with open(os.path.join(self.RAIZ, fichero), encoding="utf-8") as f:
                 codigo = "\n".join(l for l in f.read().splitlines()
                                    if not l.strip().startswith(("*", "/*", "//")))
@@ -365,7 +497,7 @@ class TestFicherosWeb(unittest.TestCase):
         # Un nombre mal escrito en el JS solo fallaria al pulsar ese boton.
         import re
         usados = set()
-        for fichero in ("app.js", "dialogos.js"):
+        for fichero in ("comun.js", "app.js", "dialogos.js", "configurar.js", "aviso.js"):
             with open(os.path.join(self.RAIZ, fichero), encoding="utf-8") as f:
                 codigo = f.read()
             usados |= set(re.findall(r'llamar\("(\w+)"', codigo))
@@ -379,7 +511,7 @@ class TestFicherosWeb(unittest.TestCase):
         import re
         with open(os.path.join(self.RAIZ, "demo.js"), encoding="utf-8") as f:
             demo = f.read()
-        for fichero in ("app.js", "dialogos.js"):
+        for fichero in ("comun.js", "app.js", "dialogos.js", "configurar.js", "aviso.js"):
             with open(os.path.join(self.RAIZ, fichero), encoding="utf-8") as f:
                 codigo = f.read()
             for metodo in set(re.findall(r'llamar\("(\w+)"', codigo)) | set(

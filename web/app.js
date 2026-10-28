@@ -4,15 +4,13 @@
  * cada dia, avisos antes de anadir, llamadas a ProyectosTic) vive en Python,
  * en la clase Api de registrar_web.py, accesible como window.pywebview.api.
  * Cada llamada devuelve una promesa: la ventana nunca se congela.
- * Los dialogos (editar, plantillas, permisos...) estan en dialogos.js.
+ * Los dialogos (editar, plantillas, permisos...) estan en dialogos.js y las
+ * utilidades comunes (el, llamar, preguntar...) en comun.js.
  *
  * Todo el texto que viene de los datos se pone con textContent (nunca
  * innerHTML), para que un comentario con "<" no pueda inyectar HTML.
  */
 "use strict";
-
-const $ = (id) => document.getElementById(id);
-const api = () => window.pywebview.api;
 
 const st = {
   ini: null,            // respuesta de api.inicio()
@@ -31,19 +29,6 @@ const st = {
 
 // ---------------------------------------------------------------- utilidades
 
-function el(tag, props = {}, ...hijos) {
-  const n = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === "class") n.className = v;
-    else if (k === "text") n.textContent = v;
-    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
-    else n.setAttribute(k, v === true ? "" : v);
-  }
-  for (const h of hijos) if (h !== null && h !== undefined && h !== false) n.append(h);
-  return n;
-}
-
 function sumarDias(iso, n) {
   const [a, m, d] = iso.split("-").map(Number);
   return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
@@ -55,52 +40,8 @@ function lunesDe(iso) {
   return sumarDias(iso, -((dia + 6) % 7));
 }
 
-function fmtHoras(h) {
-  return (Math.round(h * 100) / 100).toString().replace(".", ",");
-}
-
-function estado(texto) { $("estado").textContent = texto || ""; }
-
 function diasMarcados() {
   return (st.semana?.dias || []).filter((d) => st.marcados.has(d.iso));
-}
-
-// Modal de pregunta propio (confirm() no es igual en todos los visores web).
-// Va por encima de cualquier dialogo abierto.
-function preguntar(titulo, texto, { soloAceptar = false, si = "Sí", no = "No" } = {}) {
-  return new Promise((resolver) => {
-    $("modal-titulo").textContent = titulo;
-    $("modal-texto").textContent = texto;
-    $("modal-no").hidden = soloAceptar;
-    $("modal-no").textContent = no;
-    $("modal-si").textContent = soloAceptar ? "Aceptar" : si;
-    $("modal").hidden = false;
-    $("modal-si").focus();
-    const cerrar = (valor) => {
-      $("modal").hidden = true;
-      $("modal-si").onclick = $("modal-no").onclick = null;
-      document.removeEventListener("keydown", teclas, true);
-      resolver(valor);
-    };
-    const teclas = (e) => {
-      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cerrar(false); }
-    };
-    document.addEventListener("keydown", teclas, true);
-    $("modal-si").onclick = () => cerrar(true);
-    $("modal-no").onclick = () => cerrar(false);
-  });
-}
-const avisar = (titulo, texto) => preguntar(titulo, texto, { soloAceptar: true });
-
-async function llamar(fn, ...args) {
-  try {
-    return await api()[fn](...args);
-  } catch (e) {
-    const msg = (e && (e.message || e.toString())) || "error desconocido";
-    estado(`Error: ${msg}`);
-    await avisar("Algo ha fallado", msg);
-    throw e;
-  }
 }
 
 // Resultado de crear apuntes en lote (anadir, copiar, plantilla): avisa de
@@ -161,13 +102,13 @@ const MENUS = {
     { texto: "Permisos (horas)…", accion: dlgPermisos },
     { texto: "Integraciones (INARI)…", accion: dlgInari },
     { texto: "Aviso diario de fichaje…", accion: dlgRecordatorio },
+    "-",
+    { texto: "Configuración (asistente)…", accion: () => { location.href = "configurar.html"; } },
   ],
   ayuda: () => [
     { texto: "Atajos de teclado", accion: dlgAtajos },
     { texto: "Novedades (qué hay de nuevo)", accion: dlgNovedades },
-    { texto: "Comprobar actualizaciones", accion: () => avisar("Comprobar actualizaciones",
-        "El prototipo no comprueba actualizaciones a propósito: no debe ofrecer instalar "
-        + "la versión de producción encima. Usa tu FichaCSIRC normal.") },
+    { texto: "Comprobar actualizaciones", accion: () => dlgActualizacion({ forzar: true }) },
     st.ini?.github ? { texto: "Ver en GitHub", accion: () => llamar("abrir_github", "") } : null,
     "-",
     { texto: "Acerca de FichaCSIRC", accion: dlgAcerca },
@@ -180,7 +121,8 @@ async function arrancar() {
   const ini = st.ini = await llamar("inicio");
   st.lunes = st.hoyLunes = ini.lunes;
   st.asociaciones = ini.asociaciones || {};
-  $("version").textContent = `${ini.plataforma} · v${ini.version} · prototipo web`;
+  $("version").textContent = `${ini.plataforma} · v${ini.version}${ini.experimento ? " · prototipo web" : ""}`;
+  document.querySelector(".etiqueta-prototipo").hidden = !ini.experimento;
   if (ini.logo) { $("logo").src = ini.logo; $("logo").hidden = false; }
   if (ini.inari) { $("subtitulo").textContent += " e INARI"; $("conn-inari").hidden = false; }
   ponerTareas(ini.tareas);
@@ -190,6 +132,10 @@ async function arrancar() {
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
   // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
   if (ini.toca_permisos_anio) setTimeout(() => dlgPermisosAnio({ manual: false }), 700);
+  // Version nueva (como mucho cada pocas horas; si falla, en silencio).
+  setTimeout(() => dlgActualizacion({ forzar: false }), 1500);
+  // Mac: avisar si la app no esta en Aplicaciones (una vez por ruta).
+  llamar("aviso_aplicaciones").then((m) => { if (m) dlgAplicaciones(m); }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- semana
@@ -590,10 +536,6 @@ document.addEventListener("click", (e) => {
   if (!$("menu").contains(e.target) && !e.target.closest("#b-copiar, .menubar")) cerrarMenu();
 });
 window.addEventListener("blur", cerrarMenu);
-document.addEventListener("contextmenu", (e) => {
-  // sin el menu del navegador (no es una web), salvo en los campos de texto
-  if (!enCampo(e)) e.preventDefault();
-});
 
 document.addEventListener("keydown", (e) => {
   if (!$("modal").hidden) return;
@@ -616,12 +558,4 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Delete") { e.preventDefault(); eliminarSeleccion(); }
 });
 
-// Arrancar cuando esten la pagina entera (dialogos.js va despues) y la API:
-// pywebview la inyecta y avisa con 'pywebviewready', que puede llegar antes o
-// despues de DOMContentLoaded.
-function iniciarCuandoListo() {
-  if (window.pywebview?.api?.inicio) arrancar();
-  else window.addEventListener("pywebviewready", arrancar, { once: true });
-}
-if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciarCuandoListo);
-else iniciarCuandoListo();
+cuandoListo(arrancar);

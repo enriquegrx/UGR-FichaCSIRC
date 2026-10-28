@@ -81,7 +81,7 @@
       actividades: ["Actuaciones técnicas", "Asuntos propios", "Formación", "Soporte"],
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
-      asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false,
+      asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: true,
     }),
     usuario: () => espera("Persona de Prueba"),
     semana: (lunes) => espera(semana(lunes)),
@@ -249,5 +249,38 @@
       { estilo: "punto", texto: "Permisos: lo que no usas ya no se pierde en enero." },
       { estilo: "punto", texto: "Mac: ahora se instala con un .dmg." }]),
     abrir_github: () => espera({ ok: true }),
+    // ---- asistente, actualizaciones, aviso ----
+    cfg_cargar: () => espera({ primera_vez: /[?&]primera\b/.test(location.search), aviso: "", experimento: true,
+      logo: "", url: "https://proyectostic.ugr.es", hay_key: true, jornada: "7", desayuno_si: true,
+      desayuno: "0,5", verano_si: true, verano: "5", verano_inicio: "16/06", verano_fin: "15/09",
+      actividad: "soporte", actividades: ["actuacion tecnica", "correctivo", "formacion", "gestion/planificacion", "soporte"],
+      favoritos: tareas.slice(0, 2).map((t) => ({ id: t.id, nombre: t.nombre })) }),
+    cfg_probar: (url) => espera(url ? { nombre: "Persona de Prueba" } : { error: "Escribe la URL y la API key." }),
+    cfg_proyectos: () => espera({ proyectos: [{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" }] }),
+    cfg_tareas: (u, k, pid) => espera(String(pid) === "2"
+      ? { error: "No tienes permiso para ver las tareas de este proyecto." }
+      : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
+    cfg_validar_jornada: (dd) => {
+      const n = (x) => parseFloat(String(x).replace(",", "."));
+      const of = n(dd.jornada), des = dd.desayuno_si ? n(dd.desayuno) : 0;
+      if (!(of > 0 && of <= 24)) return espera({ error: "Las horas por día (normal) deben ser un número entre 0 y 24." });
+      if (des >= of) return espera({ error: "El desayuno no puede ser igual o mayor que la jornada." });
+      return espera({ texto: des ? `Jornada ${dd.jornada} h − ${dd.desayuno} h de desayuno = fichas ${String(of - des).replace(".", ",")} h al día (un día de permiso cuenta como ${dd.jornada} h)`
+                                 : `Fichas ${dd.jornada} h al día.` });
+    },
+    cfg_guardar: () => espera({ ok: true }),
+    cerrar: () => espera({ ok: true }),
+    comprobar_actualizacion: (forzar) => espera(forzar
+      ? { version: "2.9.3", actual: "2.9.2", puede_instalar: false, experimento: true, mac: false }
+      : { al_dia: true, version: "2.9.2" }),
+    instalar_actualizacion: () => espera({ error: "El prototipo no instala actualizaciones." }),
+    abrir_pagina_actualizacion: () => espera({ ok: true }),
+    recordatorio_estado: () => espera({ soportado: true, activo: false, experimento: true }),
+    recordatorio_activar: () => espera({ error: "En el prototipo no se programa el aviso." }),
+    recordatorio_desactivar: () => espera({ error: "En el prototipo no se toca el aviso." }),
+    aviso_datos: () => espera({ texto: "Te faltan horas por fichar esta semana (7h en total):\n\n  Miércoles 28/10: 0h de 6.5h\n  Jueves 29/10: 6h de 6.5h", minutos: 10 }),
+    aviso_responder: () => espera({ ok: true }),
+    aviso_aplicaciones: () => espera(""),
+    abrir_aplicaciones: () => espera({ ok: true }),
   });
 })();

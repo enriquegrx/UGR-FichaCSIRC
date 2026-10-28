@@ -8,26 +8,38 @@ app de verdad. Aqui la pantalla es HTML/CSS/JS (carpeta web/) y toda la logica
 sigue en Python: el motor (rellenar_horas, destinos) se usa tal cual y la clase
 Api es lo unico que ve el JavaScript (window.pywebview.api).
 
-Diferencias a proposito con la app de verdad:
+Hace TODO lo de la app Tkinter, incluido el asistente de configuracion (que se
+abre solo si no hay config), el aviso diario (--recordatorio) y las
+actualizaciones. Mientras EXPERIMENTO sea True:
   - Usa su PROPIA configuracion (FichaCSIRC-experimento), copiada de la real la
     primera vez: lo que se toque en local no afecta a la app de produccion. Los
     apuntes SI van a ProyectosTic (es la misma cuenta).
-  - No comprueba actualizaciones (no debe ofrecer instalar la de produccion).
-  - El aviso diario de fichaje no se configura desde aqui: es la MISMA tarea
-    programada que usa la app de verdad y la secuestraria.
+  - Comprueba si hay version nueva pero NO la instala (instalaria la de
+    produccion encima).
+  - No programa ni repara el aviso diario: es la MISMA tarea programada que usa
+    la app de verdad y la secuestraria.
+Pasar a produccion = EXPERIMENTO = False (y empaquetarla en lugar de la Tkinter).
 
 Ejecuta:  python registrar_web.py      (necesita: pip install pywebview)
+          python registrar_web.py --recordatorio   (solo el aviso de fichaje)
 """
 
 import os
 import csv
 import sys
+import importlib
+import threading
 import shutil
 import base64
 import calendar
 import subprocess
 import webbrowser
 import datetime as dt
+
+
+# Interruptor del experimento (ver docstring). False = comportarse como la app
+# de produccion: config real, instalar actualizaciones, programar el aviso.
+EXPERIMENTO = True
 
 
 # ---------------- configuracion aislada (ANTES de importar el motor) ----------------
@@ -59,17 +71,39 @@ def preparar_config_experimento():
     return destino
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" and EXPERIMENTO:
     preparar_config_experimento()
 
-try:
-    import rellenar_horas as core   # noqa: E402  (lee FICHACSIRC_CONFIG al importarse)
-    import destinos                 # noqa: E402
-except SystemExit as _e:            # sin config.json: el motor hace sys.exit
-    core = destinos = None
-    ERROR_ARRANQUE = str(_e)
-else:
+import configurar as ccore      # noqa: E402  (asistente: no necesita config.json)
+
+core = destinos = None
+ERROR_ARRANQUE = ""
+
+
+def _cargar_motor():
+    """Importa el motor o, si ya estaba, lo RECARGA (tras guardar el asistente:
+    BASE_URL, API_KEY, jornada, favoritas... se leen al importarse). Devuelve
+    True si hay motor; si no hay config.json deja el motivo en ERROR_ARRANQUE.
+    La recarga muta el mismo objeto modulo, asi que quien ya lo tenia importado
+    (destinos, recordatorio) ve los valores nuevos."""
+    global core, destinos, ERROR_ARRANQUE
+    try:
+        if core is None:
+            import rellenar_horas as _core
+            import destinos as _destinos
+            core, destinos = _core, _destinos
+        else:
+            importlib.reload(core)
+            importlib.reload(destinos)
+    except SystemExit as e:            # sin config.json: el motor hace sys.exit
+        core = destinos = None
+        ERROR_ARRANQUE = str(e)
+        return False
     ERROR_ARRANQUE = ""
+    return True
+
+
+_cargar_motor()
 
 
 def _recurso(*partes):
@@ -140,6 +174,55 @@ def estado_dia(d, apuntes, hoy=None):
     }
 
 
+# ---------------- utilidades del asistente (las mismas reglas que configurar_gui) ----------------
+
+def _num_jornada(txt):
+    """'6,5' o '7' -> numero valido de jornada (0-24]; None si no vale."""
+    v = ccore.parsear_numero(txt)
+    return v if v is not None and 0 < v <= 24 else None
+
+
+def _fmt_num(v):
+    """7 -> '7', 6.5 -> '6,5' (como se escribe en España)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return "7"
+    return (str(int(f)) if f == int(f) else f"{f:g}").replace(".", ",")
+
+
+def _fecha_a_lista(txt, defecto):
+    """'16/06' -> [6, 16] (mes, dia); el defecto si no es una fecha DD/MM."""
+    try:
+        p = str(txt).replace("-", "/").split("/")
+        d, m = int(p[0]), int(p[1])
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return [m, d]
+    except (ValueError, IndexError):
+        pass
+    return defecto
+
+
+def _lista_a_fecha(lst):
+    try:
+        return f"{int(lst[1]):02d}/{int(lst[0]):02d}"
+    except (TypeError, ValueError, IndexError):
+        return "16/06"
+
+
+def _motivo_conexion(e):
+    """Error de requests -> frase para el usuario (sin volcar trazas)."""
+    txt = str(e)
+    if "401" in txt:
+        return "La API key no es válida o ha caducado (401). Genera otra en ProyectosTic."
+    if "403" in txt:
+        return "Sin permiso (403)."
+    if any(p in txt for p in ("Max retries", "Failed to resolve", "NameResolution",
+                              "ConnectTimeout", "ConnectionError", "timed out")):
+        return "No se pudo conectar. Revisa la URL y tu red (o la VPN)."
+    return f"No se pudo conectar: {txt[:160]}"
+
+
 # ---------------- API expuesta al JavaScript ----------------
 
 class Api:
@@ -171,6 +254,7 @@ class Api:
             pass
         return {
             "version": core.VERSION,
+            "experimento": EXPERIMENTO,
             "github": core.GITHUB_REPO,
             "inari_listo": destinos.configurado(),
             "asociaciones": self.asociaciones(),
@@ -949,25 +1033,281 @@ class Api:
         return {"ok": True}
 
 
-def main():
-    import webview
-    if ERROR_ARRANQUE:
-        # Mismo mensaje que la app de verdad, pero en la propia ventana web.
-        import html
-        webview.create_window(
-            "FichaCSIRC · configuración necesaria",
-            html=("<body style='font:15px Segoe UI,sans-serif;padding:32px;"
-                  "background:#e9edf2;color:#1f2933'><h2>Configuración necesaria</h2>"
-                  f"<p>{html.escape(ERROR_ARRANQUE)}</p></body>"),
-            width=560, height=260)
-        webview.start()
+    # =============================================================== asistente
+
+    def cfg_cargar(self):
+        """Lo que el asistente necesita para rellenar sus pasos. La API key NO se
+        manda: solo si hay una guardada (campo vacio = conservarla)."""
+        previa = ccore.cargar_previa() or {}
+        des = previa.get("desayuno") or 0
+        logo = ""
+        try:
+            with open(_recurso("logo_ugr.png"), "rb") as f:
+                logo = "data:image/png;base64," + base64.b64encode(f.read()).decode()
+        except OSError:
+            pass
+        return {
+            "primera_vez": core is None,
+            "aviso": ERROR_ARRANQUE if ERROR_ARRANQUE and "No encuentro" not in ERROR_ARRANQUE else "",
+            "experimento": EXPERIMENTO,
+            "logo": logo,
+            "url": previa.get("base_url", "https://proyectostic.ugr.es"),
+            "hay_key": bool(previa.get("api_key")),
+            "jornada": _fmt_num(float(previa.get("jornada_invierno", 7)) + float(des)),
+            "desayuno_si": bool(des),
+            "desayuno": _fmt_num(des or 0.5),
+            "verano_si": bool(previa.get("tiene_verano", True)),
+            "verano": _fmt_num(previa.get("jornada_verano", 5)),
+            "verano_inicio": _lista_a_fecha(previa.get("verano_inicio", [6, 16])),
+            "verano_fin": _lista_a_fecha(previa.get("verano_fin", [9, 15])),
+            "actividad": previa.get("actividad_defecto") or previa.get("actividad") or "soporte",
+            "actividades": list(ccore.ACTIVIDADES),
+            "favoritos": [{"id": int(f["id"]), "nombre": f["nombre"]}
+                          for f in previa.get("favoritos", [])],
+        }
+
+    def _cfg_key(self, key):
+        key = (key or "").strip()
+        return key or (ccore.cargar_previa() or {}).get("api_key", "")
+
+    def cfg_probar(self, url, key):
+        url, key = (url or "").strip().rstrip("/"), self._cfg_key(key)
+        if not url or not key:
+            return {"error": "Escribe la URL y la API key."}
+        try:
+            me = ccore._api_get(url, key, "/api/v3/users/me")
+        except Exception as e:
+            return {"error": _motivo_conexion(e)}
+        return {"nombre": me.get("name", "usuario")}
+
+    def cfg_proyectos(self, url, key):
+        try:
+            elems = ccore._api_get_todos((url or "").strip().rstrip("/"), self._cfg_key(key),
+                                         "/api/v3/projects")
+        except Exception as e:
+            return {"error": _motivo_conexion(e)}
+        return {"proyectos": [{"id": int(p["id"]), "nombre": p.get("name", "?")} for p in elems]}
+
+    def cfg_tareas(self, url, key, pid):
+        try:
+            elems = ccore._api_get_todos((url or "").strip().rstrip("/"), self._cfg_key(key),
+                                         f"/api/v3/projects/{int(pid)}/work_packages")
+        except Exception as e:
+            if "403" in str(e):
+                return {"error": "No tienes permiso para ver las tareas de este proyecto. "
+                                 "Elige otro (por ejemplo el de tus tareas habituales)."}
+            return {"error": _motivo_conexion(e)}
+        return {"tareas": [{"id": int(w["id"]), "nombre": w.get("subject", "?")} for w in elems]}
+
+    def cfg_validar_jornada(self, d):
+        """Mismas reglas que el asistente Tkinter. Devuelve {'error'} o el texto
+        en vivo de cuanto se ficha."""
+        oficial = _num_jornada(d.get("jornada"))
+        if oficial is None:
+            return {"error": "Las horas por día (normal) deben ser un número entre 0 y 24 "
+                             "(puedes usar medias horas, p. ej. 6,5)."}
+        if d.get("verano_si"):
+            if _num_jornada(d.get("verano")) is None:
+                return {"error": "Las horas por día (verano) deben ser un número entre 0 y 24."}
+            for nombre in ("verano_inicio", "verano_fin"):
+                if _fecha_a_lista(d.get(nombre, ""), None) is None:
+                    return {"error": f"La fecha de {'inicio' if 'inicio' in nombre else 'fin'} "
+                                     "del verano no es válida. Escríbela como DD/MM (ej. 16/06)."}
+        des = (_num_jornada(d.get("desayuno")) or 0) if d.get("desayuno_si") else 0
+        fichas = round(oficial - des, 2)
+        if des and fichas <= 0:
+            return {"error": "El desayuno no puede ser igual o mayor que la jornada."}
+        if des:
+            texto = (f"Jornada {_fmt_num(oficial)} h − {_fmt_num(des)} h de desayuno = fichas "
+                     f"{_fmt_num(fichas)} h al día (un día de permiso cuenta como "
+                     f"{_fmt_num(oficial)} h)")
+        else:
+            texto = f"Fichas {_fmt_num(oficial)} h al día."
+        return {"texto": texto}
+
+    def cfg_guardar(self, d):
+        """Guarda las claves del asistente SOBRE la config existente (nunca borra
+        festivos, permisos, plantillas...) y recarga el motor con ellas."""
+        url = (d.get("url") or "").strip().rstrip("/")
+        key = self._cfg_key(d.get("key"))
+        if not url or not key:
+            return {"error": "Faltan la URL o la API key."}
+        val = self.cfg_validar_jornada(d)
+        if "error" in val:
+            return val
+        oficial = _num_jornada(d["jornada"])
+        des = (_num_jornada(d.get("desayuno")) or 0) if d.get("desayuno_si") else 0
+        cfg = ccore.cargar_previa() or {}
+        cfg.update({
+            "base_url": url,
+            "api_key": key,
+            "jornada_invierno": round(oficial - des, 2),
+            "desayuno": des,
+            # lo que vale un dia completo de permiso: la jornada OFICIAL
+            "horas_dia_permiso": oficial,
+            "tiene_verano": bool(d.get("verano_si")),
+            "jornada_verano": _num_jornada(d.get("verano")) or cfg.get("jornada_verano", 5),
+            "verano_inicio": _fecha_a_lista(d.get("verano_inicio", ""), [6, 16]),
+            "verano_fin": _fecha_a_lista(d.get("verano_fin", ""), [9, 15]),
+            "actividad_defecto": d.get("actividad") or "soporte",
+            "favoritos": [{"id": int(f["id"]), "nombre": f["nombre"]}
+                          for f in d.get("favoritos", [])],
+        })
+        ccore.escribir_config(cfg)
+        if not _cargar_motor():
+            return {"error": f"Se guardó, pero no se pudo cargar: {ERROR_ARRANQUE}"}
+        self._cache.clear()
+        return {"ok": True}
+
+    def cerrar(self):
+        if self._ventana is not None:
+            threading.Timer(0.1, self._ventana.destroy).start()
+        return {"ok": True}
+
+    # =============================================================== actualizaciones
+
+    def comprobar_actualizacion(self, forzar=False):
+        """{'version', 'puede_instalar'} si hay nueva, {'al_dia'} o {'error'}.
+        Sin forzar, como mucho cada pocas horas y sin molestar si falla."""
+        try:
+            res = core.buscar_actualizacion(forzar=bool(forzar))
+        except core.ComprobacionFallida as e:
+            return {"error": str(e)}
+        if not res:
+            return {"al_dia": True, "version": core.VERSION}
+        version, pagina, instalador = res[0], res[1], (res[2] if len(res) > 2 else "")
+        self._actualizacion = (version, pagina, instalador)
+        return {"version": version, "actual": core.VERSION,
+                "puede_instalar": bool(instalador) and not EXPERIMENTO,
+                "experimento": EXPERIMENTO, "mac": sys.platform == "darwin"}
+
+    def instalar_actualizacion(self):
+        if EXPERIMENTO:
+            return {"error": "El prototipo no instala actualizaciones: instalaría la versión "
+                             "de producción encima. Actualiza desde tu FichaCSIRC normal."}
+        version, pagina, url = getattr(self, "_actualizacion", (None, "", ""))
+        if not url:
+            return {"error": "No hay ninguna actualización preparada."}
+        import tempfile
+        if sys.platform == "darwin":
+            nombre = f"FichaCSIRC-{version}-mac-{core.arquitectura_mac()}.dmg"
+        else:
+            nombre = f"FichaCSIRC-Instalador-{version}.exe"
+        try:
+            ruta = core.descargar_archivo(url, os.path.join(tempfile.gettempdir(), nombre))
+        except Exception as e:
+            return {"error": f"No se pudo descargar el instalador: {e}", "pagina": True}
+        # Mac: se abre el dmg y la app se cierra (el Finder no deja reemplazar
+        # una app abierta). Windows: el instalador cierra la app el mismo.
+        subprocess.Popen(["open", ruta] if sys.platform == "darwin" else [ruta], close_fds=True)
+        threading.Timer(1.5, self.cerrar).start()
+        return {"ok": True, "mac": sys.platform == "darwin"}
+
+    def abrir_pagina_actualizacion(self):
+        _v, pagina, _u = getattr(self, "_actualizacion", (None, "", ""))
+        if pagina.startswith("https://github.com/"):
+            webbrowser.open(pagina)
+        return {"ok": True}
+
+    # =============================================================== aviso diario
+
+    def recordatorio_estado(self):
+        import recordatorio
+        return {"soportado": recordatorio.recordatorios_soportados(),
+                "activo": recordatorio.recordatorio_activo(), "experimento": EXPERIMENTO}
+
+    def recordatorio_activar(self, hora):
+        if EXPERIMENTO:
+            return {"error": "En el prototipo no se programa el aviso (secuestraría el de tu app normal)."}
+        import recordatorio
+        hora = (hora or "").strip()
+        try:
+            dt.datetime.strptime(hora, "%H:%M")
+        except ValueError:
+            return {"error": "Escribe la hora como HH:MM (ej. 16:00)."}
+        recordatorio.activar_recordatorio(hora)
+        return {"ok": True}
+
+    def recordatorio_desactivar(self):
+        if EXPERIMENTO:
+            return {"error": "En el prototipo no se toca el aviso de tu app normal."}
+        import recordatorio
+        recordatorio.desactivar_recordatorio()
+        return {"ok": True}
+
+    def aviso_datos(self):
+        """Para la ventanita del aviso (aviso.html)."""
+        return {"texto": getattr(self, "_aviso", ""), "minutos": 10}
+
+    def aviso_responder(self, abrir):
+        if abrir:
+            if getattr(sys, "frozen", False):
+                subprocess.Popen([sys.executable])
+            else:
+                subprocess.Popen([sys.executable, os.path.abspath(__file__)])
+        return self.cerrar()
+
+    # =============================================================== Mac: Aplicaciones
+
+    def aviso_aplicaciones(self):
+        """En Mac (y solo en produccion), por que la app no esta en Aplicaciones
+        (o '' si esta bien). Una vez por ruta, como la app Tkinter."""
+        if EXPERIMENTO:
+            return ""
+        motivo = core.fuera_de_aplicaciones()
+        if not motivo or core.config_valor("aviso_aplicaciones") == sys.executable:
+            return ""
+        try:
+            core.guardar_config_valor("aviso_aplicaciones", sys.executable)
+        except Exception:
+            pass
+        return motivo
+
+    def abrir_aplicaciones(self):
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", "/Applications"])
+        return {"ok": True}
+
+
+def _titulo(extra=""):
+    v = core.VERSION if core else ""
+    return f"FichaCSIRC {v}{' · prototipo web' if EXPERIMENTO else ''}{extra}".strip()
+
+
+def _main_recordatorio(webview):
+    """--recordatorio: lo lanza la tarea programada. Si no falta nada (o no hay
+    red), sale en silencio; si falta, una ventanita propia (encima de todo, que
+    se cierra sola a los 10 minutos para no dejar el proceso vivo)."""
+    if core is None:
+        return
+    import recordatorio
+    pendientes = core.dias_pendientes_semana()
+    if not pendientes:
         return
     api = Api()
+    api._aviso = recordatorio.mensaje_pendientes(pendientes)
     api._ventana = webview.create_window(
-        f"FichaCSIRC {core.VERSION} · prototipo web",
-        _recurso("web", "index.html"),
-        js_api=api, width=1180, height=820, min_size=(900, 660), maximized=True,
-        background_color="#e9edf2")
+        "FichaCSIRC - Recordatorio", _recurso("web", "aviso.html"), js_api=api,
+        width=520, height=340, resizable=False, on_top=True, background_color="#ffffff")
+    webview.start()
+
+
+def main():
+    import webview
+    if "--recordatorio" in sys.argv[1:]:
+        _main_recordatorio(webview)
+        return
+    if core is not None and not EXPERIMENTO:
+        import recordatorio
+        # Aviso diario que apunte a un .exe/.app que ya no existe: se repara solo.
+        threading.Thread(target=recordatorio.reparar_recordatorio, daemon=True).start()
+    api = Api()
+    # Sin config.json (primera vez): el propio asistente, no un mensaje de error.
+    pagina = "index.html" if core is not None else "configurar.html"
+    api._ventana = webview.create_window(
+        _titulo() if core else "FichaCSIRC · configuración",
+        _recurso("web", pagina), js_api=api, width=1180, height=820,
+        min_size=(900, 660), maximized=core is not None, background_color="#e9edf2")
     webview.start()
 
 

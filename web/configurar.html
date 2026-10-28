@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FichaCSIRC · configuración</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="asistente">
+<header class="cabecera">
+  <img id="logo" alt="" hidden>
+  <div class="marca">
+    <h1>FichaCSIRC</h1>
+    <span>Asistente de configuración</span>
+  </div>
+  <span class="etiqueta-prototipo" hidden>prototipo</span>
+</header>
+
+<main>
+  <ol id="pasos" class="pasos" aria-label="Pasos"></ol>
+  <section id="contenido" class="panel contenido-asistente"></section>
+</main>
+
+<footer class="pie pie-asistente">
+  <span id="paso-n"></span>
+  <span class="crece"></span>
+  <button id="b-cancelar">Cancelar</button>
+  <button id="b-atras">‹ Atrás</button>
+  <button id="b-siguiente" class="primario">Siguiente ›</button>
+  <button id="b-finalizar" class="primario" hidden>Finalizar</button>
+</footer>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <h3 id="modal-titulo"></h3>
+    <p id="modal-texto"></p>
+    <div class="modal-botones">
+      <button id="modal-no">No</button>
+      <button id="modal-si" class="primario">Sí</button>
+    </div>
+  </div>
+</div>
+
+<script src="demo.js"></script>
+<script src="comun.js"></script>
+<script src="configurar.js"></script>
+</body>
+</html>

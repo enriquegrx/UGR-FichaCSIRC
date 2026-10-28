@@ -775,9 +775,90 @@ function dlgAtajos() {
     ...filas.map(([k, t]) => el("tr", {}, el("td", {}, el("kbd", { text: k })), el("td", { text: t }))))));
 }
 
-function dlgRecordatorio() {
-  return avisar("Aviso diario de fichaje",
-    "En el prototipo no se configura el aviso diario: usa la misma tarea programada que tu "
-    + "FichaCSIRC normal y activarlo desde aquí la haría apuntar a este experimento. "
-    + "Actívalo o desactívalo desde la app normal (Herramientas → Aviso diario de fichaje).");
+async function dlgRecordatorio() {
+  const e = await llamar("recordatorio_estado");
+  if (e.experimento) {
+    return avisar("Aviso diario de fichaje",
+      "En el prototipo no se configura el aviso diario: usa la misma tarea programada que tu "
+      + "FichaCSIRC normal y activarlo desde aquí la haría apuntar a este experimento. "
+      + "Actívalo o desactívalo desde la app normal (Herramientas → Aviso diario de fichaje).");
+  }
+  if (!e.soportado) {
+    return avisar("Aviso diario de fichaje", "El aviso diario solo está disponible en Windows y macOS.");
+  }
+  if (e.activo) {
+    if (await preguntar("Aviso diario",
+        "El aviso diario de fichaje está ACTIVO (lunes a viernes).\n\n¿Quieres desactivarlo?")) {
+      const r = await llamar("recordatorio_desactivar");
+      await avisar("Aviso diario", r.error || "Aviso desactivado.");
+    }
+    return;
+  }
+  const hora = entrada("16:00", { type: "time" });
+  const d = dialogo({ titulo: "Aviso diario de fichaje", ancho: 460, botones: [cancelarBoton,
+    { texto: "Activar", clase: "primario", accion: async (dd) => {
+      const r = await llamar("recordatorio_activar", hora.value);
+      if (r.error) { await avisar("No se pudo activar", r.error); return; }
+      dd.cerrar();
+      await avisar("Aviso diario", `Listo. Te avisaré los días laborables a las ${hora.value} si te faltan horas por fichar.`);
+    } }] });
+  d.cuerpo.append(nota("FichaCSIRC puede avisarte cada día laborable si te faltan horas por fichar "
+                       + "(solo aparece si hay algo pendiente)."),
+                  rejilla(["¿A qué hora?", hora]));
+  hora.focus();
+}
+
+// Version nueva. Sin forzar (al arrancar) solo dice algo si la hay; forzando
+// (Ayuda > Comprobar) tambien dice "estas al dia" o por que no se pudo mirar.
+async function dlgActualizacion({ forzar }) {
+  let r;
+  try {
+    r = await api().comprobar_actualizacion(forzar);
+  } catch (e) {
+    if (forzar) await avisar("No se pudo comprobar", e.message || String(e));
+    return;
+  }
+  if (r.error) { if (forzar) await avisar("No se pudo comprobar", r.error); return; }
+  if (r.al_dia) { if (forzar) await avisar("Actualizaciones", `Ya tienes la última versión (v${r.version}).`); return; }
+  if (!r.puede_instalar) {
+    const motivo = r.experimento ? "\n\n(El prototipo no instala actualizaciones: instalaría la de "
+                                   + "producción encima. Hazlo desde tu FichaCSIRC normal.)" : "";
+    if (await preguntar("Actualización disponible",
+        `Hay una versión nueva de FichaCSIRC (${r.version}). Tú tienes la ${r.actual}.${motivo}\n\n¿Abrir la página de descarga?`)) {
+      await llamar("abrir_pagina_actualizacion");
+    }
+    return;
+  }
+  const como = r.mac ? "Se abrirá el instalador y FichaCSIRC se cerrará para que puedas sustituirla."
+                     : "FichaCSIRC se cerrará al iniciar el instalador.";
+  if (!(await preguntar("Actualización disponible",
+      `Hay una versión nueva de FichaCSIRC (${r.version}). Tú tienes la ${r.actual}.\n\n¿Descargar e instalar ahora?\n${como}`))) return;
+  estado(`Descargando actualización ${r.version}…`);
+  const i = await llamar("instalar_actualizacion");
+  if (i.error) {
+    if (await preguntar("No se pudo actualizar", `${i.error}\n\n¿Abrir la página de descarga?`)) {
+      await llamar("abrir_pagina_actualizacion");
+    }
+    return;
+  }
+  if (i.mac) {
+    await avisar("Instalar la actualización", "Se ha abierto el instalador.\n\nArrastra FichaCSIRC a la "
+      + "carpeta Aplicaciones y, cuando lo pregunte, elige «Reemplazar».\n\n"
+      + "FichaCSIRC se cerrará ahora para poder sustituirla.");
+  }
+  estado("Instalador descargado. FichaCSIRC se cerrará…");
+}
+
+// Mac: la app abierta desde Descargas o desde el .dmg deja una copia por
+// actualizacion (y un icono mas en Launchpad).
+async function dlgAplicaciones(motivo) {
+  const texto = motivo === "dmg"
+    ? "Estás usando FichaCSIRC directamente desde el instalador (.dmg). Al expulsarlo dejará de funcionar."
+    : "FichaCSIRC no está en la carpeta Aplicaciones, así que cada actualización deja otra copia y en "
+      + "Launchpad acaban saliendo varios iconos.";
+  if (await preguntar("Mueve FichaCSIRC a Aplicaciones", `${texto}\n\nArrastra FichaCSIRC a la `
+      + "carpeta Aplicaciones (si ya está, elige «Reemplazar») y borra las copias que tengas en "
+      + "Descargas.\n\n¿Abrir la carpeta Aplicaciones?")) {
+    await llamar("abrir_aplicaciones");
+  }
 }

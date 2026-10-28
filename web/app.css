@@ -254,3 +254,35 @@ kbd { font: 12px ui-monospace, Consolas, monospace; background: var(--fondo); bo
 .novedades p { margin: 3px 0; }
 .novedades p.apartado { font-weight: 700; margin-top: 8px; }
 .novedades p.punto { padding-left: 14px; text-indent: -10px; }
+
+/* ---------- asistente de configuracion (configurar.html) ---------- */
+.pasos { display: flex; gap: 6px; list-style: none; margin: 0; padding: 0; counter-reset: paso; flex-wrap: wrap; }
+.pasos li { counter-increment: paso; padding: 6px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--borde); color: var(--tenue); font-size: 13px; }
+.pasos li::before { content: counter(paso) ". "; }
+.pasos li.actual { background: var(--primario); border-color: var(--primario); color: #fff; font-weight: 600; }
+.pasos li.hecho { color: var(--exito); }
+.contenido-asistente { max-width: 820px; width: 100%; }
+.contenido-asistente h2 { font-size: 18px; margin-bottom: 12px; }
+.campo-asistente { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 4px 12px; align-items: center; margin: 10px 0; }
+.campo-asistente > .tenue { grid-column: 2; font-size: 12px; }
+.contenido-asistente .lista { min-height: 180px; }
+.dos-listas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+.dos-listas h4 { margin: 0 0 4px; }
+.nota.azul { color: var(--primario); }
+.separado { margin-top: 18px; }
+.favs-resumen { margin: 6px 0 0; padding-left: 20px; font-size: 13px; }
+.pie-asistente { gap: 8px; padding: 10px 16px; font-size: 13px; }
+.pie-asistente .crece { flex: 1; }
+@media (max-width: 700px) {
+  .campo-asistente { grid-template-columns: 1fr; }
+  .campo-asistente > .tenue { grid-column: 1; }
+  .dos-listas { grid-template-columns: 1fr; }
+}
+
+/* ---------- ventanita del aviso de fichaje (aviso.html) ---------- */
+body.aviso { background: var(--panel); }
+body.aviso main { padding: 18px 22px 8px; }
+body.aviso h2 { font-size: 16px; }
+.texto-aviso { white-space: pre-line; font-variant-numeric: tabular-nums; }
+.pequeno { font-size: 12px; }
+.pie-aviso { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--borde); }
