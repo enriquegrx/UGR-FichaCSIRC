@@ -534,6 +534,13 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     (la que propone «+»). La zona de trabajo ocupa exactamente lo que queda de
     ventana (`flex: 1 1 0`, min 300 px) y las listas desplazan dentro: a
     1920x1030 la semana queda llena sin scroll.
+  - Medido en la ventana real a varios tamaños (scroll de la vista semana):
+    1920x1080 0 px, 1536x864 (1920 al 125 %) 0 px, 1366x768 ~95 px, 1280x720
+    ~140 px. Claves: las habituales SIEMPRE enteras (si se ajustaban al hueco,
+    en pantallas bajas quedaban en 0 filas visibles); el panel de apuntes con
+    `contain: size` para que su lista larga no estire la fila; y por debajo de
+    820 px de alto, modo compacto (cabecera/logo menores, sin leyenda, 3
+    habituales, formulario más denso).
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la

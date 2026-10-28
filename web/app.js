@@ -227,14 +227,18 @@ function pintarHabituales(h) {
   lista.replaceChildren(...h.filas.map((f) => {
     const barra = el("div", { class: "hab-barra" }, el("i"));
     const fila = el("div", { class: "hab-fila" },
-      el("button", { class: "hab-info", title: "Rellenar el formulario con esta tarea",
+      // Dos lineas: "tarea · actividad ... horas · %" y la barra. Las horas de
+      // cada dia ya las dice el boton "+ 6,5h"; la ayuda va en el globo.
+      el("button", { class: "hab-info",
+                     title: `${f.tarea}${f.actividad ? ` · ${f.actividad}` : ""}\n`
+                            + `Normalmente ${f.tipico_txt} al día\n`
+                            + "Clic: rellena el formulario con esta tarea",
                      onclick: () => usarHabitual(f) },
         el("div", { class: "hab-cab" },
-          el("span", { class: "hab-tarea", text: f.tarea }),
+          el("span", { class: "hab-tarea" }, f.tarea,
+            f.actividad ? el("span", { class: "tenue", text: ` · ${f.actividad}` }) : null),
           el("span", { class: "tenue hab-num", text: `${f.horas_txt} · ${f.pct}%` })),
-        barra,
-        el("div", { class: "tenue hab-sub",
-                    text: `${f.actividad || "sin actividad"} · normalmente ${f.tipico_txt}/día` })),
+        barra),
       el("button", { class: "hab-mas", title: `Añadir ${f.tipico_txt} a los días marcados`,
                      onclick: () => usarHabitual(f, true) }, `+ ${f.tipico_txt}`));
     requestAnimationFrame(() => { barra.firstChild.style.width = `${Math.round((f.horas / max) * 100)}%`; });
