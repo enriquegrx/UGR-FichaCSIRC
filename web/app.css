@@ -143,8 +143,22 @@ i.muestra { display: inline-block; width: 14px; height: 10px; border-radius: 2px
 /* ---------- zona de trabajo: formulario + apuntes ----------
    Lado a lado en pantallas anchas. Ninguno se estira para rellenar la
    ventana: lo normal son 1-2 apuntes por dia y antes quedaba un gran hueco. */
-.zona-trabajo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: start; }
-@media (max-width: 1050px) { .zona-trabajo { grid-template-columns: minmax(0, 1fr); } }
+/* La zona de trabajo ocupa hasta abajo: el panel de apuntes (todo el periodo)
+   se estira y desplaza dentro; el formulario se queda arriba. */
+.zona-trabajo {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;
+  /* ocupa EXACTAMENTE lo que queda de ventana (base 0 + crece); por debajo de
+     300 px, la pagina desplaza. Dentro, las listas se ajustan y desplazan. */
+  align-items: stretch; flex: 1 1 0; min-height: 300px;
+}
+.zona-trabajo .apuntes { display: flex; flex-direction: column; min-height: 0; }
+@media (max-width: 1050px) {
+  .zona-trabajo { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .zona-trabajo .apuntes { max-height: 420px; }
+  /* una columna: sin alto fijo, las habituales se ven enteras */
+  .panel-habituales { flex: none; }
+  #lista-habituales { overflow: visible; }
+}
 .zona-trabajo .panel { padding: 10px 14px; }
 .zona-trabajo h2 { margin-bottom: 6px; }
 
@@ -160,7 +174,7 @@ i.muestra { display: inline-block; width: 14px; height: 10px; border-radius: 2px
 .acciones-form { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 
 .cabeza-seccion > .tenue { font-size: 13px; font-variant-numeric: tabular-nums; }
-.lista-apuntes { max-height: 320px; overflow: auto; margin-top: 2px; }
+.lista-apuntes { flex: 1 1 0; min-height: 120px; overflow: auto; margin-top: 2px; }
 .apunte {
   display: grid; grid-template-columns: 48px minmax(0, 1fr) auto auto; align-items: center;
   gap: 6px; padding: 5px 4px; border-top: 1px solid #eef1f4; border-radius: 4px; cursor: pointer;
@@ -173,8 +187,18 @@ i.muestra { display: inline-block; width: 14px; height: 10px; border-radius: 2px
 .icono { border: 0; background: none; padding: 5px; line-height: 0; color: var(--tenue); border-radius: 5px; }
 .icono:hover:not(:disabled) { background: var(--fondo); color: var(--texto); }
 .icono.borrar:hover:not(:disabled) { background: #fbeceb; color: var(--peligro); }
-.grupo-dia { display: flex; justify-content: space-between; gap: 8px; padding: 8px 4px 2px; font-size: 12px; font-weight: 600; }
-.grupo-dia:first-child { padding-top: 2px; }
+.grupo-dia {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left;
+  border: 0; border-radius: 5px; background: none; margin-top: 4px;
+  padding: 5px 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.grupo-dia:first-child { margin-top: 0; }
+.grupo-dia:hover { background: var(--fondo); }
+.grupo-dia.marcado { background: var(--seleccion); color: var(--primario); }
+.grupo-dia.hoy span:first-child { color: var(--primario); }
+.grupo-dia.vacio-dia { font-weight: 500; color: var(--tenue); }
+.apunte.del-marcado { background: #f4f9ff; }
+.apunte.del-marcado.sel { background: var(--seleccion); }
 .apuntes .vacio { color: var(--tenue); margin: 6px 0 2px; font-size: 13px; }
 
 /* tablas de los dialogos */
@@ -369,3 +393,22 @@ body.aviso h2 { font-size: 16px; }
 .franja-item:hover { background: var(--fondo); }
 .franja-item.ok span:last-child { color: var(--exito); }
 .franja-item.aviso span:last-child { color: var(--aviso); }
+
+/* ---------- columna izquierda: formulario + tareas habituales ---------- */
+.col-izq { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
+.col-izq .panel-form { flex: none; }
+/* las habituales toman el alto que deja el formulario y desplazan dentro */
+.panel-habituales { flex: 1 1 0; min-height: 110px; display: flex; flex-direction: column; }
+#lista-habituales { flex: 1 1 0; min-height: 0; overflow: auto; }
+.panel-habituales .cabeza-seccion { margin-bottom: 4px; }
+.panel-habituales .nota { margin: 6px 0 0; font-size: 12px; }
+.hab-fila { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 5px 0; border-top: 1px solid #eef1f4; }
+.hab-info { border: 0; background: none; padding: 2px 4px; text-align: left; border-radius: 5px; min-width: 0; }
+.hab-info:hover { background: var(--fondo); }
+.hab-cab { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.hab-tarea { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hab-num { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: 12px; }
+.hab-barra { height: 7px; border-radius: 4px; background: #e5e7eb; margin: 4px 0 2px; overflow: hidden; }
+.hab-barra > i { display: block; height: 100%; width: 0; background: var(--primario); border-radius: 4px; transition: width .3s; }
+.hab-sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hab-mas { font-size: 12px; padding: 4px 10px; white-space: nowrap; }

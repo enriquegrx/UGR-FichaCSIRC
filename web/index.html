@@ -74,28 +74,41 @@
   <section id="franja" class="franja" aria-label="Resumen" hidden></section>
 
   <div class="zona-trabajo">
-    <section class="panel panel-form">
-      <h2>Añadir apunte</h2>
-      <form id="form" class="form" autocomplete="off">
-        <label for="tarea">Tarea</label>
-        <div class="campo-tarea">
-          <input id="tarea" list="lista-tareas" placeholder="Escribe para filtrar tus favoritas">
-          <datalist id="lista-tareas"></datalist>
-          <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar…</button>
+    <div class="col-izq">
+      <section class="panel panel-form">
+        <h2>Añadir apunte</h2>
+        <form id="form" class="form" autocomplete="off">
+          <label for="tarea">Tarea</label>
+          <div class="campo-tarea">
+            <input id="tarea" list="lista-tareas" placeholder="Escribe para filtrar tus favoritas">
+            <datalist id="lista-tareas"></datalist>
+            <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar…</button>
+          </div>
+          <label for="horas">Horas</label>
+          <div class="fila">
+            <input id="horas" class="horas" inputmode="decimal" placeholder="0">
+            <label for="actividad" class="sub">Actividad</label>
+            <select id="actividad" class="crece" title="Botón derecho: asociarla con la tarea elegida"></select>
+          </div>
+          <label for="comentario">Comentario</label>
+          <input id="comentario" placeholder="Opcional">
+          <div class="acciones-form">
+            <button type="submit" id="b-anadir" class="primario">Añadir</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Tareas habituales: barras con la parte del tiempo de cada tarea desde
+           el 1 del mes pasado. Clic: rellena el formulario; "+": la anade. -->
+      <section id="habituales" class="panel panel-habituales" hidden>
+        <div class="cabeza-seccion">
+          <h2>Tus tareas habituales</h2>
+          <span id="habituales-periodo" class="tenue"></span>
         </div>
-        <label for="horas">Horas</label>
-        <div class="fila">
-          <input id="horas" class="horas" inputmode="decimal" placeholder="0">
-          <label for="actividad" class="sub">Actividad</label>
-          <select id="actividad" class="crece" title="Botón derecho: asociarla con la tarea elegida"></select>
-        </div>
-        <label for="comentario">Comentario</label>
-        <input id="comentario" placeholder="Opcional">
-        <div class="acciones-form">
-          <button type="submit" id="b-anadir" class="primario">Añadir</button>
-        </div>
-      </form>
-    </section>
+        <div id="lista-habituales"></div>
+        <p class="nota tenue">Clic en una tarea: rellena el formulario · «+»: la añade a los días marcados</p>
+      </section>
+    </div>
 
     <section class="panel apuntes">
       <div class="cabeza-seccion">

@@ -111,6 +111,27 @@ class TestFranja(Base):
         nombres = [p["nombre"] for p in r["permisos"]]
         self.assertIn("Asuntos particulares", nombres)        # nombre corto
 
+    def test_tareas_habituales(self):
+        def ap(fecha, wp, horas, act):
+            return dict(apunte(1, horas, wp=wp, act=act), fecha=fecha)
+        apuntes = [ap("2026-10-01", "10", 6.5, "soporte"), ap("2026-10-02", "10", 6.5, "soporte"),
+                   ap("2026-10-05", "10", 4, "soporte"), ap("2026-10-05", "20", 2.5, "formacion"),
+                   ap("2026-10-06", "20", 2.5, "formacion"),
+                   ap("2026-10-07", "10", 3, "formacion"),      # misma tarea, otra actividad
+                   ap("2026-10-08", "30", 7, "Asuntos propios")]
+        h = web.Api._habituales(apuntes, dt.date(2026, 9, 1))
+        self.assertEqual(h["desde"], "desde el 1 de septiembre")
+        self.assertEqual(h["total"], "32h")
+        primera = h["filas"][0]
+        self.assertEqual((primera["wp_id"], primera["actividad"], primera["horas"]),
+                         (10, "soporte", 17.0))
+        self.assertEqual(primera["tipico"], 6.5)          # lo que mas se repite
+        self.assertEqual(primera["pct"], 53)
+        claves = [(f["wp_id"], f["actividad"]) for f in h["filas"]]
+        self.assertIn((10, "formacion"), claves)            # tarea+actividad por separado
+        self.assertEqual(len(h["filas"]), 4)
+        self.assertEqual(web.Api._habituales([], dt.date(2026, 9, 1))["filas"], [])
+
     def test_sin_red_sigue_mostrando_permisos(self):
         with mock.patch.object(core, "entradas_rango", side_effect=RuntimeError("red")):
             r = self.api.resumen_franja()

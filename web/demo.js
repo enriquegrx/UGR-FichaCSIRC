@@ -316,7 +316,16 @@
               { titulo: "Septiembre", anio: 2026, mes: 9, al_dia: false, texto: "faltan 17,5h" }],
       permisos: [{ nombre: "Asuntos particulares", disponible: "63:30", negativo: false },
                  { nombre: "Servicios mínimos", disponible: "18:00", negativo: false }],
-      vacaciones: { quedan: 21, cupo: 22 } }),
+      vacaciones: { quedan: 21, cupo: 22 },
+      habituales: { desde: "desde el 1 de septiembre", total: "235h", filas: [
+        { wp_id: 11765, tarea: "[2026_ASG] Mantenimientos", actividad: "Actuaciones técnicas",
+          horas: 118, horas_txt: "118h", pct: 48, tipico: 6.5, tipico_txt: "6,5h" },
+        { wp_id: 12065, tarea: "[ASG] Proxmox + dockers en SisGes", actividad: "Formación",
+          horas: 52, horas_txt: "52h", pct: 21, tipico: 2, tipico_txt: "2h" },
+        { wp_id: 13001, tarea: "[ATE] Permisos", actividad: "Asuntos propios",
+          horas: 28, horas_txt: "28h", pct: 11, tipico: 7, tipico_txt: "7h" },
+        { wp_id: 14000, tarea: "[ASG] Migración de correo", actividad: "Soporte",
+          horas: 21, horas_txt: "21h", pct: 9, tipico: 1.5, tipico_txt: "1,5h" } ] } }),
     aviso_aplicaciones: () => espera(""),
     abrir_aplicaciones: () => espera({ ok: true }),
   });

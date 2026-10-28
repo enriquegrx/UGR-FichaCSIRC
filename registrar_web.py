@@ -33,6 +33,7 @@ import threading
 import shutil
 import base64
 import calendar
+import collections
 import subprocess
 import webbrowser
 import datetime as dt
@@ -474,17 +475,48 @@ class Api:
                 reg += sum(a["horas"] for a in por_dia.get(iso, []))
         return reg, obj
 
+    MAX_HABITUALES = 5
+
+    @classmethod
+    def _habituales(cls, apuntes, desde):
+        """Tareas mas usadas en el periodo (por tarea Y actividad): sus horas,
+        su parte del total y sus horas HABITUALES por dia (las que mas se
+        repiten), que son las que propone el boton "+"."""
+        total = sum(a["horas"] for a in apuntes)
+        horas, por_dia, nombres = collections.Counter(), {}, {}
+        for a in apuntes:
+            if not a.get("wp_id"):
+                continue
+            k = (str(a["wp_id"]), a.get("actividad") or "")
+            horas[k] += a["horas"]
+            nombres[k] = a["wp_titulo"]
+            dia = por_dia.setdefault(k, collections.Counter())
+            dia[a["fecha"]] += a["horas"]
+        filas = []
+        for (wp, act), h in horas.most_common(cls.MAX_HABITUALES):
+            # la cantidad diaria que mas se repite (a igualdad, la mayor)
+            frec = collections.Counter(round(v, 2) for v in por_dia[(wp, act)].values())
+            tipico = max(frec.items(), key=lambda kv: (kv[1], kv[0]))[0]
+            filas.append({"wp_id": int(wp), "tarea": nombres[(wp, act)], "actividad": act,
+                          "horas": round(h, 2), "horas_txt": _horas(h),
+                          "pct": round(100 * h / total) if total else 0,
+                          "tipico": tipico, "tipico_txt": _horas(tipico)})
+        return {"desde": f"desde el {desde.day} de {cls.MESES[desde.month - 1]}",
+                "total": _horas(total), "filas": filas}
+
     def resumen_franja(self):
-        """La franja de resumen: como va el mes, si el anterior quedo a medias,
-        el saldo de cada permiso y las vacaciones que quedan. UNA consulta por
-        rango para los dos meses."""
+        """La franja de resumen (como va el mes, si el anterior quedo a medias,
+        el saldo de cada permiso y las vacaciones) y las tareas habituales.
+        UNA consulta por rango desde el dia 1 del mes anterior para todo."""
         hoy = dt.date.today()
         ant = (hoy.replace(day=1) - dt.timedelta(days=1))
-        out = {"permisos": [], "meses": []}
+        out = {"permisos": [], "meses": [], "habituales": None}
         try:
             por_dia = {}
-            for a in core.entradas_rango(ant.replace(day=1).isoformat(), hoy.isoformat()):
+            apuntes = core.entradas_rango(ant.replace(day=1).isoformat(), hoy.isoformat())
+            for a in apuntes:
                 por_dia.setdefault(a["fecha"], []).append(a)
+            out["habituales"] = self._habituales(apuntes, ant.replace(day=1))
             for anio, mes, hasta, siempre in ((hoy.year, hoy.month, hoy, True),
                                               (ant.year, ant.month, ant, False)):
                 reg, obj = self._estado_mes(anio, mes, por_dia, hasta)

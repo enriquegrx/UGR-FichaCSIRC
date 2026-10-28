@@ -137,8 +137,13 @@ Abre **FichaCSIRC (Registrar horas)**:
 3. Listo. La tarjeta se pone verde cuando completas tu jornada. 🎉
 
 Cada tarjeta enseña **lo que imputaste ese día**. A la derecha del formulario
-ves los **apuntes de los días marcados**, cada uno con su ✏️ **editar** y 🗑️
-**borrar**.
+tienes **todos los apuntes de la semana** (o del mes) agrupados por día, cada uno
+con su ✏️ **editar** y 🗑️ **borrar**; los días marcados van resaltados y pulsar la
+cabecera de un día lo marca.
+
+Debajo del formulario, **tus tareas habituales**: una barra por tarea con lo que
+le dedicas. **Clic** en una rellena el formulario con su tarea, actividad y horas
+de siempre; el botón **«+»** la añade directamente a los días marcados. ⚡
 
 Bajo los días, la **franja de resumen** te dice cómo va el mes (y el anterior si
 quedó a medias), lo que te queda de cada permiso y tus vacaciones. Pulsa

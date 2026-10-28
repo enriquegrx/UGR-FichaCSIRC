@@ -213,7 +213,56 @@ async function refrescarFranja() {
       el("span", { text: `quedan ${r.vacaciones.quedan} de ${r.vacaciones.cupo} días` })));
   }
   $("franja").replaceChildren(...items);
+  pintarHabituales(r.habituales);
   $("franja").hidden = items.length < 2;
+}
+
+// ---------------------------------------------------------------- tareas habituales
+
+function pintarHabituales(h) {
+  const lista = $("lista-habituales");
+  if (!h || !h.filas.length) { $("habituales").hidden = true; return; }
+  $("habituales-periodo").textContent = `${h.desde} · ${h.total}`;
+  const max = Math.max(...h.filas.map((f) => f.horas));
+  lista.replaceChildren(...h.filas.map((f) => {
+    const barra = el("div", { class: "hab-barra" }, el("i"));
+    const fila = el("div", { class: "hab-fila" },
+      el("button", { class: "hab-info", title: "Rellenar el formulario con esta tarea",
+                     onclick: () => usarHabitual(f) },
+        el("div", { class: "hab-cab" },
+          el("span", { class: "hab-tarea", text: f.tarea }),
+          el("span", { class: "tenue hab-num", text: `${f.horas_txt} · ${f.pct}%` })),
+        barra,
+        el("div", { class: "tenue hab-sub",
+                    text: `${f.actividad || "sin actividad"} · normalmente ${f.tipico_txt}/día` })),
+      el("button", { class: "hab-mas", title: `Añadir ${f.tipico_txt} a los días marcados`,
+                     onclick: () => usarHabitual(f, true) }, `+ ${f.tipico_txt}`));
+    requestAnimationFrame(() => { barra.firstChild.style.width = `${Math.round((f.horas / max) * 100)}%`; });
+    return fila;
+  }));
+  $("habituales").hidden = false;
+}
+
+// Rellena el formulario con la tarea, su actividad y sus horas habituales; con
+// anadirYa, ademas la anade (pasando por los avisos de siempre).
+async function usarHabitual(f, anadirYa = false) {
+  let texto = textoDeTarea(f.wp_id);
+  if (!texto) {                         // no esta en favoritas: a la lista de la sesion
+    ponerTareas(await llamar("elegir_tareas", [{ id: f.wp_id, nombre: f.tarea }], false));
+    texto = textoDeTarea(f.wp_id);
+  }
+  $("tarea").value = texto;
+  await elegirTarea();                  // carga SUS actividades
+  if (f.actividad) {
+    const sel = $("actividad");
+    if (![...sel.options].some((o) => o.value === f.actividad)) {
+      sel.append(el("option", { value: f.actividad, text: f.actividad }));
+    }
+    sel.value = f.actividad;
+  }
+  $("horas").value = st.horasAuto = fmtHoras(f.tipico);
+  if (anadirYa) await anadir();
+  else { $("horas").focus(); estado(`Formulario rellenado con «${f.tarea}».`); }
 }
 
 function irAMes(anio, mes) {
@@ -243,6 +292,7 @@ function pintarVista(datos, marcarHoy, marcar = null) {
   else if (marcarHoy) st.marcados = new Set(st.dias.filter((d) => d.es_hoy).map((d) => d.iso));
   st.marcados = new Set([...st.marcados].filter((i) => st.dias.some((d) => d.iso === i)));
   st.seleccion.clear();
+  st.scrollPanel = true;          // periodo nuevo: el panel va al dia marcado
   $("lbl-todo").textContent = st.vista === "mes" ? " Todo el mes" : " Toda la semana";
   if (st.vista === "mes") pintarMes(datos); else pintarDiasSemana(datos);
   pintarMarcados();
@@ -480,10 +530,11 @@ function icono(nombre) {
 
 const claveDe = (d, a) => `${d.iso}|${a.id}`;
 
-function filaApunte(d, a) {
+function filaApunte(d, a, delMarcado = false) {
   const clave = claveDe(d, a);
   const fila = el("div", {
-    class: `apunte${st.seleccion.has(clave) ? " sel" : ""}`, role: "listitem", tabindex: "0",
+    class: `apunte${st.seleccion.has(clave) ? " sel" : ""}${delMarcado ? " del-marcado" : ""}`,
+    role: "listitem", tabindex: "0",
     title: `${a.tarea}${a.comentario ? `\n“${a.comentario}”` : ""}\n`
            + "Clic: seleccionar (para borrar varios) · Doble clic o Enter: editar",
     onclick: () => alternarSeleccion(clave, fila),
@@ -523,39 +574,50 @@ function pintarBotonEliminar() {
   $("b-eliminar").textContent = n === 1 ? "Eliminar seleccionado" : `Eliminar ${n} seleccionados`;
 }
 
+// El panel de la derecha es el DETALLE con acciones de todo el periodo visible
+// (las tarjetas son el resumen): todos los dias, agrupados, con editar y borrar
+// en cada apunte sin tener que marcar antes el dia. Los marcados, resaltados.
+// En el mes, los dias del mes (y los de relleno solo si se marcaron).
+function diasDelPanel() {
+  return st.vista === "mes" ? st.dias.filter((d) => d.del_mes || st.marcados.has(d.iso)) : st.dias;
+}
+
 function pintarApuntes() {
   const lista = $("lista-apuntes");
+  const scrollPrevio = lista.scrollTop;
   lista.replaceChildren();
-  const marcados = diasMarcados();
-  const varios = marcados.length > 1;
-  let filas = 0;
-  for (const d of marcados) {
-    if (!d.apuntes.length) continue;
-    // Con varios dias, cada uno con su cabecera; con uno, va en el titulo.
-    if (varios) {
-      lista.append(el("div", { class: "grupo-dia" },
-        el("span", { text: `${d.nombre} ${d.fecha}` }),
-        el("span", { class: "tenue", text: `${fmtHoras(d.reg)}h de ${fmtHoras(d.obj)}h` })));
-    }
-    for (const a of d.apuntes) {
-      lista.append(filaApunte(d, a));
-      filas++;
-    }
+  let primerMarcado = null;
+  let total = 0;
+  for (const d of diasDelPanel()) {
+    const marcado = st.marcados.has(d.iso);
+    total += d.reg;
+    const resumen = d.no_laborable ? d.motivo
+      : (d.estado === "error" ? "sin conexión"
+         : (d.apuntes.length ? `${fmtHoras(d.reg)}h de ${fmtHoras(d.obj)}h` : "sin apuntes"));
+    const cab = el("button", {
+      class: `grupo-dia${marcado ? " marcado" : ""}${d.es_hoy ? " hoy" : ""}${d.apuntes.length ? "" : " vacio-dia"}`,
+      title: "Clic: marcar o desmarcar este día (Mayús+clic: rango)",
+      onclick: (e) => alternarDia(d.iso, e),
+    },
+      el("span", { text: `${d.nombre} ${d.fecha}${d.es_hoy ? " · hoy" : ""}` }),
+      el("span", { class: "tenue", text: resumen }));
+    lista.append(cab);
+    if (marcado && !primerMarcado) primerMarcado = cab;
+    for (const a of d.apuntes) lista.append(filaApunte(d, a, marcado));
   }
-  if (marcados.length === 1) {
-    const d = marcados[0];
-    $("titulo-apuntes").textContent = `Apuntes · ${d.nombre} ${d.fecha}`;
-    $("resumen-apuntes").textContent = d.no_laborable ? d.motivo
-      : `${fmtHoras(d.reg)}h de ${fmtHoras(d.obj)}h`;
+  $("titulo-apuntes").textContent = st.vista === "mes"
+    ? `Apuntes de ${st.semana?.titulo?.split(" ")[0]?.toLowerCase() || "el mes"}` : "Apuntes de la semana";
+  $("resumen-apuntes").textContent = `${fmtHoras(total)}h`;
+  lista.hidden = false;
+  $("apuntes-vacio").hidden = true;
+  // Al cargar otro periodo, que se vea el primer dia marcado; al marcar o
+  // desmarcar, que la lista se quede donde estaba (no salte arriba).
+  if (st.scrollPanel && primerMarcado) {
+    lista.scrollTop = Math.max(0, primerMarcado.offsetTop - lista.offsetTop - 4);
   } else {
-    $("titulo-apuntes").textContent = varios ? `Apuntes · ${marcados.length} días` : "Apuntes";
-    $("resumen-apuntes").textContent = varios
-      ? `${fmtHoras(marcados.reduce((t, d) => t + d.reg, 0))}h en total` : "";
+    lista.scrollTop = scrollPrevio;
   }
-  lista.hidden = !filas;
-  $("apuntes-vacio").hidden = filas > 0;
-  $("apuntes-vacio").textContent = !marcados.length ? "Marca un día para ver sus apuntes."
-    : (varios ? "Los días marcados no tienen apuntes." : "Este día aún no tiene apuntes.");
+  st.scrollPanel = false;
   pintarBotonEliminar();
 }
 

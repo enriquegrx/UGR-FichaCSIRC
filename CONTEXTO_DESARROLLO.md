@@ -526,6 +526,14 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     vacaciones). Se rehace al arrancar, al recargar tras un cambio y tras una
     marca local, NO al navegar (no cambian los datos). Con datos reales, a
     1920x1030 quedan ~280 px libres bajo el formulario en la vista semana.
+  - Panel de apuntes = TODO el periodo visible agrupado por día (las tarjetas
+    son el resumen; el panel, el detalle con acciones); cabecera clicable que
+    marca el día; conserva el scroll al marcar y salta al marcado al cambiar de
+    periodo. Tareas habituales (`Api._habituales`, misma consulta que la
+    franja): por tarea Y actividad, horas, % y la cantidad diaria más repetida
+    (la que propone «+»). La zona de trabajo ocupa exactamente lo que queda de
+    ventana (`flex: 1 1 0`, min 300 px) y las listas desplazan dentro: a
+    1920x1030 la semana queda llena sin scroll.
 
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la
@@ -537,7 +545,7 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   - `test_destinos.py` (9) — puente ProyectosTIC/INARI.
   - `test_gui_acciones.py` (37) — acciones reales de la GUI (con `en_hilo` síncrono).
   - `test_gui_smoke.py` (1) — arranque de la ventana Tk; se salta sin display.
-  - `test_web_api.py` (51) — la `Api` web, el asistente, el modo experimento y
+  - `test_web_api.py` (52) — la `Api` web, el asistente, el modo experimento y
     los ficheros de `web/` (enlazados, sin `innerHTML`, y que todo lo que llama el
     JS exista en la `Api` y en la demo).
 - Ejecutarlos tras tocar el motor o la GUI.

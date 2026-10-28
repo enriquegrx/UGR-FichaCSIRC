@@ -30,6 +30,11 @@ instalada aparece en el pie de la ventana.
   un clic), en la semana y en el mes.
 - **Las tarjetas de la semana enseñan sus apuntes** (tarea y actividad): ves la
   semana entera sin ir marcando día a día.
+- **Panel de apuntes con toda la semana** (o el mes), agrupada por días: editas o
+  borras cualquier apunte sin marcar antes su día; los marcados van resaltados.
+- **Tus tareas habituales**, bajo el formulario: una barra por tarea con la parte
+  de tu tiempo que le dedicas y sus horas de cada día. Clic en una tarea rellena
+  el formulario; su botón **«+ 6,5h»** la añade directamente a los días marcados.
 - **Franja de resumen** bajo los días: cómo va el mes (y el anterior, si quedó a
   medias), lo que te queda de cada permiso y tus vacaciones. Cada dato te lleva
   a su sitio con un clic.
