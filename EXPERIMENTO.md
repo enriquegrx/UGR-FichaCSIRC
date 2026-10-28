@@ -37,7 +37,16 @@ fuera de favoritas, editar un apunte, INARI más allá de leerlo, aviso diario.
 ## Cómo probarlo
 
 **Descargado de GitHub:** *Actions → Prototipo web → el último run → Artifacts*.
-En Windows, `FichaCSIRC-Web-windows` → descomprimir → `FichaCSIRC-Web.exe`. En Mac,
+En Windows, `FichaCSIRC-Web-windows` → **antes de descomprimir: clic derecho en el
+zip → Propiedades → Desbloquear** → descomprimir → `FichaCSIRC-Web.exe`.
+
+> Sin desbloquear falla con *«Failed to resolve Python.Runtime.Loader.Initialize»*:
+> Windows marca como «descargado de internet» todo lo que sale del zip y .NET
+> (que pywebview usa para abrir la ventana) se niega a cargar una DLL marcada.
+> No afecta a una versión real instalada con el instalador de Inno Setup: los
+> ficheros que copia un instalador no llevan esa marca.
+
+En Mac,
 `FichaCSIRC-Web-mac-arm64` (zip dentro de zip) → la primera vez *Ajustes del
 Sistema → Privacidad y seguridad → Abrir igualmente*.
 
