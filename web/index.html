@@ -60,40 +60,44 @@
     </div>
   </section>
 
-  <section class="panel">
-    <h2>Añadir apunte</h2>
-    <form id="form" class="form" autocomplete="off">
-      <label for="tarea">Tarea</label>
-      <div class="campo-tarea">
-        <input id="tarea" list="lista-tareas" placeholder="Escribe para filtrar tus favoritas">
-        <datalist id="lista-tareas"></datalist>
-        <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar…</button>
-      </div>
-      <label for="horas">Horas</label>
-      <div class="fila">
-        <input id="horas" class="horas" inputmode="decimal" placeholder="0">
-        <label for="actividad" class="sub">Actividad</label>
-        <select id="actividad" title="Botón derecho: asociarla con la tarea elegida"></select>
-      </div>
-      <label for="comentario">Comentario</label>
-      <div class="fila">
-        <input id="comentario" class="crece" placeholder="Opcional">
-        <button type="submit" id="b-anadir" class="primario">Añadir a días marcados</button>
-      </div>
-    </form>
-  </section>
+  <!-- Formulario y apuntes lado a lado en pantallas anchas (uno bajo otro en
+       estrechas). Lo habitual son 1-2 apuntes por dia: la lista mide lo que
+       sus filas, no rellena la ventana. -->
+  <div class="zona-trabajo">
+    <section class="panel panel-form">
+      <h2>Añadir apunte</h2>
+      <form id="form" class="form" autocomplete="off">
+        <label for="tarea">Tarea</label>
+        <div class="campo-tarea">
+          <input id="tarea" list="lista-tareas" placeholder="Escribe para filtrar tus favoritas">
+          <datalist id="lista-tareas"></datalist>
+          <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar…</button>
+        </div>
+        <label for="horas">Horas</label>
+        <div class="fila">
+          <input id="horas" class="horas" inputmode="decimal" placeholder="0">
+          <label for="actividad" class="sub">Actividad</label>
+          <select id="actividad" class="crece" title="Botón derecho: asociarla con la tarea elegida"></select>
+        </div>
+        <label for="comentario">Comentario</label>
+        <input id="comentario" placeholder="Opcional">
+        <div class="acciones-form">
+          <button type="submit" id="b-anadir" class="primario">Añadir</button>
+        </div>
+      </form>
+    </section>
 
-  <section class="panel apuntes">
-    <div class="cabeza-seccion">
-      <h2>Apuntes de los días marcados</h2>
-      <button id="b-eliminar" class="peligro" disabled>Eliminar seleccionados</button>
-    </div>
-    <table>
-      <thead><tr><th>Día</th><th class="num">Horas</th><th>Tarea</th><th>Actividad</th><th>Comentario</th></tr></thead>
-      <tbody id="tabla"></tbody>
-    </table>
-    <p id="tabla-vacia" class="vacio">Marca un día para ver sus apuntes.</p>
-  </section>
+    <section class="panel apuntes">
+      <div class="cabeza-seccion">
+        <h2 id="titulo-apuntes">Apuntes</h2>
+        <span id="resumen-apuntes" class="tenue"></span>
+        <span class="crece"></span>
+        <button id="b-eliminar" class="peligro" hidden>Eliminar seleccionados</button>
+      </div>
+      <div id="lista-apuntes" class="lista-apuntes" role="list" aria-labelledby="titulo-apuntes"></div>
+      <p id="apuntes-vacio" class="vacio">Marca un día para ver sus apuntes.</p>
+    </section>
+  </div>
 </main>
 
 <footer class="pie">

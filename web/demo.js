@@ -7,7 +7,7 @@
   if (!/[?&]demo\b/.test(location.search)) return;
 
   const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
-  const fmt = (h) => `${Math.round(h * 100) / 100}`.replace(/\.0+$/, "") + "h";
+  const fmt = (h) => `${Math.round(h * 100) / 100}`.replace(".", ",") + "h";
   const hoy = new Date();
   const lunesDe = (d) => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
   const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

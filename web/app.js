@@ -210,7 +210,8 @@ function alternarDia(iso) {
 function pintarMarcados() {
   for (const t of $("dias").children) t.classList.toggle("marcado", st.marcados.has(t.dataset.iso));
   $("toda-semana").checked = !!st.semana && st.marcados.size === st.semana.dias.length;
-  pintarTabla();
+  pintarApuntes();
+  pintarBotonAnadir();
   actualizarTotales();
 }
 
@@ -250,41 +251,119 @@ function menuDia(x, y, d) {
   mostrarMenu(x, y, items);
 }
 
-// ---------------------------------------------------------------- tabla
+// ---------------------------------------------------------------- apuntes
 
-function pintarTabla() {
-  const cuerpo = $("tabla");
-  cuerpo.replaceChildren();
+// Iconos dibujados con SVG (sin fuentes externas: la app funciona sin red).
+const ICONOS = {
+  editar: ["M4 20h4L18.5 9.5a2.1 2.1 0 0 0-4-4L4 16v4", "M13.5 6.5l4 4"],
+  borrar: ["M4 7h16", "M10 11v6", "M14 11v6", "M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12",
+           "M9 7V4h6v3"],
+};
+function icono(nombre) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "16", height: "16",
+    fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round",
+    "stroke-linejoin": "round", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  for (const d of ICONOS[nombre]) {
+    const p = document.createElementNS(ns, "path");
+    p.setAttribute("d", d);
+    svg.append(p);
+  }
+  return svg;
+}
+
+const claveDe = (d, a) => `${d.iso}|${a.id}`;
+
+function filaApunte(d, a) {
+  const clave = claveDe(d, a);
+  const fila = el("div", {
+    class: `apunte${st.seleccion.has(clave) ? " sel" : ""}`, role: "listitem", tabindex: "0",
+    title: `${a.tarea}${a.comentario ? `\n“${a.comentario}”` : ""}\n`
+           + "Clic: seleccionar (para borrar varios) · Doble clic o Enter: editar",
+    onclick: () => alternarSeleccion(clave, fila),
+    ondblclick: () => dlgEditar(d, a),
+    onkeydown: (e) => {
+      if (e.key === "Enter") { e.preventDefault(); dlgEditar(d, a); }
+      if (e.key === " ") { e.preventDefault(); alternarSeleccion(clave, fila); }
+    },
+  },
+    el("span", { class: "ap-horas", text: a.horas_txt }),
+    el("span", { class: "ap-texto" },
+      el("span", { class: "ap-tarea", text: a.tarea }),
+      a.actividad ? el("span", { class: "tenue", text: ` · ${a.actividad}` }) : null,
+      a.comentario ? el("span", { class: "tenue ap-com", text: ` · «${a.comentario}»` }) : null),
+    el("button", { class: "icono", title: "Editar", "aria-label": `Editar el apunte de ${a.tarea}`,
+                   onclick: (e) => { e.stopPropagation(); dlgEditar(d, a); } }, icono("editar")),
+    el("button", { class: "icono borrar", title: "Eliminar",
+                   "aria-label": `Eliminar el apunte de ${a.tarea}`,
+                   onclick: (e) => {
+                     e.stopPropagation();
+                     borrarItems([{ fecha: d.iso, id: a.id, destino: a.destino }]);
+                   } }, icono("borrar")));
+  fila.dataset.clave = clave;
+  fila.dataset.destino = a.destino;
+  return fila;
+}
+
+function alternarSeleccion(clave, fila) {
+  if (st.seleccion.has(clave)) st.seleccion.delete(clave); else st.seleccion.add(clave);
+  fila.classList.toggle("sel");
+  pintarBotonEliminar();
+}
+
+function pintarBotonEliminar() {
+  const n = st.seleccion.size;
+  $("b-eliminar").hidden = !n;
+  $("b-eliminar").textContent = n === 1 ? "Eliminar seleccionado" : `Eliminar ${n} seleccionados`;
+}
+
+function pintarApuntes() {
+  const lista = $("lista-apuntes");
+  lista.replaceChildren();
+  const marcados = diasMarcados();
+  const varios = marcados.length > 1;
   let filas = 0;
-  for (const d of diasMarcados()) {
+  for (const d of marcados) {
+    if (!d.apuntes.length) continue;
+    // Con varios dias, cada uno con su cabecera; con uno, va en el titulo.
+    if (varios) {
+      lista.append(el("div", { class: "grupo-dia" },
+        el("span", { text: `${d.nombre} ${d.fecha}` }),
+        el("span", { class: "tenue", text: `${fmtHoras(d.reg)}h de ${fmtHoras(d.obj)}h` })));
+    }
     for (const a of d.apuntes) {
-      const clave = `${d.iso}|${a.id}`;
-      const tr = el("tr", {
-        class: st.seleccion.has(clave) ? "sel" : "",
-        title: (a.comentario ? `${a.tarea}\n“${a.comentario}”` : a.tarea)
-               + "\nDoble clic: editar",
-        onclick: () => {
-          if (st.seleccion.has(clave)) st.seleccion.delete(clave); else st.seleccion.add(clave);
-          tr.classList.toggle("sel");
-          $("b-eliminar").disabled = !st.seleccion.size;
-        },
-        ondblclick: () => dlgEditar(d, a),
-      },
-        el("td", { text: `${d.nombre.slice(0, 3)} ${d.fecha}` }),
-        el("td", { class: "num", text: a.horas_txt }),
-        el("td", { text: a.tarea }),
-        el("td", { text: a.actividad }),
-        el("td", { class: "comentario", text: a.comentario }));
-      tr.dataset.clave = clave;
-      tr.dataset.destino = a.destino;
-      cuerpo.append(tr);
+      lista.append(filaApunte(d, a));
       filas++;
     }
   }
-  $("tabla-vacia").hidden = filas > 0;
-  $("tabla-vacia").textContent = st.marcados.size
-    ? "Los días marcados no tienen apuntes." : "Marca un día para ver sus apuntes.";
-  $("b-eliminar").disabled = !st.seleccion.size;
+  if (marcados.length === 1) {
+    const d = marcados[0];
+    $("titulo-apuntes").textContent = `Apuntes · ${d.nombre} ${d.fecha}`;
+    $("resumen-apuntes").textContent = d.no_laborable ? d.motivo
+      : `${fmtHoras(d.reg)}h de ${fmtHoras(d.obj)}h`;
+  } else {
+    $("titulo-apuntes").textContent = varios ? `Apuntes · ${marcados.length} días` : "Apuntes";
+    $("resumen-apuntes").textContent = varios
+      ? `${fmtHoras(marcados.reduce((t, d) => t + d.reg, 0))}h en total` : "";
+  }
+  lista.hidden = !filas;
+  $("apuntes-vacio").hidden = filas > 0;
+  $("apuntes-vacio").textContent = !marcados.length ? "Marca un día para ver sus apuntes."
+    : (varios ? "Los días marcados no tienen apuntes." : "Este día aún no tiene apuntes.");
+  pintarBotonEliminar();
+}
+
+// El boton dice A QUE dias anade (antes: "Añadir a días marcados", que obligaba
+// a mirar arriba para saberlo).
+function pintarBotonAnadir() {
+  const marcados = diasMarcados();
+  const b = $("b-anadir");
+  if (!marcados.length) b.textContent = "Añadir (marca un día)";
+  else if (marcados.length === 1) {
+    const d = marcados[0];
+    b.textContent = `Añadir a ${d.nombre.slice(0, 3).toLowerCase()} ${d.fecha}`;
+  } else b.textContent = `Añadir a ${marcados.length} días`;
 }
 
 function actualizarTotales() {
@@ -461,10 +540,14 @@ async function borrarItems(items, { confirmar = true } = {}) {
   }
 }
 
+// Supr / boton: lo seleccionado; si no hay nada seleccionado, el apunte que
+// tenga el foco del teclado.
 function eliminarSeleccion() {
-  return borrarItems([...st.seleccion].map((clave) => {
+  const claves = st.seleccion.size ? [...st.seleccion]
+    : [document.activeElement?.closest?.(".apunte")?.dataset.clave].filter(Boolean);
+  return borrarItems(claves.map((clave) => {
     const [fecha, id] = clave.split("|");
-    const fila = document.querySelector(`tr[data-clave="${CSS.escape(clave)}"]`);
+    const fila = document.querySelector(`.apunte[data-clave="${CSS.escape(clave)}"]`);
     return { fecha, id, destino: fila?.dataset.destino || "op" };
   }));
 }

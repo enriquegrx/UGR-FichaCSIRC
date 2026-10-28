@@ -115,6 +115,13 @@ def _recurso(*partes):
 
 # ---------------- estado de un dia (lo que pinta cada tarjeta) ----------------
 
+def _horas(h):
+    """6.5 -> '6,5h': como se escribe en España. Toda cifra de horas que pinta la
+    interfaz pasa por aqui (core._fmt da punto, y mezclar '6.5h' en una fila con
+    '6,5 h' en su cabecera quedaba incoherente)."""
+    return core._fmt(h).replace(".", ",")
+
+
 def estado_dia(d, apuntes, hoy=None):
     """Lo que necesita la tarjeta de un dia. Misma logica que
     registrar_gui._pintar_semana, pero devuelta como datos: el HTML no decide
@@ -130,24 +137,24 @@ def estado_dia(d, apuntes, hoy=None):
         frac = 1.0
         texto = core.motivo_no_laborable(iso).capitalize()
         if reg:
-            texto = f"{core._fmt(reg)} · {texto}"
+            texto = f"{_horas(reg)} · {texto}"
     elif apuntes is None:
         estado, frac, texto = "error", 0.0, "sin conexión"
     elif h_permiso and obj == 0:
         estado, frac, texto = "permiso", 1.0, "Permiso (día completo)"
         if reg:
-            texto = f"{core._fmt(reg)} · {texto}"
+            texto = f"{_horas(reg)} · {texto}"
     elif reg > obj + 0.001:
         estado, frac = "pasado", 1.0
-        texto = f"{core._fmt(reg)} / {core._fmt(obj)}  (te pasas)"
+        texto = f"{_horas(reg)} / {_horas(obj)}  (te pasas)"
     elif reg >= obj - 0.001 and reg > 0:
         estado, frac = "completo", 1.0
-        texto = f"{core._fmt(reg)} / {core._fmt(obj)}  ✔"
+        texto = f"{_horas(reg)} / {_horas(obj)}  ✔"
     elif reg > 0:
         estado, frac = "parcial", (reg / obj if obj else 0.0)
-        texto = f"{core._fmt(reg)} / {core._fmt(obj)}"
+        texto = f"{_horas(reg)} / {_horas(obj)}"
     else:
-        estado, frac, texto = "vacio", 0.0, f"0h / {core._fmt(obj)}"
+        estado, frac, texto = "vacio", 0.0, f"0h / {_horas(obj)}"
     return {
         "iso": iso,
         "nombre": core.DIAS_ES[d.weekday()],
@@ -168,7 +175,7 @@ def estado_dia(d, apuntes, hoy=None):
             f"{(core.tipo_permiso(p.get('tipo')) or {}).get('nombre', p.get('tipo'))}: "
             f"{core.fmt_horas_hhmm(p.get('horas') or 0)}" for p in core.permisos_dia(iso)],
         "apuntes": [
-            {"id": str(a["id"]), "horas": a["horas"], "horas_txt": core._fmt(a["horas"]),
+            {"id": str(a["id"]), "horas": a["horas"], "horas_txt": _horas(a["horas"]),
              "wp_id": str(a.get("wp_id") or ""), "tarea": a["wp_titulo"],
              "actividad": a["actividad"], "comentario": a["comentario"],
              "destino": a.get("destino", "op")}
@@ -323,7 +330,7 @@ class Api:
         cupo_tt = core.teletrabajo_por_semana()
         return {
             "titulo": f"Semana {dias[0].strftime('%d/%m/%Y')} - {dom.strftime('%d/%m/%Y')}",
-            "total": f"{core._fmt(reg)} / {core._fmt(obj)}",
+            "total": f"{_horas(reg)} / {_horas(obj)}",
             "teletrabajo": (f"{core.teletrabajo_en_semana(dias[0])}/{cupo_tt}"
                             if cupo_tt else ""),
             "conexion": "error" if fallos >= len(dias) else ("warn" if fallos else "ok"),
@@ -374,11 +381,11 @@ class Api:
             ya = sum(e["horas"] for e in (self._cache.get(i) or [])
                      if str(e.get("wp_id")) == str(wp_id))
             if ya:
-                repetidos.append(f"{nombre(i)} (ya tiene {core._fmt(ya)})")
+                repetidos.append(f"{nombre(i)} (ya tiene {_horas(ya)})")
         if repetidos:
             avisos.append({"clave": "repetir", "titulo": "Esa tarea ya tiene horas ese día",
                            "texto": "Ya hay horas de esta tarea en: " + ", ".join(repetidos)
-                                    + f". ¿Añadir {core._fmt(horas)} más? "
+                                    + f". ¿Añadir {_horas(horas)} más? "
                                       "(Si dices que no, esos días se dejan como están.)"})
         exceso = []
         for i in dias_iso:
@@ -387,7 +394,7 @@ class Api:
             reg = sum(a["horas"] for a in (self._cache.get(i) or []))
             obj = core.objetivo_de(dt.date.fromisoformat(i))
             if reg + horas > obj + 0.001:
-                exceso.append(f"{nombre(i)} ({core._fmt(reg + horas)} de {core._fmt(obj)})")
+                exceso.append(f"{nombre(i)} ({_horas(reg + horas)} de {_horas(obj)})")
         if exceso:
             avisos.append({"clave": "exceso", "titulo": "Jornada superada",
                            "texto": "Con este apunte te pasarás de la jornada en: "
@@ -614,7 +621,7 @@ class Api:
                 if apuntes:
                     self._copia = ("dia", [(i, apuntes) for i in sorted(dias_iso)])
                     return {"origen": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
-                            "lineas": [f"{core._fmt(a['horas'])}  {a['wp_titulo']}"
+                            "lineas": [f"{_horas(a['horas'])}  {a['wp_titulo']}"
                                        for a in apuntes],
                             "n": len(apuntes), "dias": len(dias_iso)}
             d -= dt.timedelta(days=1)
@@ -633,7 +640,7 @@ class Api:
                                   for i, o in enumerate(origen)])
         return {"origen": origen[0].strftime("%d/%m"), "n": total,
                 "lineas": [f"{core.DIAS_ES[i]}: {len(leidos[o.isoformat()])} apunte(s), "
-                           f"{core._fmt(sum(a['horas'] for a in leidos[o.isoformat()]))}"
+                           f"{_horas(sum(a['horas'] for a in leidos[o.isoformat()]))}"
                            for i, o in enumerate(origen) if leidos[o.isoformat()]]}
 
     def ejecutar_copia(self):
@@ -646,7 +653,7 @@ class Api:
     # ---- plantillas ----
     def plantillas(self):
         return [{"nombre": p["nombre"], "n": len(p.get("apuntes", [])),
-                 "total": core._fmt(sum(a.get("horas", 0) for a in p.get("apuntes", [])))}
+                 "total": _horas(sum(a.get("horas", 0) for a in p.get("apuntes", [])))}
                 for p in core.PLANTILLAS]
 
     def guardar_plantilla_dia(self, iso, nombre):
@@ -710,17 +717,17 @@ class Api:
                 if obj and reg < obj - 0.001:
                     incompletos.append({"iso": iso,
                                         "dia": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
-                                        "horas": f"{core._fmt(reg)} / {core._fmt(obj)}"})
+                                        "horas": f"{_horas(reg)} / {_horas(obj)}"})
         al_dia = total >= obj_hoy - 0.001
         meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
                  "septiembre", "octubre", "noviembre", "diciembre"]
         return {"titulo": f"{meses[mes - 1].capitalize()} {anio}",
-                "registrado": core._fmt(total), "objetivo_hoy": core._fmt(obj_hoy),
-                "objetivo_mes": core._fmt(obj_mes), "al_dia": al_dia,
+                "registrado": _horas(total), "objetivo_hoy": _horas(obj_hoy),
+                "objetivo_mes": _horas(obj_mes), "al_dia": al_dia,
                 "estado": "Al día ✔" if al_dia else
-                          f"Te faltan {core._fmt(obj_hoy - total)} para estar al día",
+                          f"Te faltan {_horas(obj_hoy - total)} para estar al día",
                 "frac": round(max(0.0, min(total / obj_mes if obj_mes else 0.0, 1.0)), 3),
-                "teletrabajo": (f"Incluye teletrabajo en INARI: {core._fmt(tt_horas)} "
+                "teletrabajo": (f"Incluye teletrabajo en INARI: {_horas(tt_horas)} "
                                 f"en {tt_dias} día(s)") if tt_dias else "",
                 "incompletos": incompletos}
 
@@ -749,7 +756,7 @@ class Api:
             w.writerow([])
             w.writerow(["", core.horas_csv(total), "TOTAL"])
         self._ultima_exportacion = ruta
-        return {"ruta": ruta, "n": len(apuntes), "total": core._fmt(total)}
+        return {"ruta": ruta, "n": len(apuntes), "total": _horas(total)}
 
     def _pedir_ruta(self, nombre):
         import webview
@@ -980,7 +987,7 @@ class Api:
 
     def duracion(self, inicio, fin):
         h = core.duracion_horas(inicio, fin)
-        return core._fmt(h) if h else ""
+        return _horas(h) if h else ""
 
     def inari_registrar(self, iso, inicio, fin, descripcion, columna, carril, categoria):
         if core.duracion_horas(inicio, fin) is None:

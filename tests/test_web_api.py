@@ -61,7 +61,7 @@ class TestEstadoDia(Base):
     def test_apuntes_serializables(self):
         a = web.estado_dia(L, [apunte(5, 2.5, com="<b>hola</b>")])["apuntes"][0]
         self.assertEqual((a["id"], a["horas_txt"], a["comentario"]),
-                         ("5", "2.5h", "<b>hola</b>"))   # el JS lo pinta como texto
+                         ("5", "2,5h", "<b>hola</b>"))   # el JS lo pinta como texto
 
 
 class TestSemana(Base):
@@ -237,7 +237,7 @@ class TestDialogos(Base):
         with mock.patch.object(core, "entradas_rango", return_value=apuntes), \
              mock.patch.object(self.api, "_pedir_ruta", return_value=ruta):
             r = self.api.exportar_csv("2026-10-31", "2026-10-01")   # al reves: se ordena
-        self.assertEqual((r["n"], r["total"]), (2, "7.5h"))
+        self.assertEqual((r["n"], r["total"]), (2, "7,5h"))
         with open(ruta, encoding="utf-8-sig") as f:
             lineas = f.read().splitlines()
         self.assertEqual(lineas[1].split(";")[:2], ["2026-10-01", "1"])
