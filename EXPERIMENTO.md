@@ -16,14 +16,33 @@ propósito.
 
 ## Qué incluye el prototipo
 
-Semana con sus tarjetas, totales y chips; marcar días (clic, *Toda la semana*,
-Alt+1..5); añadir apuntes con **los mismos avisos** que la app de verdad (día sin
-leer, no laborable, tarea repetida, jornada superada); lista de apuntes con
-selección múltiple, eliminar y deshacer; menú del botón derecho del día
-(festivo, vacaciones, apertura de curso, baja, guardia, teletrabajo).
+Lo mismo que la app de verdad:
 
-**Aún no:** plantillas, permisos, resumen del mes, exportar CSV, buscar tareas
-fuera de favoritas, editar un apunte, INARI más allá de leerlo, aviso diario.
+- **Ventana principal:** semana con tarjetas, totales y chips; marcar días (clic,
+  *Toda la semana*, Alt+1..5); añadir apuntes con **los mismos avisos** (día sin
+  leer, no laborable, tarea repetida, jornada superada); lista con selección
+  múltiple, eliminar y deshacer; barra de menús (Archivo, Herramientas, Ayuda).
+- **Diálogos** (`web/dialogos.js`): editar apunte (doble clic), buscar tareas
+  (por proyecto o en todos) y añadirlas a favoritas, copiar día/semana anterior,
+  plantillas, resumen del mes, exportar CSV, importar festivos, vacaciones y
+  teletrabajo, permisos (saldo, concesiones, enlace a actividad, permisos del
+  año nuevo), integración INARI y registro de slots, novedades, atajos, acerca de.
+- **Botón derecho** sobre un día (festivo, vacaciones, permiso, guardia,
+  teletrabajo, guardar como plantilla, eliminar apuntes del día, slot de INARI)
+  y sobre Actividad (asociarla con la tarea).
+
+Mejoras respecto a la app Tkinter que ya vienen de serie:
+
+- **Resumen del mes y exportar CSV hacen una sola consulta** por rango en vez de
+  una por día (el resumen de un mes: ~0,5 s frente a 22 consultas).
+- El **token de INARI nunca llega a la ventana**: solo se sabe si hay uno guardado.
+- El **pie de botones de cada diálogo siempre se ve**, se encoja lo que se encoja.
+- El **botón derecho funciona igual en Windows y en Mac** (lo resuelve el visor
+  web, sin el lío de Button-2/Button-3 de Tk).
+
+**A propósito no está:** el **aviso diario de fichaje**. Es la misma tarea
+programada que usa la app de verdad: activarlo aquí la haría apuntar al
+experimento. Se sigue gestionando desde la app normal.
 
 ## Ojo al probarlo
 

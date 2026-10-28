@@ -43,6 +43,7 @@ jobs:
           pyinstaller --noconfirm --clean --onedir --windowed --noupx
           --name "FichaCSIRC-Web" --icon "fichacsirc.ico"
           --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          --add-data "NOVEDADES.md;."
           registrar_web.py
 
       - uses: actions/upload-artifact@v4
@@ -73,6 +74,7 @@ jobs:
           pyinstaller --noconfirm --clean --windowed \
             --name "FichaCSIRC-Web" \
             --add-data "web:web" --add-data "logo_ugr.png:." \
+            --add-data "NOVEDADES.md:." \
             registrar_web.py
           ditto -c -k --keepParent dist/FichaCSIRC-Web.app dist/FichaCSIRC-Web-mac-arm64.zip
 

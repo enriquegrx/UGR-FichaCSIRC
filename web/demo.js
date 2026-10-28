@@ -80,6 +80,8 @@
       tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })),
       actividades: ["Actuaciones técnicas", "Asuntos propios", "Formación", "Soporte"],
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
+      github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
+      asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false,
     }),
     usuario: () => espera("Persona de Prueba"),
     semana: (lunes) => espera(semana(lunes)),
@@ -135,4 +137,117 @@
     },
     teletrabajo_lleno: () => espera(marcas.tele.size >= 1),
   } };
+
+  // ---- dialogos ----
+  const asoc = { "Asuntos propios": 13001 };
+  const plantillas = [{ nombre: "Día tipo (7h)", apuntes: [{ id: 11765, horas: 5 }, { id: 12065, horas: 2 }] }];
+  let copia = null;
+  const permisos = [
+    { id: "ap", nombre: "Asuntos particulares por horas", actividad: "Asuntos propios",
+      concesiones: [{ horas: 70, fecha_limite: "2027-01-15" }], local: 2, pt: 4.5 },
+    { id: "sm", nombre: "Compensación por servicios mínimos", actividad: "",
+      concesiones: [{ horas: 28, fecha_limite: "2026-11-10" }, { horas: 28, fecha_limite: "2027-04-06" }], local: 38, pt: 0 },
+  ];
+  const hhmm = (h) => `${Math.floor(h)}:${String(Math.round((h % 1) * 60)).padStart(2, "0")}`;
+  const vistaPermisos = () => ({
+    desde: "01/01/2026", anio: 2026, hay_actividades: permisos.some((p) => p.actividad),
+    actividades: ["Actuaciones técnicas", "Asuntos propios", "Formación", "Soporte"],
+    filas: permisos.map((p) => {
+      const cupo = p.concesiones.reduce((s, c) => s + c.horas, 0);
+      const usadas = p.local + (p.actividad ? p.pt : 0);
+      return { id: p.id, nombre: p.nombre, actividad: p.actividad, concedidas: hhmm(cupo),
+        usadas: hhmm(usadas), usadas_local: hhmm(p.local), usadas_pt: hhmm(p.pt),
+        disponibles: hhmm(cupo - usadas), negativo: cupo < usadas,
+        concesiones: p.concesiones.map((c) => ({ horas: hhmm(c.horas), fecha_limite: c.fecha_limite,
+          estado: c.fecha_limite === "2026-11-10" ? "por_caducar" : "" })) };
+    }) });
+  Object.assign(window.pywebview.api, {
+    editar: (fecha, id, horas) => {
+      const a = (apuntes[fecha] || []).find((x) => String(x.id) === String(id));
+      if (!a) return espera({ error: "Ese apunte ya no está." });
+      a.horas = parseFloat(String(horas).replace(",", "."));
+      return espera({ ok: true });
+    },
+    asociar: (wp, act) => { asoc[act] = Number(wp); return espera({ ...asoc }); },
+    desasociar: (act) => { delete asoc[act]; return espera({ ...asoc }); },
+    proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" }]),
+    tareas_de_proyecto: (pid) => espera(pid === "2" ? { error: "No tienes permiso para ver las tareas de este proyecto." }
+      : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
+    buscar_tareas: (t) => espera(t.length < 3 ? { error: "Escribe al menos 3 letras." }
+      : { tareas: [{ id: 14000, nombre: "[ASG] Migración de correo" }] }),
+    elegir_tareas: (ts) => {
+      for (const t of ts) if (!tareas.some((x) => x.id === t.id)) tareas.unshift(t);
+      return espera(tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })));
+    },
+    preparar_copia_dia: (dias) => {
+      copia = dias.map((i) => [i, apuntes[d(0)] || []]);
+      return espera({ origen: "Lunes", n: (apuntes[d(0)] || []).length, dias: dias.length,
+        lineas: (apuntes[d(0)] || []).map((a) => `${fmt(a.horas)}  ${a.tarea}`) });
+    },
+    preparar_copia_semana: () => espera({ vacio: "La semana anterior no tiene apuntes (demo)." }),
+    ejecutar_copia: () => {
+      let creados = 0;
+      for (const [i, ap] of copia || []) for (const a of ap) {
+        if ((apuntes[i] || []).some((x) => x.wp_id === a.wp_id)) continue;
+        (apuntes[i] = apuntes[i] || []).push({ ...a, id: siguiente++ });
+        creados++;
+      }
+      return espera({ creados, saltados: 0, errores: 0, ultimo: "" });
+    },
+    plantillas: () => espera(plantillas.map((p) => ({ nombre: p.nombre, n: p.apuntes.length,
+      total: fmt(p.apuntes.reduce((s, a) => s + a.horas, 0)) }))),
+    guardar_plantilla_dia: (i, nombre) => {
+      plantillas.push({ nombre, apuntes: (apuntes[i] || []).map((a) => ({ id: a.wp_id, horas: a.horas })) });
+      return espera({ ok: true, n: (apuntes[i] || []).length });
+    },
+    aplicar_plantilla: () => espera({ creados: 2, saltados: 0, errores: 0, ultimo: "" }),
+    eliminar_plantilla: (n) => {
+      plantillas.splice(plantillas.findIndex((p) => p.nombre === n), 1);
+      return window.pywebview.api.plantillas();
+    },
+    resumen_mes: (a, m) => espera({ titulo: `Mes ${m}/${a}`, registrado: "98h", objetivo_hoy: "104h",
+      objetivo_mes: "147h", al_dia: false, estado: "Te faltan 6h para estar al día", frac: 0.66,
+      teletrabajo: "", incompletos: [{ iso: d(2), dia: `Miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)}`, horas: "1h / 7h" }] }),
+    exportar_csv: () => espera({ ruta: "C:\\Users\\demo\\horas.csv", n: 4, total: "11,5h" }),
+    abrir_exportacion: () => espera({ ok: true }),
+    festivos: (n, a, l) => espera([n && { fecha: "08/12/2026", nombre: "La Inmaculada" },
+      n && { fecha: "25/12/2026", nombre: "Navidad" }, l && { fecha: "02/01/2027", nombre: "Toma de Granada" }].filter(Boolean)),
+    importar_festivos: () => espera({ n: 3 }),
+    ajustes_dias: () => espera({ anio: 2026, cupo: 22, usadas: 9, tt: 1 }),
+    guardar_ajustes_dias: (c) => espera(Number(c) > 60 ? { error: "El cupo de vacaciones va de 0 a 60 días." } : { ok: true }),
+    permisos: () => espera(vistaPermisos()),
+    actualizar_usadas_pt: () => espera(vistaPermisos()),
+    anadir_concesion: (id, h, f) => {
+      const p = permisos.find((x) => x.id === id);
+      const horas = parseFloat(String(h).replace(":", "."));
+      if (!(horas > 0)) return espera({ error: "Las horas concedidas deben ser un número positivo." });
+      p.concesiones.push({ horas, fecha_limite: f || "" });
+      return espera(vistaPermisos());
+    },
+    quitar_concesion: (id, i) => { permisos.find((x) => x.id === id).concesiones.splice(i, 1); return espera(vistaPermisos()); },
+    fijar_actividad_permiso: (id, act) => { permisos.find((x) => x.id === id).actividad = act; return espera(vistaPermisos()); },
+    info_permiso_dia: (i) => espera({ dia: i, libre: "7:00", lleno: false, ya: "0:00", jornada: "6:30",
+      dia_entero: "7:00", dia_completo: "7:00", distintas: true,
+      tipos: permisos.map((p) => ({ id: p.id, nombre: p.nombre, disponible: "63:30", actividad: p.actividad,
+        caducadas: 0, caduca: p.id === "sm" ? "2026-11-10" : "" })) }),
+    anadir_permiso: (i, t, h, conf) => espera(!conf && t === "sm"
+      ? { confirmar: "Te quedan 18:00 y vas a usar 20:00. ¿Continuar?" } : { ok: true, horas: h }),
+    propuesta_permisos_anio: () => espera({ anio: 2027, filas: permisos.map((p) => ({ id: p.id, nombre: p.nombre,
+      horas: hhmm(p.concesiones[p.concesiones.length - 1].horas), fecha_limite: "2028-01-15", quedan: "40:00" })) }),
+    anadir_permisos_anio: (filas) => espera({ n: filas.filter((f) => f.horas).length }),
+    permisos_anio_no: () => espera({ ok: true }),
+    inari_config: () => espera({ activo: false, url: "https://inari.ugr.es/kanboard/jsonrpc.php", usuario: "",
+      hay_token: false, proyecto: null, columna: null, carril: null, categoria: null }),
+    inari_probar: () => espera({ error: "Escribe usuario y token." }),
+    inari_tablero: () => espera({ columnas: [], carriles: [], categorias: [] }),
+    inari_guardar: () => espera({ ok: true }),
+    inari_opciones_slot: () => espera({ columnas: [{ id: 1, nombre: "Hecho" }], carriles: [{ id: 1, nombre: "General" }],
+      categorias: [{ id: 3, nombre: "Soporte" }], pref: { columna: 1, carril: 1, categoria: 3 } }),
+    duracion: (a, b) => espera(a && b && b > a ? "1.5h" : ""),
+    inari_registrar: () => espera({ ok: true }),
+    novedades: () => espera([{ estilo: "version", texto: "Versión 2.9.2" }, { estilo: "apartado", texto: "Mejoras" },
+      { estilo: "punto", texto: "Permisos: lo que no usas ya no se pierde en enero." },
+      { estilo: "punto", texto: "Mac: ahora se instala con un .dmg." }]),
+    abrir_github: () => espera({ ok: true }),
+  });
 })();

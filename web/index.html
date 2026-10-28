@@ -7,6 +7,11 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
+<nav class="menubar" aria-label="Menú">
+  <button data-menu="archivo">Archivo</button>
+  <button data-menu="herramientas">Herramientas</button>
+  <button data-menu="ayuda">Ayuda</button>
+</nav>
 <header class="cabecera">
   <img id="logo" alt="" hidden>
   <div class="marca">
@@ -29,13 +34,18 @@
       <span id="total-semana" class="total"></span>
       <span id="tt-semana" class="chip chip-tele" hidden></span>
     </div>
+    <button id="b-resumen" title="Horas del mes: registradas, objetivo y días incompletos">Resumen</button>
+    <button id="b-exportar" title="Exporta tus apuntes a CSV por rango de fechas">Exportar CSV…</button>
     <button id="b-recargar" title="Recargar (F5)">⟳</button>
   </section>
 
   <section class="panel">
     <div class="cabeza-seccion">
       <h2>Días</h2>
-      <label class="check"><input type="checkbox" id="toda-semana"> Toda la semana</label>
+      <div class="fila">
+        <label class="check"><input type="checkbox" id="toda-semana"> Toda la semana</label>
+        <button id="b-copiar" title="Repetir apuntes: el último día con horas, la semana pasada o una plantilla">Copiar / Plantillas ▾</button>
+      </div>
     </div>
     <div id="dias" class="dias"></div>
     <div class="leyenda">
@@ -57,12 +67,13 @@
       <div class="campo-tarea">
         <input id="tarea" list="lista-tareas" placeholder="Escribe para filtrar tus favoritas">
         <datalist id="lista-tareas"></datalist>
+        <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar…</button>
       </div>
       <label for="horas">Horas</label>
       <div class="fila">
         <input id="horas" class="horas" inputmode="decimal" placeholder="0">
         <label for="actividad" class="sub">Actividad</label>
-        <select id="actividad"></select>
+        <select id="actividad" title="Botón derecho: asociarla con la tarea elegida"></select>
       </div>
       <label for="comentario">Comentario</label>
       <div class="fila">
@@ -107,5 +118,6 @@
 
 <script src="demo.js"></script>
 <script src="app.js"></script>
+<script src="dialogos.js"></script>
 </body>
 </html>

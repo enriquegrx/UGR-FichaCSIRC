@@ -1,9 +1,10 @@
-/* FichaCSIRC - prototipo web (pywebview).
+/* FichaCSIRC - prototipo web (pywebview): ventana principal.
  *
  * El JS solo pinta y recoge lo que hace el usuario: toda la logica (estado de
  * cada dia, avisos antes de anadir, llamadas a ProyectosTic) vive en Python,
  * en la clase Api de registrar_web.py, accesible como window.pywebview.api.
  * Cada llamada devuelve una promesa: la ventana nunca se congela.
+ * Los dialogos (editar, plantillas, permisos...) estan en dialogos.js.
  *
  * Todo el texto que viene de los datos se pone con textContent (nunca
  * innerHTML), para que un comentario con "<" no pueda inyectar HTML.
@@ -14,15 +15,17 @@ const $ = (id) => document.getElementById(id);
 const api = () => window.pywebview.api;
 
 const st = {
+  ini: null,            // respuesta de api.inicio()
   lunes: null,          // "AAAA-MM-DD"
   hoyLunes: null,
   semana: null,         // ultima respuesta de api.semana()
   marcados: new Set(),  // iso de los dias marcados
   seleccion: new Set(), // "fecha|id" de las filas seleccionadas
   tareas: new Map(),    // texto -> id
+  asociaciones: {},     // actividad -> wp_id (hechas a mano)
   horasAuto: "",
   comAuto: "",
-  comentarioGuardia: "",
+  comHabitual: "",
   ocupado: false,
 };
 
@@ -31,19 +34,25 @@ const st = {
 function el(tag, props = {}, ...hijos) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
+    if (v === undefined || v === null || v === false) continue;
     if (k === "class") n.className = v;
     else if (k === "text") n.textContent = v;
     else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
-    else n.setAttribute(k, v);
+    else n.setAttribute(k, v === true ? "" : v);
   }
-  for (const h of hijos) if (h) n.append(h);
+  for (const h of hijos) if (h !== null && h !== undefined && h !== false) n.append(h);
   return n;
 }
 
 function sumarDias(iso, n) {
   const [a, m, d] = iso.split("-").map(Number);
-  const f = new Date(Date.UTC(a, m - 1, d + n));
-  return f.toISOString().slice(0, 10);
+  return new Date(Date.UTC(a, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+function lunesDe(iso) {
+  const [a, m, d] = iso.split("-").map(Number);
+  const dia = new Date(Date.UTC(a, m - 1, d)).getUTCDay();   // 0 = domingo
+  return sumarDias(iso, -((dia + 6) % 7));
 }
 
 function fmtHoras(h) {
@@ -52,18 +61,19 @@ function fmtHoras(h) {
 
 function estado(texto) { $("estado").textContent = texto || ""; }
 
-function nombreDia(iso) {
-  const d = (st.semana?.dias || []).find((x) => x.iso === iso);
-  return d ? `${d.nombre} ${d.fecha}` : iso;
+function diasMarcados() {
+  return (st.semana?.dias || []).filter((d) => st.marcados.has(d.iso));
 }
 
-// Modal propio (confirm() no es igual en todos los visores web).
-function preguntar(titulo, texto, { soloAceptar = false } = {}) {
+// Modal de pregunta propio (confirm() no es igual en todos los visores web).
+// Va por encima de cualquier dialogo abierto.
+function preguntar(titulo, texto, { soloAceptar = false, si = "Sí", no = "No" } = {}) {
   return new Promise((resolver) => {
     $("modal-titulo").textContent = titulo;
     $("modal-texto").textContent = texto;
     $("modal-no").hidden = soloAceptar;
-    $("modal-si").textContent = soloAceptar ? "Aceptar" : "Sí";
+    $("modal-no").textContent = no;
+    $("modal-si").textContent = soloAceptar ? "Aceptar" : si;
     $("modal").hidden = false;
     $("modal-si").focus();
     const cerrar = (valor) => {
@@ -93,12 +103,83 @@ async function llamar(fn, ...args) {
   }
 }
 
+// Resultado de crear apuntes en lote (anadir, copiar, plantilla): avisa de
+// los errores, recarga la semana y deja el resumen en la barra de estado.
+async function informarLote(r, { hecho, nada }) {
+  if (r.error) { await avisar("No se pudo", r.error); return; }
+  if (r.errores && !r.creados) {
+    await avisar("No se creó ningún apunte", `Detalle: ${r.ultimo}`);
+  } else if (r.errores) {
+    await avisar("Hecho con errores",
+      `Creados: ${r.creados}. Con errores: ${r.errores}.\nÚltimo error: ${r.ultimo}`);
+  }
+  await cargarSemana();
+  if (r.creados) {
+    estado(`${hecho(r.creados)}${r.saltados ? ` Saltados ${r.saltados} (ya existían).` : ""}`);
+  } else if (!r.errores) {
+    estado(nada);
+  }
+}
+
+// ---------------------------------------------------------------- menus
+
+function cerrarMenu() { $("menu").hidden = true; }
+
+/* items: [{texto, accion, desactivado}] | "-" (separador) | {titulo} */
+function mostrarMenu(x, y, items) {
+  const m = $("menu");
+  m.replaceChildren();
+  for (const it of items) {
+    if (it === "-") { m.append(el("hr")); continue; }
+    if (it.titulo) { m.append(el("div", { class: "titulo-menu", text: it.titulo })); continue; }
+    m.append(el("button", {
+      text: it.texto, disabled: !!it.desactivado,
+      onclick: () => { cerrarMenu(); it.accion(); },
+    }));
+  }
+  m.hidden = false;
+  const r = m.getBoundingClientRect();
+  m.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 8))}px`;
+  m.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 8))}px`;
+  m.querySelector("button:not([disabled])")?.focus();
+}
+
+function menuBajo(boton, items) {
+  const r = boton.getBoundingClientRect();
+  mostrarMenu(r.left, r.bottom + 2, items);
+}
+
+const MENUS = {
+  archivo: () => [
+    { texto: "Exportar a CSV…", accion: dlgExportar },
+    { texto: "Resumen del mes", accion: dlgResumen },
+  ],
+  herramientas: () => [
+    { texto: "Plantillas…", accion: dlgPlantillas },
+    { texto: "Importar festivos…", accion: dlgFestivos },
+    { texto: "Vacaciones y teletrabajo…", accion: dlgAjustesDias },
+    { texto: "Permisos (horas)…", accion: dlgPermisos },
+    { texto: "Integraciones (INARI)…", accion: dlgInari },
+    { texto: "Aviso diario de fichaje…", accion: dlgRecordatorio },
+  ],
+  ayuda: () => [
+    { texto: "Atajos de teclado", accion: dlgAtajos },
+    { texto: "Novedades (qué hay de nuevo)", accion: dlgNovedades },
+    { texto: "Comprobar actualizaciones", accion: () => avisar("Comprobar actualizaciones",
+        "El prototipo no comprueba actualizaciones a propósito: no debe ofrecer instalar "
+        + "la versión de producción encima. Usa tu FichaCSIRC normal.") },
+    st.ini?.github ? { texto: "Ver en GitHub", accion: () => llamar("abrir_github", "") } : null,
+    "-",
+    { texto: "Acerca de FichaCSIRC", accion: dlgAcerca },
+  ].filter(Boolean),
+};
+
 // ---------------------------------------------------------------- arranque
 
 async function arrancar() {
-  const ini = await llamar("inicio");
+  const ini = st.ini = await llamar("inicio");
   st.lunes = st.hoyLunes = ini.lunes;
-  st.comentarioGuardia = ini.comentario_guardia;
+  st.asociaciones = ini.asociaciones || {};
   $("version").textContent = `${ini.plataforma} · v${ini.version} · prototipo web`;
   if (ini.logo) { $("logo").src = ini.logo; $("logo").hidden = false; }
   if (ini.inari) { $("subtitulo").textContent += " e INARI"; $("conn-inari").hidden = false; }
@@ -107,22 +188,24 @@ async function arrancar() {
   await cargarSemana({ marcarHoy: true });
   if (st.tareas.size) elegirTarea();
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
+  // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
+  if (ini.toca_permisos_anio) setTimeout(() => dlgPermisosAnio({ manual: false }), 700);
 }
 
 // ---------------------------------------------------------------- semana
 
-async function cargarSemana({ marcarHoy = false } = {}) {
+async function cargarSemana({ marcarHoy = false, marcar = null } = {}) {
   estado("Cargando semana…");
   $("conn").className = "conn";
   const s = await llamar("semana", st.lunes);
-  pintarSemana(s, marcarHoy);
+  pintarSemana(s, marcarHoy, marcar);
 }
 
 async function repintarLocal() {
   pintarSemana(await llamar("repintar", st.lunes), false);
 }
 
-function pintarSemana(s, marcarHoy) {
+function pintarSemana(s, marcarHoy, marcar = null) {
   st.semana = s;
   $("titulo-semana").textContent = s.titulo;
   $("total-semana").textContent = s.total;
@@ -131,10 +214,8 @@ function pintarSemana(s, marcarHoy) {
   $("conn").className = `conn ${s.conexion}`;
   $("conn").title = { ok: "Conectado", warn: "Algún día no se pudo leer",
                       error: "Sin conexión con ProyectosTic" }[s.conexion];
-  if (marcarHoy) {
-    st.marcados = new Set(s.dias.filter((d) => d.es_hoy).map((d) => d.iso));
-  }
-  // los marcados que ya no estan en esta semana se descartan
+  if (marcar) st.marcados = new Set(marcar);
+  else if (marcarHoy) st.marcados = new Set(s.dias.filter((d) => d.es_hoy).map((d) => d.iso));
   st.marcados = new Set([...st.marcados].filter((i) => s.dias.some((d) => d.iso === i)));
   st.seleccion.clear();
 
@@ -152,10 +233,17 @@ function pintarSemana(s, marcarHoy) {
     const tarjeta = el("div", {
       class: `dia ${d.estado}${d.es_hoy ? " hoy" : ""}`,
       tabindex: "0", role: "button",
-      title: `${d.nombre} ${d.fecha} · Alt+${i + 1}`,
+      title: `${d.nombre} ${d.fecha} · Alt+${i + 1} · botón derecho: más opciones`,
       onclick: () => alternarDia(d.iso),
-      oncontextmenu: (e) => { e.preventDefault(); menuDia(e, d); },
-      onkeydown: (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); alternarDia(d.iso); } },
+      oncontextmenu: (e) => { e.preventDefault(); menuDia(e.clientX, e.clientY, d); },
+      onkeydown: (e) => {
+        if (e.key === " " || e.key === "Enter") { e.preventDefault(); alternarDia(d.iso); }
+        if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+          e.preventDefault();
+          const r = tarjeta.getBoundingClientRect();
+          menuDia(r.left + 20, r.bottom - 10, d);
+        }
+      },
     },
       el("div", { class: "titulo", text: `${d.nombre} ${d.fecha}${d.es_hoy ? "  · hoy" : ""}` }),
       barra,
@@ -163,7 +251,6 @@ function pintarSemana(s, marcarHoy) {
       chips.childElementCount ? chips : null);
     tarjeta.dataset.iso = d.iso;
     cont.append(tarjeta);
-    // la barra se anima desde 0 al ancho que toca
     requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
   });
   pintarMarcados();
@@ -176,9 +263,45 @@ function alternarDia(iso) {
 
 function pintarMarcados() {
   for (const t of $("dias").children) t.classList.toggle("marcado", st.marcados.has(t.dataset.iso));
-  $("toda-semana").checked = st.semana && st.marcados.size === st.semana.dias.length;
+  $("toda-semana").checked = !!st.semana && st.marcados.size === st.semana.dias.length;
   pintarTabla();
   actualizarTotales();
+}
+
+function menuDia(x, y, d) {
+  const items = [{ titulo: `${d.nombre} ${d.fecha}` }];
+  const marca = (accion, motivo = "") => async () => {
+    if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
+        && !(await preguntar("Teletrabajo",
+              "Ya tienes cubierto el cupo de teletrabajo de esta semana.\n¿Marcar otro igualmente?"))) return;
+    await llamar("accion_dia", d.iso, accion, motivo);
+    await repintarLocal();
+  };
+  if (d.no_laborable) {
+    items.push({ texto: `Quitar marca (${d.motivo})`, accion: marca("quitar_no_laborable") });
+  } else {
+    for (const motivo of ["festivo", "vacaciones", "apertura de curso", "baja"]) {
+      items.push({ texto: `Marcar como ${motivo}`, accion: marca("no_laborable", motivo) });
+    }
+    items.push("-", { texto: "Añadir permiso por horas…", accion: () => dlgPermisoDia(d) });
+    d.permiso_detalle.forEach((p, i) => {
+      items.push({ texto: `Quitar permiso: ${p}`, accion: marca("quitar_permiso", String(i)) });
+    });
+  }
+  items.push("-",
+    { texto: d.guardia ? "Quitar guardia" : "Marcar día de guardia",
+      accion: marca(d.guardia ? "quitar_guardia" : "guardia") },
+    { texto: d.teletrabajo ? "Quitar teletrabajo" : "Marcar teletrabajo",
+      accion: marca(d.teletrabajo ? "quitar_teletrabajo" : "teletrabajo") },
+    "-",
+    { texto: "Guardar este día como plantilla…", desactivado: !d.apuntes.length,
+      accion: () => dlgGuardarPlantillaDia(d) },
+    { texto: "Eliminar apuntes de este día…", desactivado: !d.apuntes.length,
+      accion: () => dlgEliminarDia(d) });
+  if (d.teletrabajo && st.ini?.inari_listo) {
+    items.push("-", { texto: "Registrar slot en INARI…", accion: () => dlgSlotInari(d) });
+  }
+  mostrarMenu(x, y, items);
 }
 
 // ---------------------------------------------------------------- tabla
@@ -187,18 +310,19 @@ function pintarTabla() {
   const cuerpo = $("tabla");
   cuerpo.replaceChildren();
   let filas = 0;
-  for (const d of st.semana?.dias || []) {
-    if (!st.marcados.has(d.iso)) continue;
+  for (const d of diasMarcados()) {
     for (const a of d.apuntes) {
       const clave = `${d.iso}|${a.id}`;
       const tr = el("tr", {
         class: st.seleccion.has(clave) ? "sel" : "",
-        title: a.comentario ? `${a.tarea}\n“${a.comentario}”` : a.tarea,
+        title: (a.comentario ? `${a.tarea}\n“${a.comentario}”` : a.tarea)
+               + "\nDoble clic: editar",
         onclick: () => {
           if (st.seleccion.has(clave)) st.seleccion.delete(clave); else st.seleccion.add(clave);
           tr.classList.toggle("sel");
           $("b-eliminar").disabled = !st.seleccion.size;
         },
+        ondblclick: () => dlgEditar(d, a),
       },
         el("td", { text: `${d.nombre.slice(0, 3)} ${d.fecha}` }),
         el("td", { class: "num", text: a.horas_txt }),
@@ -218,7 +342,7 @@ function pintarTabla() {
 }
 
 function actualizarTotales() {
-  const marcados = (st.semana?.dias || []).filter((d) => st.marcados.has(d.iso));
+  const marcados = diasMarcados();
   if (marcados.length === 1) {
     const d = marcados[0];
     if (d.no_laborable) {
@@ -240,12 +364,10 @@ function actualizarTotales() {
 
 function ponerTareas(tareas) {
   st.tareas.clear();
-  const lista = $("lista-tareas");
-  lista.replaceChildren();
-  for (const t of tareas) {
+  $("lista-tareas").replaceChildren(...tareas.map((t) => {
     st.tareas.set(t.texto, t.id);
-    lista.append(el("option", { value: t.texto }));
-  }
+    return el("option", { value: t.texto });
+  }));
 }
 
 function ponerActividades(nombres, preferida) {
@@ -264,6 +386,11 @@ function resolverTarea() {
   return null;
 }
 
+function textoDeTarea(id) {
+  for (const [texto, wid] of st.tareas) if (wid === Number(id)) return texto;
+  return null;
+}
+
 async function elegirTarea() {
   if (!$("tarea").value && st.tareas.size) $("tarea").value = st.tareas.keys().next().value;
   const id = resolverTarea();
@@ -272,6 +399,40 @@ async function elegirTarea() {
   ponerActividades(r.nombres, r.preferida);
   st.comHabitual = r.comentario || "";
   sugerirComentario();
+}
+
+// Al elegir una actividad asociada a mano, la tarea salta sola a la suya (el
+// caso de "Asuntos propios" que acababa imputado en Mantenimientos).
+async function tareaDeActividad() {
+  const destino = st.asociaciones[$("actividad").value];
+  if (destino == null || resolverTarea() === Number(destino)) return;
+  const texto = textoDeTarea(destino);
+  if (!texto) return;                  // la tarea asociada ya no esta en la lista
+  $("tarea").value = texto;
+  const r = await llamar("actividades", destino);   // solo su comentario habitual:
+  st.comHabitual = r.comentario || "";               // no se pisa la actividad elegida
+  st.comAuto = "";
+  sugerirComentario();
+  estado(`Tarea cambiada a «${texto.split(" - ").slice(1).join(" - ").slice(0, 40)}» por la actividad elegida.`);
+}
+
+function menuActividad(e) {
+  e.preventDefault();
+  const wp = resolverTarea();
+  const act = $("actividad").value;
+  if (wp == null || !act) return;
+  const tarea = $("tarea").value.split(" - ").slice(1).join(" - ");
+  const items = [{ texto: `Asociar «${act}» con «${tarea.slice(0, 32)}»`, accion: async () => {
+    st.asociaciones = await llamar("asociar", wp, act);
+    estado(`«${act}» queda asociada a esa tarea.`);
+  } }];
+  if (st.asociaciones[act] != null) {
+    items.push({ texto: `Quitar la asociación de «${act}»`, accion: async () => {
+      st.asociaciones = await llamar("desasociar", act);
+      estado(`Asociación de «${act}» retirada.`);
+    } });
+  }
+  mostrarMenu(e.clientX, e.clientY, items);
 }
 
 function sugerirHoras(falta) {
@@ -284,9 +445,9 @@ function sugerirHoras(falta) {
 function sugerirComentario() {
   const campo = $("comentario");
   if (campo.value.trim() && campo.value.trim() !== st.comAuto) return;
-  const marcados = (st.semana?.dias || []).filter((d) => st.marcados.has(d.iso));
+  const marcados = diasMarcados();
   const sugerido = (marcados.length === 1 && marcados[0].guardia)
-    ? st.comentarioGuardia : (st.comHabitual || "");
+    ? st.ini.comentario_guardia : (st.comHabitual || "");
   st.comAuto = sugerido;
   campo.value = sugerido;
 }
@@ -297,7 +458,8 @@ async function anadir(e) {
   const dias = [...st.marcados].sort();
   const wp = resolverTarea();
   if (wp == null) {
-    await avisar("Falta tarea", "Elige una tarea de tus favoritas (puedes escribir para filtrar).");
+    await avisar("Falta tarea", "Elige una tarea de tus favoritas (puedes escribir para "
+                 + "filtrar) o búscala con «Buscar…».");
     return;
   }
   const horas = $("horas").value.trim();
@@ -320,19 +482,9 @@ async function anadir(e) {
     const r = await llamar("anadir", dias, wp, horas, comentario, actividad, permitirRepetir);
     $("horas").value = st.horasAuto = "";
     $("comentario").value = st.comAuto = "";
-    if (r.errores && !r.creados) {
-      await avisar("No se pudo registrar", `No se creó ningún apunte.\n\nDetalle: ${r.ultimo}`);
-    } else if (r.errores) {
-      await avisar("Registrado con errores",
-        `Añadidos: ${r.creados}. Con errores: ${r.errores}.\nÚltimo error: ${r.ultimo}`);
-    }
-    await cargarSemana();
-    if (r.creados) {
-      estado(`Apunte añadido (${r.creados}).${r.saltados ? ` Saltados ${r.saltados} (ya existían).` : ""}`);
-      st.comHabitual = comentario && comentario !== st.comentarioGuardia ? comentario : st.comHabitual;
-    } else if (!r.errores) {
-      estado("Esa tarea ya estaba registrada en los días marcados; no se añadió nada.");
-    }
+    if (r.creados && comentario && comentario !== st.ini.comentario_guardia) st.comHabitual = comentario;
+    await informarLote(r, { hecho: (n) => `Apunte añadido (${n}).`,
+      nada: "Esa tarea ya estaba registrada en los días marcados; no se añadió nada." });
   } finally {
     st.ocupado = false;
     $("b-anadir").disabled = false;
@@ -341,15 +493,10 @@ async function anadir(e) {
 
 // ---------------------------------------------------------------- borrar / deshacer
 
-async function eliminar() {
-  if (!st.seleccion.size || st.ocupado) return;
-  const items = [...st.seleccion].map((clave) => {
-    const [fecha, id] = clave.split("|");
-    const fila = document.querySelector(`tr[data-clave="${CSS.escape(clave)}"]`);
-    return { fecha, id, destino: fila?.dataset.destino || "op" };
-  });
+async function borrarItems(items, { confirmar = true } = {}) {
+  if (!items.length || st.ocupado) return;
   const n = items.length;
-  if (!(await preguntar("Eliminar",
+  if (confirmar && !(await preguntar("Eliminar",
       n === 1 ? "¿Seguro que quieres eliminar este apunte?"
               : `¿Seguro que quieres eliminar estos ${n} apuntes?`))) return;
   st.ocupado = true;
@@ -366,6 +513,14 @@ async function eliminar() {
   } finally {
     st.ocupado = false;
   }
+}
+
+function eliminarSeleccion() {
+  return borrarItems([...st.seleccion].map((clave) => {
+    const [fecha, id] = clave.split("|");
+    const fila = document.querySelector(`tr[data-clave="${CSS.escape(clave)}"]`);
+    return { fecha, id, destino: fila?.dataset.destino || "op" };
+  }));
 }
 
 async function deshacer() {
@@ -386,46 +541,6 @@ async function deshacer() {
   }
 }
 
-// ---------------------------------------------------------------- menu del dia
-
-function cerrarMenu() { $("menu").hidden = true; }
-
-function menuDia(evento, d) {
-  const m = $("menu");
-  m.replaceChildren(el("div", { class: "titulo-menu", text: `${d.nombre} ${d.fecha}` }));
-  const opcion = (texto, accion, motivo) => m.append(el("button", {
-    text: texto,
-    onclick: async () => {
-      cerrarMenu();
-      if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
-          && !(await preguntar("Teletrabajo",
-                "Ya tienes cubierto el cupo de teletrabajo de esta semana.\n¿Marcar otro igualmente?"))) return;
-      await llamar("accion_dia", d.iso, accion, motivo || "");
-      await repintarLocal();
-    },
-  }));
-  if (d.no_laborable) {
-    opcion(`Quitar marca (${d.motivo})`, "quitar_no_laborable");
-  } else {
-    for (const motivo of ["festivo", "vacaciones", "apertura de curso", "baja"]) {
-      opcion(`Marcar como ${motivo}`, "no_laborable", motivo);
-    }
-  }
-  m.append(el("hr"));
-  opcion(d.guardia ? "Quitar guardia" : "Marcar día de guardia", d.guardia ? "quitar_guardia" : "guardia");
-  opcion(d.teletrabajo ? "Quitar teletrabajo" : "Marcar teletrabajo",
-         d.teletrabajo ? "quitar_teletrabajo" : "teletrabajo");
-  m.append(el("hr"));
-  m.append(el("button", { text: "Permisos, plantillas y más: aún no en el prototipo", disabled: "" }));
-  m.hidden = false;
-  // que no se salga de la ventana
-  const { innerWidth: w, innerHeight: h } = window;
-  const r = m.getBoundingClientRect();
-  m.style.left = `${Math.min(evento.clientX, w - r.width - 8)}px`;
-  m.style.top = `${Math.min(evento.clientY, h - r.height - 8)}px`;
-  m.querySelector("button:not([disabled])")?.focus();
-}
-
 // ---------------------------------------------------------------- eventos
 
 function enCampo(e) {
@@ -438,29 +553,55 @@ function navegar(delta) {
   cargarSemana({ marcarHoy: true });
 }
 
+function irADia(iso) {
+  st.lunes = lunesDe(iso);
+  $("b-deshacer").hidden = true;
+  cargarSemana({ marcar: [iso] });
+}
+
 $("b-ant").onclick = () => navegar(-1);
 $("b-sig").onclick = () => navegar(1);
 $("b-hoy").onclick = () => navegar(0);
 $("b-recargar").onclick = () => cargarSemana();
-$("b-eliminar").onclick = eliminar;
+$("b-resumen").onclick = () => dlgResumen();
+$("b-exportar").onclick = () => dlgExportar();
+$("b-buscar").onclick = () => dlgBuscar();
+$("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
+  { texto: "Copiar día anterior a los días marcados", accion: dlgCopiarDia },
+  { texto: "Copiar semana anterior completa", accion: dlgCopiarSemana },
+  "-",
+  { texto: "Plantillas…", accion: dlgPlantillas },
+]);
+$("b-eliminar").onclick = eliminarSeleccion;
 $("b-deshacer").onclick = deshacer;
 $("form").addEventListener("submit", anadir);
 $("tarea").addEventListener("change", elegirTarea);
+$("actividad").addEventListener("change", tareaDeActividad);
+$("actividad").addEventListener("contextmenu", menuActividad);
 $("toda-semana").addEventListener("change", (e) => {
   st.marcados = new Set(e.target.checked ? st.semana.dias.map((d) => d.iso) : []);
   pintarMarcados();
 });
+for (const b of document.querySelectorAll(".menubar button")) {
+  b.addEventListener("click", (e) => { e.stopPropagation(); menuBajo(b, MENUS[b.dataset.menu]()); });
+}
 
-document.addEventListener("click", (e) => { if (!$("menu").contains(e.target)) cerrarMenu(); });
+document.addEventListener("click", (e) => {
+  if (!$("menu").contains(e.target) && !e.target.closest("#b-copiar, .menubar")) cerrarMenu();
+});
 window.addEventListener("blur", cerrarMenu);
 document.addEventListener("contextmenu", (e) => {
-  // fuera de las tarjetas, sin el menu del navegador (no es una web)
-  if (!e.target.closest(".dia") && !enCampo(e)) e.preventDefault();
+  // sin el menu del navegador (no es una web), salvo en los campos de texto
+  if (!enCampo(e)) e.preventDefault();
 });
 
 document.addEventListener("keydown", (e) => {
   if (!$("modal").hidden) return;
-  if (e.key === "Escape") { cerrarMenu(); return; }
+  if (!$("menu").hidden && e.key === "Escape") { cerrarMenu(); return; }
+  if (typeof pila !== "undefined" && pila.length) {
+    if (e.key === "Escape") { e.preventDefault(); pila[pila.length - 1].cerrar(); }
+    return;                                   // con un dialogo abierto, nada mas
+  }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
   if (e.altKey && /^[1-5]$/.test(e.key)) {
     e.preventDefault();
@@ -472,8 +613,15 @@ document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.key === "ArrowLeft") { e.preventDefault(); navegar(-1); }
   else if (e.ctrlKey && e.key === "ArrowRight") { e.preventDefault(); navegar(1); }
   else if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); deshacer(); }
-  else if (e.key === "Delete") { e.preventDefault(); eliminar(); }
+  else if (e.key === "Delete") { e.preventDefault(); eliminarSeleccion(); }
 });
 
-if (window.pywebview && window.pywebview.api) arrancar();
-else window.addEventListener("pywebviewready", arrancar);
+// Arrancar cuando esten la pagina entera (dialogos.js va despues) y la API:
+// pywebview la inyecta y avisa con 'pywebviewready', que puede llegar antes o
+// despues de DOMContentLoaded.
+function iniciarCuandoListo() {
+  if (window.pywebview?.api?.inicio) arrancar();
+  else window.addEventListener("pywebviewready", arrancar, { once: true });
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciarCuandoListo);
+else iniciarCuandoListo();

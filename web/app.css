@@ -191,3 +191,66 @@ td.comentario { color: var(--tenue); max-width: 320px; overflow: hidden; text-ov
 @media (max-width: 1000px) {
   .dias { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ---------- barra de menus ---------- */
+.menubar { display: flex; gap: 2px; padding: 2px 8px; background: var(--panel); border-bottom: 1px solid var(--borde); }
+.menubar button { border: 0; background: none; padding: 4px 10px; border-radius: 4px; }
+.menubar button:hover { background: var(--fondo); }
+.campo-tarea { display: flex; gap: 8px; }
+.campo-tarea input { flex: 1; }
+
+/* ---------- dialogos (dialogos.js) ---------- */
+.capa { position: fixed; inset: 0; background: rgba(15, 23, 42, .35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dlg { background: var(--panel); border-radius: 10px; box-shadow: 0 16px 40px rgba(16, 24, 40, .25); display: flex; flex-direction: column; max-height: calc(100vh - 32px); }
+.dlg-cabeza { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 8px; }
+.dlg-cabeza h3 { margin: 0; font-size: 16px; }
+.dlg-x { border: 0; background: none; font-size: 20px; line-height: 1; padding: 2px 8px; color: var(--tenue); }
+.dlg-cuerpo { padding: 4px 18px 8px; overflow: auto; flex: 1; min-height: 0; }
+.dlg-pie { display: flex; justify-content: space-between; gap: 8px; padding: 12px 18px 14px; border-top: 1px solid var(--borde); flex-wrap: wrap; }
+.dlg-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.dlg-sub { font-weight: 600; margin: 4px 0 8px; }
+.dlg h4 { margin: 14px 0 6px; font-size: 14px; }
+.rejilla { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; margin: 8px 0; }
+.rejilla > label { color: var(--tenue); }
+.nota { margin: 6px 0; white-space: pre-line; font-size: 13px; }
+.tenue { color: var(--tenue); }
+.verde { color: var(--exito); }
+.rojo { color: var(--peligro); }
+.ambar { color: var(--aviso); }
+.ancho { width: 100%; }
+.lista { width: 100%; margin: 8px 0 4px; }
+.check.bloque { display: flex; margin: 4px 0; }
+.dlg hr { border: 0; border-top: 1px solid var(--borde); margin: 8px 0; }
+#modal { z-index: 60; }
+.menu { z-index: 70; }
+
+.nav-mes { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.nav-mes .mes { flex: 1; text-align: center; font-size: 16px; }
+.barra.grande { height: 10px; margin: 0 0 12px; }
+.barra.completo > i { background: var(--exito); }
+.barra.parcial > i { background: var(--aviso); }
+.cifras { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+.cifras strong { font-size: 16px; text-align: right; font-variant-numeric: tabular-nums; }
+.estado-mes { font-weight: 700; margin: 12px 0 4px; }
+.estado-mes.ok { color: var(--exito); }
+.estado-mes.aviso { color: var(--aviso); }
+.fila-dia { display: flex; justify-content: space-between; width: 100%; margin: 2px 0; text-align: left; }
+
+.lista-festivos { margin: 10px 0; max-height: 220px; overflow: auto; font-size: 13px; }
+.festivo { display: grid; grid-template-columns: 96px 1fr; gap: 8px; padding: 1px 0; }
+
+fieldset.permiso { border: 1px solid var(--borde); border-radius: 8px; margin: 0 0 10px; padding: 6px 12px 10px; }
+fieldset.permiso legend { font-weight: 600; padding: 0 4px; }
+.cifras-permiso { gap: 18px; flex-wrap: wrap; }
+.concesion { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; padding: 2px 0; }
+.pie-permiso { margin-top: 8px; flex-wrap: wrap; }
+.actividad-permiso { width: 220px; }
+
+table.tabla-dlg { margin-top: 4px; }
+.tabla-dlg td { border-bottom: 1px solid #eef1f4; padding: 6px 8px; vertical-align: middle; }
+kbd { font: 12px ui-monospace, Consolas, monospace; background: var(--fondo); border: 1px solid var(--borde); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+
+.novedades h4.version { color: var(--primario); font-size: 15px; margin: 14px 0 4px; }
+.novedades p { margin: 3px 0; }
+.novedades p.apartado { font-weight: 700; margin-top: 8px; }
+.novedades p.punto { padding-left: 14px; text-indent: -10px; }
