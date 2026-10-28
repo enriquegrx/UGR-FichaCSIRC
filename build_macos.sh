@@ -22,24 +22,14 @@ ICONSET="build/macos/fichacsirc.iconset"
 ICNS="build/macos/fichacsirc.icns"
 SRC_ICON="${SRC_ICON:-fichacsirc_256.png}"
 
-echo "Comprobando Tkinter..."
-if ! "$PYTHON_BIN" - <<'PY'
-import tkinter as tk
-print(f"Python/Tk: {tk.TkVersion}")
-if tk.TkVersion < 8.6:
-    raise SystemExit("Tk demasiado antiguo para empaquetar en macOS")
-PY
-then
-  echo "ERROR: $PYTHON_BIN no tiene Tkinter usable (>= 8.6)."
-  echo "En macOS con Homebrew instala: brew install python@3.12 python-tk@3.12"
-  echo "Tambien puedes pasar otro Python con: PYTHON_BIN=/ruta/python3.12 ./build_macos.sh"
-  exit 1
-fi
+# Desde la 3.0 la ventana es HTML (pywebview sobre WKWebView, via pyobjc):
+# ya no hace falta un Python con Tk moderno.
 
 echo "Preparando entorno de build..."
 "$PYTHON_BIN" -m venv "$VENV"
 PY="$VENV/bin/python"
-"$PY" -m pip install --quiet --upgrade pip pyinstaller requests
+"$PY" -m pip install --quiet --upgrade pip
+"$PY" -m pip install --quiet -r requirements-web.txt pyinstaller==6.21.0
 
 echo "Preparando icono .icns..."
 rm -rf "$ICONSET"
@@ -58,25 +48,19 @@ cp "$ICONSET/icon_512x512.png" "$ICONSET/icon_512x512@2x.png"
 iconutil -c icns "$ICONSET" -o "$ICNS"
 
 echo "Limpiando builds anteriores..."
-rm -rf build/FichaCSIRC build/FichaCSIRC-Configurar
-rm -rf dist/FichaCSIRC.app dist/FichaCSIRC-Configurar.app
+rm -rf build/FichaCSIRC dist/FichaCSIRC.app
 
+# Una sola app: el asistente de configuracion va dentro (Herramientas >
+# Configuracion), ya no hay FichaCSIRC-Configurar.app.
 echo "Construyendo FichaCSIRC.app..."
 "$PY" -m PyInstaller --noconfirm --clean --windowed \
   --name "FichaCSIRC" --icon "$ICNS" \
-  --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
+  --add-data "web:web" --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
   --add-data "NOVEDADES.md:." \
-  registrar_gui.py
+  registrar_web.py
 
-echo "Construyendo FichaCSIRC-Configurar.app..."
-"$PY" -m PyInstaller --noconfirm --clean --windowed \
-  --name "FichaCSIRC-Configurar" --icon "$ICNS" \
-  --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
-  --add-data "NOVEDADES.md:." \
-  configurar_gui.py
-
-# Se distribuye como .dmg (no .zip): al abrirlo, el Finder muestra las dos apps
-# junto a un acceso a Aplicaciones y basta con arrastrarlas; si ya estaban, el
+# Se distribuye como .dmg (no .zip): al abrirlo, el Finder muestra la app
+# junto a un acceso a Aplicaciones y basta con arrastrarla; si ya estaba, el
 # Finder pregunta "Reemplazar". Con el zip cada actualizacion se descomprimia en
 # otra carpeta de Descargas y Launchpad acababa mostrando un icono por copia.
 DMG="dist/FichaCSIRC-mac-${ARCH_LABEL}.dmg"
@@ -84,7 +68,6 @@ STAGE="build/macos/dmg-${ARCH_LABEL}"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 ditto "dist/FichaCSIRC.app" "$STAGE/FichaCSIRC.app"
-ditto "dist/FichaCSIRC-Configurar.app" "$STAGE/FichaCSIRC-Configurar.app"
 ln -s /Applications "$STAGE/Aplicaciones"
 rm -f "$DMG"
 # hdiutil falla a veces en los runners de GitHub con "Resource busy" (algun
@@ -105,7 +88,6 @@ done
 echo
 echo "Listo:"
 echo "  dist/FichaCSIRC.app"
-echo "  dist/FichaCSIRC-Configurar.app"
 echo "  $DMG"
 echo
 echo "Nota: sin firma/notarizacion, la primera vez macOS las bloquea. Se abren en"

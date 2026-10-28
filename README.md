@@ -14,7 +14,9 @@ integración con **INARI (Kanboard)** para fichar los días de teletrabajo. 🏡
 ## 📌 Estado del proyecto
 
 - Plataforma: Windows y macOS.
-- Interfaz: Python con Tkinter/ttk.
+- Interfaz (desde la 3.0): HTML/CSS/JavaScript en una ventana nativa con
+  [pywebview](https://pywebview.flowrl.com/) (WebView2 en Windows, WKWebView en
+  macOS). Toda la lógica sigue en Python.
 - API: OpenProject REST v3.
 - Distribución: instalador Windows combinado y paquetes macOS para Apple Silicon
   e Intel.
@@ -73,12 +75,13 @@ de entrada o salida.
 
 El flujo habitual es:
 
-1. Abrir `FichaCSIRC-Configurar` la primera vez.
+1. Abrir `FichaCSIRC`: la primera vez (sin configuración) arranca solo el
+   asistente. Luego está en *Herramientas → Configuración (asistente)* y, en
+   Windows, en el acceso *FichaCSIRC - Configurar* (`FichaCSIRC.exe --configurar`).
 2. Introducir la URL de ProyectosTic y la API key personal.
-3. Configurar jornada normal, jornada de verano, tareas favoritas y actividad
-   por defecto.
-4. Abrir `FichaCSIRC`.
-5. Seleccionar el día o los días, elegir tarea, revisar horas y guardar.
+3. Configurar jornada (oficial y desayuno), jornada de verano, tareas favoritas
+   y actividad por defecto.
+4. Seleccionar el día o los días, elegir tarea, revisar horas y guardar.
 
 La ventana se abre maximizada. La app avisa si se supera la jornada configurada
 o si una tarea ya tiene horas ese día (se puede imputar en dos tramos), y
@@ -113,7 +116,11 @@ Descargar `FichaCSIRC-Instalador.exe` desde la última release:
 <https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest>
 
 El instalador es por usuario, no requiere permisos de administrador y crea los
-accesos directos necesarios. Si Windows muestra SmartScreen, hay que usar
+accesos directos necesarios. Necesita *Microsoft Edge WebView2 Runtime* (viene
+con Windows 11 y Windows 10 actualizado); si falta, el instalador avisa.
+Al actualizar desde una versión 2.x instala encima, en la misma carpeta, y borra
+antes los restos de la versión Tkinter (`FichaCSIRC-Configurar` y el `_internal`
+viejo); la configuración no se toca. Si Windows muestra SmartScreen, hay que usar
 `Más información` y después `Ejecutar de todas formas`; la aplicación no está
 firmada con certificado comercial.
 
@@ -126,9 +133,10 @@ Descargar el `.dmg` correspondiente desde la última release:
 - `FichaCSIRC-mac-arm64.dmg` para Apple Silicon.
 - `FichaCSIRC-mac-x64.dmg` para Intel.
 
-Al abrirlo aparecen `FichaCSIRC.app` y `FichaCSIRC-Configurar.app` junto a un
-acceso a **Aplicaciones**: hay que arrastrarlas ahí (si ya estaban, elegir
-*Reemplazar*). Desde la 2.9.2 se distribuye como `.dmg` y no como `.zip`: con el
+Al abrirlo aparece `FichaCSIRC.app` junto a un acceso a **Aplicaciones**: hay
+que arrastrarla ahí (si ya estaba, elegir *Reemplazar*). Desde la 3.0 no hay
+`FichaCSIRC-Configurar.app` (el asistente va dentro): quien venga de la 2.x
+puede borrarla de Aplicaciones. Desde la 2.9.2 se distribuye como `.dmg` y no como `.zip`: con el
 zip cada actualización se descomprimía en otra carpeta de Descargas y Launchpad
 acababa mostrando un icono por copia. La app avisa si se abre fuera de
 Aplicaciones y, al actualizarse, descarga el `.dmg` de la arquitectura del Mac
@@ -141,7 +149,7 @@ marca la descarga con cuarentena y no permite abrirla, se puede limpiar desde
 Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/FichaCSIRC.app /Applications/FichaCSIRC-Configurar.app
+xattr -dr com.apple.quarantine /Applications/FichaCSIRC.app
 ```
 
 Para localizar copias antiguas (las que generaban iconos repetidos):
@@ -181,15 +189,15 @@ configuración.
 |---|---|
 | `rellenar_horas.py` | Motor principal: API, jornada, apuntes, exportación y modo consola. |
 | `configurar.py` | Utilidades de configuración y comprobación de conexión. |
-| `registrar_gui.py` | Ventana principal de registro. |
-| `configurar_gui.py` | Asistente gráfico de configuración inicial. |
-| `dialogos.py` | Diálogos secundarios: búsqueda, edición, resumen mensual, exportación, plantillas, permisos e integraciones. |
-| `fichaui.py` | Utilidades visuales compartidas: estilos, tooltips, botones y ejecución en hilo. |
+| `registrar_web.py` | **La app (3.0)**: ventana pywebview y la clase `Api` que usa la interfaz; asistente, aviso (`--recordatorio`) y actualizaciones. |
+| `web/` | Interfaz: `index.html` + `app.js` (ventana), `dialogos.js`, `configurar.html/js` (asistente), `aviso.html/js`, `comun.js`, `app.css`. `demo.js` solo con `?demo`. |
+| `requirements-web.txt` | Dependencias de la app (requests, pywebview). |
+| `registrar_gui.py`, `configurar_gui.py`, `dialogos.py`, `fichaui.py` | Interfaz Tkinter **anterior a la 3.0**. Ya no se empaqueta; se conserva de referencia y sus tests siguen pasando. |
 | `inari.py` | Cliente JSON-RPC de INARI (Kanboard): credenciales, slots y descubrimiento de proyecto, columna, carril y categoría. |
 | `destinos.py` | Puente entre ProyectosTIC (OpenProject) e INARI: registra y lee las horas de los días de teletrabajo. |
 | `recordatorio.py` | Aviso diario de fichaje mediante Programador de tareas o LaunchAgent. |
 | `instalador.iss` | Instalador Windows con Inno Setup. |
-| `build_exe.bat` | Compilación local de los `.exe` de Windows en modo carpeta (`--onedir`). |
+| `build_exe.bat` | Compilación local de la app de Windows en modo carpeta (`--onedir`). |
 | `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
 | `build_macos.sh` | Compilación local de apps macOS y su `.dmg`. |
 | `NOVEDADES.md` | Changelog para usuarios; se empaqueta y se ve en Ayuda → Novedades. |
@@ -212,26 +220,31 @@ es solo para desarrollo, pruebas o empaquetado local.
 Requisitos recomendados:
 
 - Python 3.12.
-- `requests`.
-- Tkinter disponible en el Python usado.
+- `requests` y `pywebview` (en Windows usa WebView2; en macOS, pyobjc).
 
 Instalar dependencias:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-web.txt
 ```
 
-Ejecutar el configurador:
+Ejecutar la aplicación (sin configuración abre el asistente):
 
 ```bash
-python configurar_gui.py
+python registrar_web.py
 ```
 
-Ejecutar la aplicación:
+El asistente, a propósito:
 
 ```bash
-python registrar_gui.py
+python registrar_web.py --configurar
 ```
+
+Para probar algo arriesgado sin tocar la configuración real, poner
+`EXPERIMENTO = True` en `registrar_web.py` (configuración aparte, sin instalar
+actualizaciones ni tocar el aviso diario). Para revisar solo el diseño, sin red:
+`python -m http.server 8765 --directory web` y abrir
+`http://localhost:8765/index.html?demo`.
 
 Ejecutar tests:
 
@@ -279,15 +292,9 @@ En macOS:
 Artefactos generados:
 
 - `dist/FichaCSIRC.app`
-- `dist/FichaCSIRC-Configurar.app`
 - `dist/FichaCSIRC-mac-arm64.dmg` o `dist/FichaCSIRC-mac-x64.dmg`
 
-Para empaquetar en macOS hace falta un Python con Tk moderno; el script rechaza
-Tk anterior a 8.6. En Homebrew:
-
-```bash
-brew install python@3.12 python-tk@3.12
-```
+El script crea su propio entorno virtual e instala ahí `requirements-web.txt`.
 
 Los detalles de mantenimiento y scripts auxiliares están en
 [CONTEXTO_DESARROLLO.md](CONTEXTO_DESARROLLO.md).
@@ -318,8 +325,8 @@ Los detalles de mantenimiento y scripts auxiliares están en
 - Windows y macOS pueden mostrar avisos de seguridad porque los binarios no
   están firmados con certificados comerciales.
 - La lista de festivos conocidos debe revisarse cada año.
-- La interfaz está hecha en Tkinter: se ha cuidado el diseño, pero se mantiene
-  dentro de los límites de una herramienta interna ligera.
+- En Windows necesita *Microsoft Edge WebView2 Runtime* (viene con Windows 11 y
+  Windows 10 actualizado).
 
 ## 📄 Licencia
 

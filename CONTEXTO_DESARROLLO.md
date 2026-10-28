@@ -1,10 +1,20 @@
 # Contexto de desarrollo - FichaCSIRC
 
-App de escritorio (Windows, Python/Tkinter) para fichar horas en OpenProject
-(instancia ProyectosTic de la UGR) vía su API REST v3. Ver `README.md` para la
+App de escritorio (Windows y macOS) para fichar horas en OpenProject (instancia
+ProyectosTic de la UGR) vía su API REST v3. Desde la **3.0** la interfaz es HTML
+en una ventana pywebview; la lógica sigue en Python. Ver `README.md` para la
 definición completa y el historial de decisiones.
 
 ## Estructura
+- **`registrar_web.py`** — LA APP (3.0): ventana pywebview + clase `Api` (lo único
+  que ve el JS, como `window.pywebview.api`). Toda la lógica en Python; el JS
+  solo pinta. Incluye asistente (`cfg_*`, `--configurar`, y se abre solo sin
+  config), aviso (`--recordatorio`) y actualizaciones. `EXPERIMENTO` (False en
+  producción) aísla la config y bloquea instalar/programar el aviso.
+- **`web/`** — interfaz: `index.html`+`app.js` (ventana), `dialogos.js` (un único
+  `dialogo()` con pie siempre visible), `configurar.html/js`, `aviso.html/js`,
+  `comun.js` (el, llamar, preguntar), `app.css`. `demo.js` simula la Api solo con
+  `?demo` (diseño sin red). **Nunca `innerHTML`** con datos: hay test.
 - `rellenar_horas.py` — motor (API + lógica) y app de consola.
 - `configurar.py` — utilidades de API compartidas + configurador de consola.
 - `registrar_gui.py` — ventana principal de registro (importa `rellenar_horas`).
@@ -18,10 +28,15 @@ definición completa y el historial de decisiones.
 - `recordatorio.py` — aviso de fichaje: comprobación suelta + alta/baja de la tarea
   programada de Windows (`schtasks`). La app lo lanza con `--recordatorio`.
 - `configurar_gui.py` — asistente gráfico (wizard); importa `configurar`.
+- `registrar_gui.py`, `dialogos.py`, `fichaui.py`, `configurar_gui.py` son la
+  interfaz **Tkinter anterior a la 3.0**: ya no se empaquetan; se conservan de
+  referencia (sus tests siguen) hasta decidir retirarlos.
 - Lanzadores `.bat` (detectan Python, evitan el alias de la Microsoft Store).
 - `build_exe.bat` — empaqueta Windows con PyInstaller (`--onedir --noupx`, modo
   carpeta: el `.exe` + su `_internal`); CI en `.github/workflows`.
-- `build_macos.sh` — empaqueta macOS como `.app` y ZIP; CI genera artefactos `arm64` y `x64`.
+- `build_macos.sh` — empaqueta macOS como `.app` y `.dmg`; CI genera `arm64` y `x64`.
+- `.github/workflows/experimento.yml` — en ramas `experimento/**` construye lo
+  mismo que la release (instalador + dmg) como artefactos, sin publicar.
 - `instalador.iss` + `build_instalador.bat` — instalador único (Inno Setup); la CI lo
   genera y lo publica como **único artefacto Windows** de cada Release. Ya NO se
   publican `.exe` sueltos: con `--onedir` el ejecutable necesita su `_internal` al
@@ -455,6 +470,35 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.0.0 (oct 2026, rama `experimento/pywebview`): **interfaz HTML con pywebview**
+  en lugar de Tkinter, con el asistente dentro de la misma app.
+  - Por qué: los problemas recurrentes eran de Tk (pie que desaparecía, botones
+    de Windows que ignoran el color, Button-2/Button-3 en Mac, avisos al
+    empaquetar Tcl/Tk) y el aspecto. Se descartó Rust/Tauri (reescribir el motor
+    y sus tests) y Qt (+50-80 MB por instalación, y no reaprovechable en Tauri).
+    La interfaz HTML sí se reaprovecharía si algún día se pasa a Tauri.
+  - El motor (`rellenar_horas`, `destinos`, `inari`) no cambia. `Api` devuelve
+    datos ya calculados (estado de cada día, avisos antes de añadir) y el JS solo
+    los pinta.
+  - Mejoras que vienen con el cambio: resumen del mes y CSV con UNA consulta por
+    rango (`entradas_rango`); API key y token de INARI nunca llegan al JS (campo
+    vacío = se conserva el guardado); el JS no puede abrir URLs ni ficheros
+    arbitrarios (`abrir_github`, `abrir_exportacion`, `abrir_pagina_actualizacion`
+    solo abren lo suyo).
+  - Empaquetado: UNA app. Windows: `instalador.iss` copia solo `dist\FichaCSIRC`,
+    el acceso "FichaCSIRC - Configurar" pasa a `FichaCSIRC.exe --configurar`, y al
+    actualizar `[InstallDelete]` borra `FichaCSIRC-Configurar` y el `_internal`
+    viejo (no mezclar DLL de Tcl/Tk con lo nuevo). La ruta del exe es la misma,
+    así que la tarea del aviso diario sigue valiendo. Comprueba WebView2 en el
+    registro y avisa si falta. macOS: una sola `FichaCSIRC.app` en el dmg.
+  - Actualización de los clientes 2.x: su actualizador descarga
+    `FichaCSIRC-Instalador.exe` de la release `latest` (mismo nombre) e instala
+    encima. Plan: publicar primero como **pre-release** (el actualizador solo
+    mira `latest`, que ignora las pre-releases), probar con voluntarios y luego
+    marcarla como latest.
+  - De paso: `build_instalador.bat` buscaba `dist\FichaCSIRC.exe` (ruta de
+    `--onefile`, rota desde 2.6.4) y no pasaba la versión a Inno Setup.
+
 ## Tests
 - `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la
   red mockeada, repartidos así:
@@ -464,7 +508,10 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   - `test_inari.py` (23) — cliente JSON-RPC de INARI (lectura y escritura).
   - `test_destinos.py` (9) — puente ProyectosTIC/INARI.
   - `test_gui_acciones.py` (37) — acciones reales de la GUI (con `en_hilo` síncrono).
-  - `test_gui_smoke.py` (1) — arranque de la ventana; se salta sin display.
+  - `test_gui_smoke.py` (1) — arranque de la ventana Tk; se salta sin display.
+  - `test_web_api.py` (41) — la `Api` web, el asistente, el modo experimento y
+    los ficheros de `web/` (enlazados, sin `innerHTML`, y que todo lo que llama el
+    JS exista en la `Api` y en la demo).
 - Ejecutarlos tras tocar el motor o la GUI.
 
 ## Pendiente / ideas

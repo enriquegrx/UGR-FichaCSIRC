@@ -1,9 +1,10 @@
-name: Prototipo web
+name: Version candidata
 
-# SOLO para las ramas experimentales (experimento/...): compila el prototipo de
-# interfaz HTML (registrar_web.py + web/, con pywebview) y lo deja como
+# SOLO para las ramas experimentales (experimento/...): construye lo MISMO que
+# publicaria release.yml (instalador de Windows y .dmg de macOS) y lo deja como
 # ARTEFACTO descargable en la pagina del run (Actions > run > Artifacts).
 # No crea release ni etiqueta: no llega a nadie y el actualizador no lo ve.
+# Sirve para instalarlo a mano y probar la experiencia real antes de publicar.
 
 on:
   push:
@@ -36,24 +37,43 @@ jobs:
       - name: Ejecutar tests
         run: python -m unittest discover -s tests -t . -v
 
-      # --onedir como la app de verdad (ver release.yml: --onefile daba
-      # "Failed to load Python DLL").
-      - name: Construir prototipo (carpeta)
+      # Mismas opciones que release.yml (ver alli el porque de --onedir).
+      - name: Construir FichaCSIRC (carpeta)
         run: >
           pyinstaller --noconfirm --clean --onedir --windowed --noupx
-          --name "FichaCSIRC-Web" --icon "fichacsirc.ico"
+          --name "FichaCSIRC" --icon "fichacsirc.ico"
+          --version-file "version_info.txt"
           --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
           --add-data "NOVEDADES.md;."
           registrar_web.py
 
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      # La version del instalador sale del codigo, con "-candidata" para que
+      # se vea en "Aplicaciones instaladas" que no es una version publicada.
+      - name: Construir instalador
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path rellenar_horas.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          iscc /DMyAppVersion="$v-candidata" instalador.iss
+
       - uses: actions/upload-artifact@v4
         with:
-          name: FichaCSIRC-Web-windows
-          path: dist/FichaCSIRC-Web
+          name: FichaCSIRC-Instalador-candidata
+          path: dist/FichaCSIRC-Instalador.exe
           retention-days: 30
 
   macos:
-    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            arch: arm64
+          - runner: macos-26-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
@@ -62,24 +82,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Instalar dependencias
-        run: pip install -r requirements-web.txt pyinstaller==6.21.0
-
-      # Sin tests en macOS a proposito: ya corren en el job de Windows (y los de
-      # GUI Tk se colgaban en los runners de Mac, ver release.yml).
-      # El .app se comprime con ditto: subido tal cual, el artefacto perderia
-      # los enlaces simbolicos y los permisos de ejecucion del bundle.
-      - name: Construir prototipo (.app)
-        run: |
-          pyinstaller --noconfirm --clean --windowed \
-            --name "FichaCSIRC-Web" \
-            --add-data "web:web" --add-data "logo_ugr.png:." \
-            --add-data "NOVEDADES.md:." \
-            registrar_web.py
-          ditto -c -k --keepParent dist/FichaCSIRC-Web.app dist/FichaCSIRC-Web-mac-arm64.zip
+      # Sin tests en macOS a proposito: ya corren en el job de Windows (ver
+      # release.yml). build_macos.sh instala sus dependencias en un venv.
+      - name: Construir app y .dmg
+        run: ARCH_LABEL=${{ matrix.arch }} ./build_macos.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FichaCSIRC-Web-mac-arm64
-          path: dist/FichaCSIRC-Web-mac-arm64.zip
+          name: FichaCSIRC-mac-${{ matrix.arch }}-candidata
+          path: dist/FichaCSIRC-mac-${{ matrix.arch }}.dmg
           retention-days: 30

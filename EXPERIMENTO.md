@@ -1,9 +1,8 @@
 # Experimento: interfaz HTML con pywebview
 
-Rama **`experimento/pywebview`**. Es una prueba para decidir si la interfaz pasa
-de Tkinter a HTML. **No es una versión publicada**: no tiene etiqueta, no crea
-release y el actualizador de la app no la ve. Solo la usa quien la descarga a
-propósito.
+Rama **`experimento/pywebview`**: la interfaz pasa de Tkinter a HTML. **No es una
+versión publicada**: no tiene etiqueta, no crea release y el actualizador de la
+app no la ve. Solo la usa quien la descarga a propósito.
 
 ## Qué es
 
@@ -63,32 +62,35 @@ Pasarla a producción = `EXPERIMENTO = False` y empaquetarla en lugar de la
 Tkinter (instalador de Inno Setup y `.dmg`, con un solo `.app`: el asistente ya
 va dentro).
 
-## Ojo al probarlo
+## Versión candidata 3.0.0 (estado actual de la rama)
 
-- Usa **su propia configuración** (`%APPDATA%\FichaCSIRC-experimento` o
-  `~/Library/Application Support/FichaCSIRC-experimento`), copiada de la real la
-  primera vez. Lo que marques en local (festivos, guardias…) no toca la app de
-  verdad. Para empezar de cero, borra esa carpeta.
-- Los **apuntes sí van a ProyectosTic**: es tu cuenta real.
-- No comprueba actualizaciones (no debe ofrecer instalar la de producción).
+La rama ya tiene `EXPERIMENTO = False` y versión **3.0.0**: es la **versión
+candidata**. El workflow *Versión candidata* construye en cada push **lo mismo
+que publicaría la release** (instalador de Windows y `.dmg`), como artefactos,
+sin crear release.
 
-## Cómo probarlo
+**Probarla en tu PC (Windows):** *Actions → Versión candidata → el último run →
+Artifacts → `FichaCSIRC-Instalador-candidata`*, descomprimir y ejecutar el
+instalador. Se instala **encima** de tu FichaCSIRC 2.x (misma carpeta, misma
+configuración, mismo aviso diario) y en *Aplicaciones instaladas* aparece como
+`3.0.0-candidata`. Así se prueba exactamente lo que verán los demás al
+actualizar.
 
-**Descargado de GitHub:** *Actions → Prototipo web → el último run → Artifacts*.
-En Windows, `FichaCSIRC-Web-windows` → **antes de descomprimir: clic derecho en el
-zip → Propiedades → Desbloquear** → descomprimir → `FichaCSIRC-Web.exe`.
+**Volver atrás:** instalar `FichaCSIRC-Instalador.exe` de la release 2.9.2
+(<https://github.com/enriquegrx/UGR-FichaCSIRC/releases/tag/v2.9.2>). Usa la
+misma configuración: no se pierde nada.
 
-> Sin desbloquear falla con *«Failed to resolve Python.Runtime.Loader.Initialize»*:
-> Windows marca como «descargado de internet» todo lo que sale del zip y .NET
-> (que pywebview usa para abrir la ventana) se niega a cargar una DLL marcada.
-> No afecta a una versión real instalada con el instalador de Inno Setup: los
-> ficheros que copia un instalador no llevan esa marca.
+**Publicarla** (cuando se decida): fusionar la rama en `main`, etiquetar
+`v3.0.0` y, en GitHub, dejar la release como **pre-release** para probarla con
+voluntarios (el actualizador de los demás solo mira `latest`, que ignora las
+pre-releases). Al quitar la marca de pre-release les salta el aviso a todos.
 
-En Mac,
-`FichaCSIRC-Web-mac-arm64` (zip dentro de zip) → la primera vez *Ajustes del
-Sistema → Privacidad y seguridad → Abrir igualmente*.
+## Probar algo arriesgado sin tocar la configuración real
 
-**Desde el código:**
+Poner `EXPERIMENTO = True` en `registrar_web.py` y ejecutar desde el código:
+usa la configuración de `FichaCSIRC-experimento` (copiada de la real la primera
+vez), comprueba versiones pero no las instala y no toca el aviso diario. Los
+**apuntes sí van a ProyectosTic**: es la misma cuenta.
 
 ```bash
 pip install -r requirements-web.txt
@@ -97,7 +99,14 @@ python registrar_web.py
 
 Para ver solo el diseño en un navegador, sin red ni pywebview:
 `python -m http.server 8765 --directory web` y abrir
-`http://localhost:8765/index.html?demo`.
+`http://localhost:8765/index.html?demo` (o `configurar.html?demo`,
+`aviso.html?demo`).
+
+> Si se descarga un **zip con el ejecutable suelto** (no el instalador), hay que
+> desbloquearlo antes de descomprimir (*clic derecho → Propiedades →
+> Desbloquear*): si no, falla con *«Failed to resolve
+> Python.Runtime.Loader.Initialize»*, porque .NET no carga DLL marcadas como
+> descargadas de internet. Con el instalador no pasa.
 
 ## Medido hasta ahora (Windows 11)
 

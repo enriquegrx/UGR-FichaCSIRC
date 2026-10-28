@@ -29,17 +29,20 @@ Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INAR
    - **No pide permisos de administrador** 🙅: se instala solo para tu usuario.
    - Deja marcada **«Crear un acceso directo en el escritorio»** si quieres el
      icono a mano (viene marcada).
-   - Al terminar, si es tu **primera instalación**, puedes dejar marcada
-     **«Configurar FichaCSIRC ahora (necesario la primera vez)»** para abrir el asistente
+   - Al terminar, si es tu **primera instalación**, deja marcada **«Abrir
+     FichaCSIRC y configurarlo»**: la app arranca directamente el asistente
      (necesitarás tu **API key**: tenla a mano, sección 2). Si es una
      **actualización**, verás **«Abrir FichaCSIRC al terminar»** y la app se
-     reabrirá sola. 🔁
+     reabrirá sola con todo lo tuyo. 🔁
 
-4. Quedan instalados **dos programas** (en el menú Inicio y, si lo marcaste, el
-   de registro también en el escritorio):
+4. En el menú Inicio (y, si lo marcaste, en el escritorio) tienes:
 
    - 📝 **FichaCSIRC (Registrar horas)** — la que usarás cada día.
-   - 🔧 **FichaCSIRC - Configurar** — el asistente de configuración (una vez).
+   - 🔧 **FichaCSIRC - Configurar** — abre directamente el asistente de
+     configuración (también está dentro de la app, en *Herramientas*).
+
+   > 🧩 Necesita **Microsoft Edge WebView2**, que ya viene con Windows 11 y con
+   > Windows 10 actualizado. Si faltara, el instalador te avisa.
 
    > 🗑️ **Para desinstalar:** *Configuración de Windows → Aplicaciones →
    > FichaCSIRC → Desinstalar*. Tu configuración y tus horas no se tocan.
@@ -52,24 +55,22 @@ Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INAR
    - Apple Silicon (M1/M2/M3/M4): `FichaCSIRC-mac-arm64.dmg`
    - Intel: `FichaCSIRC-mac-x64.dmg`
 
-2. Ábrelo. Verás dos aplicaciones y un acceso a **Aplicaciones**:
+2. Ábrelo. Verás **FichaCSIRC.app** y un acceso a **Aplicaciones**.
+   **Arrástrala a Aplicaciones** 📂 (si ya la tenías, elige **«Reemplazar»**).
+   No la abras desde el propio `.dmg` ni desde Descargas: así cada actualización
+   sustituye a la anterior en vez de dejar otra copia.
 
-   - 📝 **FichaCSIRC.app** — la de cada día.
-   - 🔧 **FichaCSIRC-Configurar.app** — el asistente de configuración.
+3. Ábrela desde Aplicaciones. Como no está firmada por Apple, la primera vez
+   macOS la bloquea: ve a **Ajustes del Sistema → Privacidad y seguridad** y
+   pulsa **«Abrir igualmente»**. Solo la primera vez. 🔓 La primera vez arranca
+   sola el asistente de configuración.
 
-   **Arrastra las dos a Aplicaciones** 📂. Si ya las tenías, elige
-   **«Reemplazar»**. No las abras desde el propio `.dmg` ni desde Descargas: así
-   cada actualización sustituye a la anterior en vez de dejar otra copia.
-
-3. Abre primero **FichaCSIRC-Configurar.app** desde Aplicaciones. Como la app no
-   está firmada por Apple, la primera vez macOS la bloquea: ve a **Ajustes del
-   Sistema → Privacidad y seguridad** y pulsa **«Abrir igualmente»**. Solo la
-   primera vez. 🔓
-
-4. Cuando termines la configuración, abre **FichaCSIRC.app** para fichar.
+> 🧹 **¿Vienes de una versión anterior a la 3.0?** Ya no hay
+> *FichaCSIRC-Configurar.app*: el asistente va dentro de la app (*Herramientas →
+> Configuración*). Puedes mandar la antigua a la Papelera.
 
 > 🔄 **Actualizar en Mac:** cuando haya versión nueva, la app te ofrece
-> descargarla. Se abre el instalador y la app se cierra; arrastra las dos apps a
+> descargarla. Se abre el instalador y la app se cierra; arrastra FichaCSIRC a
 > Aplicaciones y elige **«Reemplazar»**.
 >
 > 🧹 **¿Te salen varios iconos de FichaCSIRC en Launchpad?** Son copias viejas
@@ -103,18 +104,23 @@ Se saca de tu propio perfil de OpenProject:
 
 ## 3. ⚙️ Configuración inicial (2 minutos)
 
-Abre **FichaCSIRC - Configurar** y sigue el asistente:
+La primera vez que abres FichaCSIRC arranca solo el asistente. Para volver a
+él más adelante: **Herramientas → Configuración (asistente)** (o, en Windows,
+el acceso **FichaCSIRC - Configurar**).
 
 - 🔌 **Conexión**: la dirección ya viene puesta (`https://proyectostic.ugr.es`);
   pega tu **API key** y pulsa **Probar conexión** — debe saludarte con tu nombre. 👋
-- ⏰ **Jornada**: horas por día en horario normal (ej. 7) y de verano (ej. 5), con
-  sus fechas. Admite medias horas (4,5).
+- ⏰ **Jornada**: tu jornada **oficial** (ej. 7) y, si media hora es de desayuno
+  y no se ficha, marca **Descontar desayuno** (0,5): el asistente te dice cuánto
+  fichas (6,5 h) y cuánto vale un día de permiso (7 h). Después, la de verano
+  (ej. 5) con sus fechas. Admite medias horas (4,5).
 - ⭐ **Tareas favoritas**: elige tu proyecto y marca las tareas que uses a menudo
   (Ctrl o Mayús para varias). Elige también tu actividad por defecto (ej. «soporte»).
 - 💾 **Finalizar** para guardar.
 
-Ya puedes cerrar el asistente. Solo tendrás que volver si cambia tu jornada o
-quieres retocar las favoritas.
+Al finalizar pasas directamente a la ventana de fichar. Solo tendrás que volver
+al asistente si cambia tu jornada o quieres retocar las favoritas. La API key
+no se vuelve a mostrar: si dejas su campo vacío, se conserva la guardada.
 
 ---
 
@@ -279,7 +285,7 @@ para que no tengas que saltar de una herramienta a otra.
 | Problema | Solución |
 |---|---|
 | «Sin conexión con ProyectosTic» | Comprueba que tienes red de la UGR (o la VPN encendida 🌐). |
-| «Acceso denegado (401)» | Tu API key ya no vale: genera otra (sección 2) y vuelve a pasar el configurador. |
+| «Acceso denegado (401)» | Tu API key ya no vale: genera otra (sección 2) y pégala en *Herramientas → Configuración (asistente)*. |
 | «No tienes permiso para ver las tareas de este proyecto» (403) | Es normal: solo ves los proyectos en los que participas. Elige otro. |
 | Varios iconos de FichaCSIRC en Launchpad (Mac) | Son copias viejas en Descargas: deja solo las de Aplicaciones (ver sección 1, macOS). |
 | El aviso diario de fichaje no salta | Abre FichaCSIRC una vez: si el aviso apuntaba a una instalación vieja, la app lo reprograma sola a la misma hora. |

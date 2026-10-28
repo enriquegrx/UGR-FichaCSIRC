@@ -1,35 +1,32 @@
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title Construir FichaCSIRC.exe
+title Construir FichaCSIRC
 
 set "PYEXE="
 for /d %%D in ("%LocalAppData%\Programs\Python\Python3*") do if exist "%%D\python.exe" set "PYEXE=%%D\python.exe"
 if not defined PYEXE for /d %%D in ("%ProgramFiles%\Python3*") do if exist "%%D\python.exe" set "PYEXE=%%D\python.exe"
 
-if not defined PYEXE echo No hay Python instalado. Ejecuta primero "FichaCSIRC - Configurar.bat".
+if not defined PYEXE echo No hay Python 3 instalado (hace falta para compilar).
 if not defined PYEXE pause
 if not defined PYEXE exit /b
 
-echo Instalando PyInstaller y requests (puede tardar la primera vez)...
-"!PYEXE!" -m pip install --quiet --upgrade pip pyinstaller requests
+echo Instalando PyInstaller, requests y pywebview (puede tardar la primera vez)...
+"!PYEXE!" -m pip install --quiet --upgrade pip
+"!PYEXE!" -m pip install --quiet -r requirements-web.txt pyinstaller==6.21.0
 
 echo.
-echo Construyendo la app de registro (FichaCSIRC)...
-"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." registrar_gui.py
-
-echo.
-echo Construyendo el configurador (FichaCSIRC-Configurar)...
-"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." configurar_gui.py
+echo Construyendo FichaCSIRC (interfaz web, con el asistente dentro)...
+"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." registrar_web.py
 
 echo.
 echo ============================================================
-echo   Listo. Cada app es una CARPETA (el .exe + su _internal):
-echo     dist\FichaCSIRC\FichaCSIRC.exe             (registrar)
-echo     dist\FichaCSIRC-Configurar\FichaCSIRC-Configurar.exe  (configurar)
+echo   Listo. La app es una CARPETA (el .exe + su _internal):
+echo     dist\FichaCSIRC\FichaCSIRC.exe
 echo   OJO: el .exe necesita su carpeta _internal al lado (no lo muevas solo).
 echo   La configuracion se guarda en:  %%APPDATA%%\FichaCSIRC
-echo   Ejecuta primero el configurador y luego la app.
+echo   La primera vez abre solo el asistente; despues: FichaCSIRC.exe --configurar
+echo   Para el instalador: build_instalador.bat
 echo ============================================================
 echo.
 pause

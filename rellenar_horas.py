@@ -49,7 +49,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "2.9.2"
+VERSION = "3.0.0"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -255,10 +255,13 @@ LOG = _configurar_log()
 
 
 def _msg_configurar():
+    # Desde la 3.0 el asistente va dentro de la app (y en Windows tiene su
+    # acceso "FichaCSIRC - Configurar" en el menu Inicio).
     if getattr(sys, "frozen", False):
         if sys.platform == "darwin":
-            return "Ejecuta primero FichaCSIRC-Configurar.app"
-        return "Ejecuta primero FichaCSIRC-Configurar.exe"
+            return "En FichaCSIRC: Herramientas > Configuración (asistente)."
+        return ('Abre "FichaCSIRC - Configurar" (menú Inicio) o, en la app, '
+                "Herramientas > Configuración (asistente).")
     if os.name != "nt":
         return 'Ejecuta primero "python3 configurar_gui.py"'
     return 'Ejecuta primero "FichaCSIRC - Configurar.bat"'

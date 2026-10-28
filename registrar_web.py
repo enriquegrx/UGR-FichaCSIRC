@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-registrar_web.py - PROTOTIPO de la ventana principal con interfaz HTML (pywebview).
+registrar_web.py - FichaCSIRC (desde 3.0): ventana con interfaz HTML (pywebview).
 
-Rama experimental: convive con registrar_gui.py (Tkinter), que sigue siendo la
-app de verdad. Aqui la pantalla es HTML/CSS/JS (carpeta web/) y toda la logica
-sigue en Python: el motor (rellenar_horas, destinos) se usa tal cual y la clase
-Api es lo unico que ve el JavaScript (window.pywebview.api).
+Sustituye a registrar_gui.py + configurar_gui.py (Tkinter), que siguen en el
+repo pero ya no se empaquetan. La pantalla es HTML/CSS/JS (carpeta web/) y toda
+la logica sigue en Python: el motor (rellenar_horas, destinos) se usa tal cual
+y la clase Api es lo unico que ve el JavaScript (window.pywebview.api).
 
 Hace TODO lo de la app Tkinter, incluido el asistente de configuracion (que se
 abre solo si no hay config), el aviso diario (--recordatorio) y las
@@ -22,6 +22,7 @@ Pasar a produccion = EXPERIMENTO = False (y empaquetarla en lugar de la Tkinter)
 
 Ejecuta:  python registrar_web.py      (necesita: pip install pywebview)
           python registrar_web.py --recordatorio   (solo el aviso de fichaje)
+          python registrar_web.py --configurar     (abre el asistente)
 """
 
 import os
@@ -39,7 +40,8 @@ import datetime as dt
 
 # Interruptor del experimento (ver docstring). False = comportarse como la app
 # de produccion: config real, instalar actualizaciones, programar el aviso.
-EXPERIMENTO = True
+# Para volver a probar algo arriesgado sin tocar la config real: True.
+EXPERIMENTO = False
 
 
 # ---------------- configuracion aislada (ANTES de importar el motor) ----------------
@@ -1303,9 +1305,11 @@ def main():
         threading.Thread(target=recordatorio.reparar_recordatorio, daemon=True).start()
     api = Api()
     # Sin config.json (primera vez): el propio asistente, no un mensaje de error.
-    pagina = "index.html" if core is not None else "configurar.html"
+    # --configurar: el acceso "FichaCSIRC - Configurar" del menu Inicio.
+    asistente = core is None or "--configurar" in sys.argv[1:]
+    pagina = "configurar.html" if asistente else "index.html"
     api._ventana = webview.create_window(
-        _titulo() if core else "FichaCSIRC · configuración",
+        _titulo() if not asistente else "FichaCSIRC · configuración",
         _recurso("web", pagina), js_api=api, width=1180, height=820,
         min_size=(900, 660), maximized=core is not None, background_color="#e9edf2")
     webview.start()

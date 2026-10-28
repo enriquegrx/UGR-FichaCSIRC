@@ -92,9 +92,11 @@ class TestMsgConfigurar(unittest.TestCase):
         self.assertIn(esperado, core._msg_configurar())
 
     def test_frozen(self):
+        # 3.0: el asistente va dentro de la app (y en Windows, su acceso del menu)
         with mock.patch.object(sys, "frozen", True, create=True):
-            esperado = "FichaCSIRC-Configurar.app" if sys.platform == "darwin" else "FichaCSIRC-Configurar.exe"
-            self.assertIn(esperado, core._msg_configurar())
+            self.assertIn("Configuración (asistente)", core._msg_configurar())
+            if sys.platform != "darwin":
+                self.assertIn("FichaCSIRC - Configurar", core._msg_configurar())
 
 
 class TestApi(unittest.TestCase):

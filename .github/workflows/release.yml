@@ -39,11 +39,13 @@ jobs:
       - name: Instalar dependencias
         # PyInstaller fijado: evita que un bootloader nuevo cambie el manejo del
         # empaquetado sin avisar (build reproducible).
-        run: pip install requests pyinstaller==6.21.0
+        run: pip install -r requirements-web.txt pyinstaller==6.21.0
 
       - name: Ejecutar tests
         run: python -m unittest discover -s tests -t . -v
 
+      # Desde la 3.0 hay UNA app: la interfaz HTML (registrar_web.py + web/,
+      # con pywebview); el asistente de configuracion va dentro (--configurar).
       # Modo CARPETA (--onedir), no --onefile: el .exe se ejecuta junto a su
       # carpeta _internal (con python3XX.dll y el runtime VC) y NO se extrae nada
       # a %TEMP%\_MEI. Asi se evita el error "Failed to load Python DLL" al lanzar
@@ -53,16 +55,9 @@ jobs:
           pyinstaller --noconfirm --clean --onedir --windowed --noupx
           --name "FichaCSIRC" --icon "fichacsirc.ico"
           --version-file "version_info.txt"
-          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;."
-          registrar_gui.py
-
-      - name: Construir FichaCSIRC-Configurar (carpeta)
-        run: >
-          pyinstaller --noconfirm --clean --onedir --windowed --noupx
-          --name "FichaCSIRC-Configurar" --icon "fichacsirc.ico"
-          --version-file "version_info.txt"
-          --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;."
-          configurar_gui.py
+          --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
+          --add-data "NOVEDADES.md;."
+          registrar_web.py
 
       - name: Instalar Inno Setup
         run: choco install innosetup -y --no-progress

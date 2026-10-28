@@ -1,11 +1,12 @@
 ; instalador.iss - Instalador unico de FichaCSIRC (Inno Setup 6)
 ;
-; Empaqueta las dos aplicaciones (registro + configurador) en un solo
-; instalador, con accesos directos en el menu Inicio y desinstalador.
+; Desde la 3.0 hay UNA sola aplicacion (interfaz HTML con pywebview): el
+; asistente de configuracion va dentro (FichaCSIRC.exe --configurar), con su
+; acceso propio en el menu Inicio para que nadie lo eche en falta.
 ; Instalacion POR USUARIO (no pide permisos de administrador).
 ;
-; Compilar (necesita dist\FichaCSIRC.exe y dist\FichaCSIRC-Configurar.exe):
-;   iscc /DMyAppVersion=2.1 instalador.iss
+; Compilar (necesita la carpeta dist\FichaCSIRC de PyInstaller --onedir):
+;   iscc /DMyAppVersion=3.0.0 instalador.iss
 ; (si no se pasa /D, usa la version por defecto de abajo)
 
 #ifndef MyAppVersion
@@ -45,22 +46,27 @@ Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
 
-; Al pasar de --onefile a --onedir, borrar los .exe sueltos de una instalacion
-; vieja (ahora cada app vive en su carpeta {app}\<App>\ con su _internal).
+; Restos de versiones anteriores que NO deben convivir con la nueva:
+;  - los .exe sueltos de cuando era --onefile (antes de 2.6.4);
+;  - el configurador Tkinter, que desde la 3.0 va dentro de la app;
+;  - el _internal de la version Tkinter: copiar encima dejaria sus DLL de Tcl/Tk
+;    y modulos viejos mezclados con los nuevos.
 [InstallDelete]
 Type: files; Name: "{app}\FichaCSIRC.exe"
 Type: files; Name: "{app}\FichaCSIRC-Configurar.exe"
+Type: filesandordirs; Name: "{app}\FichaCSIRC-Configurar"
+Type: filesandordirs; Name: "{app}\FichaCSIRC\_internal"
 
-; Cada app es una CARPETA (--onedir): el .exe + su _internal (python3XX.dll,
-; runtime VC, tcl/tk...). Se copian recursivas a subcarpetas separadas.
+; La app es una CARPETA (--onedir): el .exe + su _internal (python3XX.dll,
+; runtime VC, pythonnet, la interfaz web/...). Va en {app}\FichaCSIRC, la misma
+; ruta de siempre: asi la tarea programada del aviso diario sigue valiendo.
 [Files]
 Source: "dist\FichaCSIRC\*"; DestDir: "{app}\FichaCSIRC"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "dist\FichaCSIRC-Configurar\*"; DestDir: "{app}\FichaCSIRC-Configurar"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "INSTRUCCIONES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\FichaCSIRC (Registrar horas)"; Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"
-Name: "{group}\FichaCSIRC - Configurar"; Filename: "{app}\FichaCSIRC-Configurar\FichaCSIRC-Configurar.exe"; WorkingDir: "{app}\FichaCSIRC-Configurar"
+Name: "{group}\FichaCSIRC - Configurar"; Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; Parameters: "--configurar"; WorkingDir: "{app}\FichaCSIRC"
 Name: "{group}\Desinstalar FichaCSIRC"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"; Tasks: desktopicon
 
@@ -71,9 +77,9 @@ Name: "{autodesktop}\FichaCSIRC"; Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; W
 ; _internal, no extrae nada a %TEMP%\_MEI, y desaparece el "Failed to load Python
 ; DLL" que daban 2.6.1/2.6.2 (que eran --onefile). WorkingDir apunta a su carpeta.
 Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"; Description: "Abrir FichaCSIRC al terminar"; Flags: nowait postinstall skipifsilent; Check: EsActualizacion
-; Ofrecer el configurador SOLO en una instalacion nueva (si ya hay config.json
-; es una actualizacion y no hay que reconfigurar: la casilla ni aparece).
-Filename: "{app}\FichaCSIRC-Configurar\FichaCSIRC-Configurar.exe"; WorkingDir: "{app}\FichaCSIRC-Configurar"; Description: "Configurar FichaCSIRC ahora (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion
+; Instalacion nueva: abrir la app, que sin config.json arranca sola el
+; asistente (si ya hay config es una actualizacion y la casilla ni aparece).
+Filename: "{app}\FichaCSIRC\FichaCSIRC.exe"; WorkingDir: "{app}\FichaCSIRC"; Description: "Abrir FichaCSIRC y configurarlo (necesario la primera vez)"; Flags: nowait postinstall skipifsilent; Check: not EsActualizacion
 ; Y ofrecer las instrucciones en la web (renderizadas), en vez de un .txt suelto
 Filename: "{#MyUrl}/blob/main/INSTRUCCIONES.md"; Description: "Ver las instrucciones de uso (web)"; Flags: postinstall shellexec skipifsilent unchecked
 
@@ -118,11 +124,38 @@ begin
   end;
 end;
 
+const
+  WEBVIEW2_CLAVE = 'Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+
+function VersionWebView2(Raiz: Integer; const Ruta: String): Boolean;
+var
+  V: String;
+begin
+  Result := RegQueryStringValue(Raiz, Ruta, 'pv', V) and (V <> '') and (V <> '0.0.0.0');
+end;
+
+function WebView2Instalado(): Boolean;
+begin
+  { La ventana de la 3.0 la dibuja WebView2 (Edge). Viene con Windows 11 y con
+    Windows 10 actualizado; se busca donde lo registra Microsoft (equipo de 64
+    o 32 bits, o instalado solo para el usuario). }
+  Result := VersionWebView2(HKLM, 'SOFTWARE\WOW6432Node\' + WEBVIEW2_CLAVE)
+         or VersionWebView2(HKLM, 'SOFTWARE\' + WEBVIEW2_CLAVE)
+         or VersionWebView2(HKCU, 'Software\' + WEBVIEW2_CLAVE);
+end;
+
 function InitializeSetup(): Boolean;
 begin
   { Si lo lanza el actualizador, espera a que la app termine de cerrarse. }
   Sleep(1500);
   CerrarProcesos;
+  if not WebView2Instalado() then
+    MsgBox('FichaCSIRC necesita "Microsoft Edge WebView2 Runtime", que no está ' +
+           'instalado en este equipo (viene con Windows 11 y con Windows 10 ' +
+           'actualizado).' + #13#10#13#10 +
+           'La instalación continúa, pero la aplicación no abrirá hasta que lo ' +
+           'instales: búscalo como "WebView2 Runtime" en la web de Microsoft o ' +
+           'pídeselo a tu servicio de informática.', mbInformation, MB_OK);
   Result := True;
 end;
 

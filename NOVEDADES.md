@@ -5,6 +5,32 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.0.0
+
+**Nueva ventana**
+- FichaCSIRC **estrena aspecto**. Todo sigue en su sitio (la semana arriba, el
+  formulario de añadir y la lista de apuntes, y los mismos menús), pero más
+  claro, más rápido y con los botones de cada ventana **siempre a la vista**.
+- **El configurador va dentro de la app**: *Herramientas → Configuración
+  (asistente)*. En Windows sigue estando el acceso *FichaCSIRC - Configurar* del
+  menú Inicio. La primera vez se abre solo.
+- **En Mac hay una sola aplicación**: puedes mandar a la Papelera la
+  *FichaCSIRC-Configurar* antigua que tengas en Aplicaciones.
+
+**Mejoras**
+- El **resumen del mes** y **exportar a CSV** van mucho más rápido: consultan
+  todo el periodo de una vez en lugar de día a día.
+- El **asistente explica cuánto fichas** y cuánto vale un día de permiso si
+  descuentas el desayuno (jornada 7 h − 0,5 h = fichas 6,5 h; un día de permiso
+  cuenta 7 h).
+- El **botón derecho** funciona igual en Windows y en Mac.
+- Tu **API key** y el token de INARI **ya no se muestran** en pantalla: si dejas
+  el campo vacío, se conserva el guardado.
+
+**Requisitos**
+- En Windows necesita **Microsoft Edge WebView2**, que ya viene con Windows 11 y
+  con Windows 10 actualizado. Si faltara, el instalador te lo dice.
+
 ## 2.9.2
 
 **Mejoras**
