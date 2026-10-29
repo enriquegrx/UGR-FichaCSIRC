@@ -44,6 +44,8 @@ instalada aparece en el pie de la ventana.
 - **Más compacta**: el formulario y los apuntes van **uno al lado del otro**, y
   cada apunte tiene sus botones de **editar** y **borrar**. El botón de añadir
   dice a qué días lo hace («Añadir a lun 26/10», «Añadir a 3 días»).
+- En **portátiles y pantallas pequeñas** la ventana se compacta sola (cabecera
+  más baja, sin la leyenda de colores) para que quepa todo sin desplazar.
 
 **Mejoras**
 - El **resumen del mes** y **exportar a CSV** van mucho más rápido: consultan
