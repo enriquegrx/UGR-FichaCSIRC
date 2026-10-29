@@ -255,6 +255,41 @@ function dlgEditarDia(dia) {
   recalcular();
 }
 
+// ================================================================ PIN de acceso
+
+async function dlgPin() {
+  const { activo } = await llamar("pin_estado");
+  const campo = (etiqueta) => entrada("", { type: "password", inputmode: "numeric", maxlength: "8",
+                                            autocomplete: "off", class: "horas", "aria-label": etiqueta });
+  const actual = campo("PIN actual"), nuevo = campo("PIN nuevo"), repetido = campo("Repite el PIN nuevo");
+  const botones = [cancelarBoton,
+    { texto: activo ? "Cambiar PIN" : "Activar PIN", clase: "primario", accion: fijar }];
+  if (activo) botones.unshift({ texto: "Quitar PIN", clase: "peligro", izquierda: true, accion: quitar });
+  const d = dialogo({ titulo: "PIN de acceso", ancho: 520, botones });
+  d.cuerpo.append(
+    nota(activo ? "FichaCSIRC pide el PIN al abrirse. Para cambiarlo o quitarlo, escribe antes el actual."
+                : "Con un PIN, FichaCSIRC lo pedirá cada vez que se abra (también el asistente de configuración)."),
+    rejilla(...(activo ? [["PIN actual", actual]] : []),
+            ["PIN nuevo", nuevo], ["Repítelo", repetido]),
+    nota("De 4 a 8 cifras. Si lo olvidas, la única salida es borrar la configuración de este equipo "
+         + "y volver a configurar FichaCSIRC (tus horas en ProyectosTIC no se pierden)."));
+  (activo ? actual : nuevo).focus();
+  for (const i of [actual, nuevo, repetido]) i.addEventListener("keydown", (e) => { if (e.key === "Enter") fijar(d); });
+
+  async function fijar(dd) {
+    const r = await llamar("pin_fijar", nuevo.value, repetido.value, actual.value);
+    if (r.error) { await avisar("PIN de acceso", r.error); return; }
+    dd.cerrar();
+    estado(activo ? "PIN cambiado." : "PIN activado: se pedirá al abrir FichaCSIRC.");
+  }
+  async function quitar(dd) {
+    const r = await llamar("pin_quitar", actual.value);
+    if (r.error) { await avisar("PIN de acceso", r.error); actual.focus(); return; }
+    dd.cerrar();
+    estado("PIN quitado: FichaCSIRC ya no lo pedirá.");
+  }
+}
+
 // ================================================================ buscar tarea
 
 function dlgBuscar() {

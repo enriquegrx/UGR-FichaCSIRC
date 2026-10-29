@@ -21,6 +21,7 @@ const PASOS = [
   { titulo: "Conexión", pintar: pConexion, validar: vConexion },
   { titulo: "Jornada", pintar: pJornada, validar: vJornada },
   { titulo: "Tareas", pintar: pTareas },
+  { titulo: "PIN", pintar: pPin, validar: vPin },
   { titulo: "Resumen", pintar: pResumen },
 ];
 
@@ -196,6 +197,43 @@ function pTareas() {
   })();
 }
 
+// PIN de acceso, opcional. Si ya hay uno, aqui solo se dice donde cambiarlo:
+// el asistente no lo pisa.
+function pPin() {
+  if (W.ini.hay_pin) {
+    caja().append(el("h2", { text: "PIN de acceso" }),
+      el("p", { text: "Ya tienes un PIN de acceso: FichaCSIRC lo pide al abrirse." }),
+      el("p", { class: "tenue", text: "Para cambiarlo o quitarlo: Herramientas → PIN de acceso." }));
+    return;
+  }
+  const si = el("input", { type: "checkbox", id: "p-si" });
+  si.checked = !!W.d.pin_si;
+  const campo = (valor, etiqueta) => entrada(valor, { type: "password", inputmode: "numeric", maxlength: "8",
+                                                      autocomplete: "off", "aria-label": etiqueta });
+  const pin = campo(W.d.pin, "PIN"), pin2 = campo(W.d.pin2, "Repite el PIN");
+  const campos = el("div", {}, fila("PIN (4 a 8 cifras)", pin), fila("Repítelo", pin2));
+  const guardar = () => { W.d.pin_si = si.checked; W.d.pin = pin.value.trim(); W.d.pin2 = pin2.value.trim(); };
+  const pintar = () => { campos.hidden = !si.checked; guardar(); };
+  si.onchange = () => { pintar(); if (si.checked) pin.focus(); };
+  pin.oninput = pin2.oninput = guardar;
+  caja().append(
+    el("h2", { text: "PIN de acceso (opcional)" }),
+    el("p", { text: "Si compartes el equipo, FichaCSIRC puede pedir un PIN cada vez que se abre." }),
+    el("label", { class: "check" }, si, " Pedir un PIN al abrir FichaCSIRC"),
+    campos,
+    el("p", { class: "tenue", text: "Si lo olvidas, habrá que borrar la configuración de este equipo y "
+      + "volver a pasar por este asistente. Tus horas en ProyectosTIC no se pierden. "
+      + "Puedes activarlo, cambiarlo o quitarlo cuando quieras en Herramientas → PIN de acceso." }));
+  pintar();
+}
+
+async function vPin() {
+  if (W.ini.hay_pin || !W.d.pin_si) return true;
+  if (!/^\d{4,8}$/.test(W.d.pin || "")) { await avisar("PIN de acceso", "El PIN debe tener entre 4 y 8 cifras."); return false; }
+  if (W.d.pin !== W.d.pin2) { await avisar("PIN de acceso", "Los dos PIN no coinciden."); return false; }
+  return true;
+}
+
 function pResumen() {
   const d = W.d;
   const lineas = [
@@ -205,6 +243,7 @@ function pResumen() {
     ["Horario de verano", d.verano_si ? `${d.verano} h/día, del ${d.verano_inicio} al ${d.verano_fin}` : "No"],
     ["Actividad por defecto", d.actividad],
     ["Tareas favoritas", String(d.favoritos.length)],
+    ["PIN de acceso", W.ini.hay_pin ? "el que ya tienes" : (d.pin_si ? "sí (se pedirá al abrir)" : "no")],
   ];
   const MAX = 10;   // no alargar el resumen sin fin si hay muchas favoritas
   caja().append(
@@ -256,6 +295,9 @@ async function cancelar() {
 }
 
 async function arrancarAsistente() {
+  // "FichaCSIRC - Configurar" abre el asistente directamente: con PIN, tambien
+  // hay que escribirlo (si no, cualquiera cambiaria la config o el PIN).
+  await desbloquear();
   const ini = W.ini = await llamar("cfg_cargar");
   if (ini.logo) { $("logo").src = ini.logo; $("logo").hidden = false; }
   document.querySelector(".etiqueta-prototipo").hidden = !ini.experimento;

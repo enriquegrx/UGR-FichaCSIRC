@@ -82,6 +82,54 @@ function cuandoListo(fn) {
   else iniciar();
 }
 
+// PIN de acceso: si esta activo y la app sigue bloqueada, una pantalla que
+// lo tapa todo hasta acertarlo. Devuelve true al desbloquear y false si se
+// borro la configuracion por haberlo olvidado (hay que ir al asistente).
+// Python no da datos hasta entonces (Api._exigir_desbloqueo).
+async function desbloquear() {
+  const e = await llamar("pin_estado");
+  if (!e.activo || e.desbloqueada) return true;
+  return new Promise((resolver) => {
+    const pin = el("input", { type: "password", inputmode: "numeric", autocomplete: "off",
+                              maxlength: "8", "aria-label": "PIN", class: "pin-campo" });
+    const msg = el("p", { class: "pin-msg", role: "alert" });
+    const entrar = el("button", { class: "primario", type: "submit", text: "Entrar" });
+    const olvido = el("button", { type: "button", class: "enlace", text: "He olvidado el PIN" });
+    const capa = el("div", { class: "bloqueo" },
+      el("form", { class: "bloqueo-caja" },
+        el("h1", { text: "FichaCSIRC" }),
+        el("p", { class: "tenue", text: "Escribe tu PIN para entrar." }),
+        pin, msg, entrar, olvido));
+    const form = capa.firstChild;
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!pin.value.trim()) { pin.focus(); return; }
+      entrar.disabled = true;
+      const r = await llamar("pin_comprobar", pin.value).catch(() => ({ error: "" }));
+      if (r.ok) { capa.remove(); resolver(true); return; }
+      msg.textContent = r.error || "";
+      pin.value = "";
+      pin.focus();
+      if (r.espera) setTimeout(() => { entrar.disabled = false; }, r.espera * 1000);
+      else entrar.disabled = false;
+    });
+    olvido.addEventListener("click", async () => {
+      if (!(await preguntar("He olvidado el PIN",
+          "Sin el PIN no se puede entrar. Si sigues, se borra la configuración de FichaCSIRC "
+          + "en este equipo (API key, favoritas, plantillas, permisos, festivos y el aviso "
+          + "diario) y empezarás de cero con el asistente.\n\n"
+          + "Tus horas en ProyectosTIC no se tocan.\n\n¿Borrar la configuración?",
+          { si: "Borrar y empezar de cero", no: "Cancelar" }))) { pin.focus(); return; }
+      const r = await llamar("pin_olvidado");
+      if (r.error) { msg.textContent = r.error; return; }
+      capa.remove();
+      resolver(false);
+    });
+    document.body.append(capa);
+    pin.focus();
+  });
+}
+
 // Sin el menu contextual del navegador (no es una web), salvo en los campos.
 document.addEventListener("contextmenu", (e) => {
   if (!["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) e.preventDefault();

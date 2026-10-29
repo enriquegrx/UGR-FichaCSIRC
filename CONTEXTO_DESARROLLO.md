@@ -470,6 +470,22 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.1.0 (oct 2026, rama `mejoras/3.1`, sin publicar):
+  - **Editar día** (`Api.guardar_dia`): valida TODO antes de tocar nada (una hora
+    mal escrita no deja el día a medias) y guarda el contrario de cada paso que
+    sale bien en `_deshacer` (crear / editar / borrar), que `deshacer()` aplica
+    en orden inverso. Por eso `crear_entrada` devuelve ya el id creado.
+  - **PIN de acceso**: bloqueo de pantalla, NO cifrado (decisión del usuario: con
+    la API key cifrada el aviso de las 14:00 no podría consultar horas). Hash
+    PBKDF2-SHA256 200k con sal; fallos en `pin_intentos` para que reiniciar la app
+    no se salte la espera. `Api._exigir_desbloqueo()` en `inicio`, `cfg_cargar` y
+    `cfg_guardar`: el acceso "FichaCSIRC - Configurar" también lo pide.
+    "Olvidé el PIN" borra config.json (y el aviso diario): reinstalar no serviría
+    porque la config vive en %APPDATA%/Library y el desinstalador no la toca.
+  - **Novedades tras actualizar**: `ultima_version_abierta`; sin ella (se viene
+    de la 3.0) se enseña la última versión; el asistente la deja apuntada para
+    que una instalación nueva no las vea.
+
 - v3.0.0 (oct 2026, rama `experimento/pywebview`): **interfaz HTML con pywebview**
   en lugar de Tkinter, con el asistente dentro de la misma app.
   - Por qué: los problemas recurrentes eran de Tk (pie que desaparecía, botones

@@ -106,6 +106,7 @@ const MENUS = {
     { texto: "Permisos (horas)…", accion: dlgPermisos },
     { texto: "Integraciones (INARI)…", accion: dlgInari },
     { texto: "Aviso diario de fichaje…", accion: dlgRecordatorio },
+    { texto: "PIN de acceso…", accion: dlgPin },
     "-",
     { texto: "Configuración (asistente)…", accion: () => { location.href = "configurar.html"; } },
   ],
@@ -122,6 +123,9 @@ const MENUS = {
 // ---------------------------------------------------------------- arranque
 
 async function arrancar() {
+  // Con PIN, nada se pide ni se pinta hasta acertarlo; si se olvido y se borro
+  // la configuracion, al asistente.
+  if (!(await desbloquear())) { location.href = "configurar.html"; return; }
   const ini = st.ini = await llamar("inicio");
   st.lunes = st.hoyLunes = ini.lunes;
   st.mesSel = mesDe(hoyIso());

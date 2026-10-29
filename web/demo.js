@@ -197,7 +197,15 @@
         concesiones: p.concesiones.map((c) => ({ horas: hhmm(c.horas), fecha_limite: c.fecha_limite,
           estado: c.fecha_limite === "2026-11-10" ? "por_caducar" : "" })) };
     }) });
+  // ?pin: arranca bloqueada (PIN 1234)
+  let pinActivo = /[?&]pin\b/.test(location.search), pinOk = !pinActivo;
   Object.assign(window.pywebview.api, {
+    pin_estado: () => espera({ activo: pinActivo, desbloqueada: pinOk }),
+    pin_comprobar: (p) => { pinOk = pinOk || p === "1234"; return espera(pinOk ? { ok: true } : { error: "PIN incorrecto." }); },
+    pin_fijar: (n, r) => espera(!/^\d{4,8}$/.test(n) ? { error: "El PIN debe tener entre 4 y 8 cifras." }
+      : n !== r ? { error: "Los dos PIN no coinciden." } : (pinActivo = true, { ok: true })),
+    pin_quitar: () => { pinActivo = false; return espera({ ok: true }); },
+    pin_olvidado: () => { pinActivo = false; pinOk = true; return espera({ ok: true }); },
     guardar_dia: (fecha, c) => {
       const num = (v) => parseFloat(String(v).replace(",", "."));
       const lista = (apuntes[fecha] = apuntes[fecha] || []);

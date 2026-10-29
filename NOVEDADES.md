@@ -5,6 +5,30 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.1.0
+
+**Editar un día entero**
+- **Botón derecho sobre un día → «Editar día…»**: salen todas las tareas de ese
+  día y cambias sus **horas** (y su actividad) ahí mismo, **quitas** alguna con la
+  papelera o **añades** otras con «+ Añadir tarea». Arriba ves el total del día
+  mientras escribes («6,5h de 7h»). Nada se envía hasta que pulsas **Guardar**, y
+  **Deshacer** (Ctrl+Z) lo deja todo como estaba.
+- En la vista semanal, al pasar el ratón por una tarea de la ficha salen sus
+  botones ✏️ **editar** y 🗑️ **borrar**.
+
+**PIN de acceso**
+- Si compartes el equipo, FichaCSIRC puede **pedir un PIN al abrirse**
+  (también el asistente de configuración). Se activa en *Herramientas → PIN de
+  acceso…* o en el propio asistente al instalar.
+- Si lo olvidas, «He olvidado el PIN» borra la configuración de ese equipo y
+  vuelves a empezar con el asistente. **Tus horas en ProyectosTIC no se tocan.**
+
+**Mejoras**
+- Después de actualizar, la primera vez que abres FichaCSIRC te enseña **qué hay
+  de nuevo** en esa versión. Siempre lo tienes en *Ayuda → Novedades*.
+
+---
+
 ## 3.0.0
 
 **Nueva ventana**

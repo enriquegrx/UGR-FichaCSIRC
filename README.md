@@ -34,6 +34,14 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - 💬 Recordar la actividad y el comentario habitual de cada tarea.
 - ✏️ Editar apuntes con doble clic y borrar varios apuntes seleccionados con
   posibilidad de deshacer.
+- ✎ **Editar un día entero** (botón derecho → *Editar día…*): horas y actividad
+  de cada apunte, quitar y añadir tareas; se guarda todo junto y *Deshacer* lo
+  revierte entero.
+- 🔒 **PIN de acceso** opcional al abrir la app (y el asistente). Es un bloqueo
+  de pantalla: en `config.json` solo se guarda un hash PBKDF2 con sal (`pin`) y
+  los fallos (`pin_intentos`, con espera creciente). La API key sigue en claro
+  para que el aviso diario funcione sin pedir nada; olvidar el PIN = borrar la
+  configuración y volver al asistente.
 - 🔄 Copiar el día anterior, copiar la semana anterior o aplicar plantillas de día
   típico.
 - 🏖️ Marcar festivos, vacaciones u otros días no laborables (nunca bloquean el fichaje).
@@ -60,7 +68,8 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
   porque OpenProject devuelve las mismas actividades para todas las tareas y nada
   impide imputar «Asuntos propios» en una tarea que no toca.
 - 🆕 Ver las **novedades de cada versión dentro de la app** (Ayuda → Novedades),
-  sin pasar por GitHub.
+  sin pasar por GitHub; tras actualizar se abren solas una vez
+  (`ultima_version_abierta`).
 - 📊 Consultar un resumen mensual con objetivo, horas registradas y días
   incompletos.
 - 📤 Exportar horas a CSV.

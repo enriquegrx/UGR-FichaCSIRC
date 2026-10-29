@@ -169,12 +169,18 @@ La app recuerda la vista que dejaste.
   **botón derecho sobre el día → «Copiar día anterior»** (la primera opción, en
   negrita): lo copia a ese día sin tener que marcarlo. También desde *Copiar /
   Plantillas*, a todos los días marcados.
+- ✎ **Editar un día entero**: botón derecho sobre el día → **Editar día…**.
+  Cambias las horas de cada tarea ahí mismo, quitas alguna (papelera) o añades
+  otras; el total del día se actualiza mientras escribes. Se guarda todo junto
+  al pulsar *Guardar* y *Deshacer* lo devuelve a como estaba.
+- 🖱️ En la vista semanal, al pasar el ratón por una tarea de la ficha salen sus
+  botones ✏️ editar y 🗑️ borrar.
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
-  más rápida de crear una: **botón derecho sobre el día** → *Apuntes del día*
-  → *Guardar este día como plantilla*.
-- 🗑️ **Eliminar apuntes de un día**: botón derecho sobre el día → *Apuntes del
-  día* → *Eliminar apuntes de este día*. Te los lista y eliges uno, varios o
-  todos (se puede deshacer).
+  más rápida de crear una: **botón derecho sobre el día** → *Guardar este día
+  como plantilla*.
+- 🗑️ **Eliminar apuntes de un día**: botón derecho sobre el día → *Eliminar
+  apuntes de este día*. Te los lista y eliges uno, varios o todos (se puede
+  deshacer).
 - ✏️ **Doble clic** en un apunte lo edita; **Supr** lo borra (con botón *Deshacer* 🔙).
 - 🖱️ **Botón derecho** sobre un día (en Mac, **Ctrl+clic**): marcarlo como
   festivo, vacaciones, guardia o teletrabajo, o **añadir un permiso por horas**
@@ -187,7 +193,12 @@ La app recuerda la vista que dejaste.
   útil para los permisos: asocia «Asuntos propios» con la tarea de *Permisos* y
   no se te volverá a ir a la tarea equivocada.
 - 🆕 **Ayuda → Novedades**: qué ha cambiado en cada versión, dentro de la propia
-  aplicación.
+  aplicación. Tras actualizar, sale sola la primera vez.
+- 🔒 **PIN de acceso** (*Herramientas*, o en el asistente al instalar): si
+  compartes el equipo, FichaCSIRC pide un PIN de 4 a 8 cifras al abrirse. Si lo
+  olvidas, *He olvidado el PIN* borra la configuración de ese equipo y vuelves a
+  configurar con el asistente (tus horas en ProyectosTIC no se pierden;
+  reinstalar no sirve, la configuración no está en la carpeta del programa).
 - 📊 **Resumen del mes**: cuántas horas llevas, tu objetivo y qué días te faltan.
 - 📤 **Exportar CSV**: tus horas en un archivo que abre Excel.
 - ⏰ **Aviso diario de fichaje** (*Herramientas*): si sueles olvidarte, actívalo y
@@ -320,6 +331,7 @@ para que no tengas que saltar de una herramienta a otra.
 | «No tienes permiso para ver las tareas de este proyecto» (403) | Es normal: solo ves los proyectos en los que participas. Elige otro. |
 | Varios iconos de FichaCSIRC en Launchpad (Mac) | Son copias viejas en Descargas: deja solo las de Aplicaciones (ver sección 1, macOS). |
 | El aviso diario de fichaje no salta | Abre FichaCSIRC una vez: si el aviso apuntaba a una instalación vieja, la app lo reprograma sola a la misma hora. |
+| He olvidado el PIN | En la pantalla del PIN, *He olvidado el PIN*: se borra la configuración de este equipo y empiezas de nuevo con el asistente (necesitarás tu API key, sección 2). Tus horas no se tocan. |
 | El indicador **● INARI** está en rojo | Revisa tu token en *Herramientas → Integraciones (INARI)…* y prueba la conexión (solo aplica a SisGes). |
 | Cualquier otra cosa rara 🐛 | Junto a tu configuración (`%APPDATA%\FichaCSIRC` en Windows, `~/Library/Application Support/FichaCSIRC` en macOS) hay un archivo `fichacsirc.log`: adjúntalo al pedir ayuda. |
 

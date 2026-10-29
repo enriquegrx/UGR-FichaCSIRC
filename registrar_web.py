@@ -32,6 +32,9 @@ import importlib
 import threading
 import shutil
 import base64
+import hashlib
+import hmac
+import secrets
 import calendar
 import collections
 import subprocess
@@ -252,6 +255,55 @@ def _motivo_conexion(e):
 
 # ---------------- API expuesta al JavaScript ----------------
 
+# ---------------------------------------------------------------- PIN de acceso
+# Bloqueo de pantalla, NO cifrado: la API key sigue en config.json (asi el aviso
+# diario puede mirar las horas sin pedir nada). Del PIN solo se guarda un hash
+# lento con sal; los fallos se apuntan en config.json para que cerrar y volver
+# a abrir la app no se salte la espera.
+PIN_ITERACIONES = 200_000
+PIN_FALLOS_LIBRES = 3          # a partir del 4.o fallo, espera creciente
+PIN_ESPERA_MAX = 300
+
+
+def _pin_hash(pin, sal_hex, iteraciones=PIN_ITERACIONES):
+    return hashlib.pbkdf2_hmac("sha256", pin.encode(), bytes.fromhex(sal_hex),
+                               iteraciones).hex()
+
+
+def _pin_formato(pin):
+    """El PIN limpio si son 4-8 cifras; si no, None."""
+    pin = str(pin or "").strip()
+    return pin if pin.isdigit() and 4 <= len(pin) <= 8 else None
+
+
+def _pin_nuevo(pin):
+    sal = secrets.token_hex(16)
+    return {"hash": _pin_hash(pin, sal), "sal": sal, "iter": PIN_ITERACIONES}
+
+
+def _pin_guardado():
+    p = (ccore.cargar_previa() or {}).get("pin")
+    return p if isinstance(p, dict) and p.get("hash") and p.get("sal") else None
+
+
+def _pin_correcto(pin, guardado):
+    calc = _pin_hash(str(pin or "").strip(), guardado["sal"],
+                     int(guardado.get("iter", PIN_ITERACIONES)))
+    return hmac.compare_digest(calc, guardado["hash"])
+
+
+def _config_cambiar(**valores):
+    """Cambia claves de config.json SIN el motor (sirve tambien en el asistente
+    y con la app aun bloqueada). None = quitar la clave."""
+    cfg = ccore.cargar_previa() or {}
+    for k, v in valores.items():
+        if v is None:
+            cfg.pop(k, None)
+        else:
+            cfg[k] = v
+    ccore.escribir_config(cfg)
+
+
 class Api:
     """Todo lo que el HTML puede pedir. pywebview llama a cada metodo en su
     propio hilo y el JS recibe una promesa: la interfaz nunca se congela.
@@ -265,9 +317,100 @@ class Api:
         self._extras = []         # tareas elegidas con Buscar en esta sesion
         self._copia = None        # copia preparada (dia/semana anterior)
         self._ventana = None      # ventana pywebview (dialogo de guardar)
+        self._desbloqueada = _pin_guardado() is None
+        self._de_cero = False     # se borro la config por olvidar el PIN
+
+    def _exigir_desbloqueo(self):
+        if not self._desbloqueada:
+            raise PermissionError("FichaCSIRC está bloqueada: escribe tu PIN.")
+
+    # ---- PIN de acceso ----
+    def pin_estado(self):
+        return {"activo": _pin_guardado() is not None, "desbloqueada": self._desbloqueada}
+
+    def pin_comprobar(self, pin):
+        guardado = _pin_guardado()
+        if guardado is None:
+            self._desbloqueada = True
+            return {"ok": True}
+        intentos = (ccore.cargar_previa() or {}).get("pin_intentos") or {}
+        ahora = dt.datetime.now()
+        try:
+            hasta = dt.datetime.fromisoformat(intentos.get("hasta", ""))
+        except ValueError:
+            hasta = None
+        if hasta and hasta > ahora:
+            s = int((hasta - ahora).total_seconds()) + 1
+            return {"error": f"Demasiados intentos. Espera {s} s.", "espera": s}
+        if _pin_correcto(pin, guardado):
+            self._desbloqueada = True
+            if intentos:
+                _config_cambiar(pin_intentos=None)
+            return {"ok": True}
+        fallos = int(intentos.get("fallos", 0)) + 1
+        espera = 0
+        if fallos > PIN_FALLOS_LIBRES:
+            espera = min(5 * 2 ** (fallos - PIN_FALLOS_LIBRES - 1), PIN_ESPERA_MAX)
+        nuevo = {"fallos": fallos}
+        if espera:
+            nuevo["hasta"] = (ahora + dt.timedelta(seconds=espera)).isoformat(timespec="seconds")
+        _config_cambiar(pin_intentos=nuevo)
+        if espera:
+            return {"error": f"PIN incorrecto. Espera {espera} s antes de volver a probar.",
+                    "espera": espera}
+        return {"error": "PIN incorrecto."}
+
+    def pin_fijar(self, nuevo, repetido, actual=""):
+        """Activa o cambia el PIN. Si ya habia uno, hay que escribir el actual
+        (la app puede estar abierta en un equipo desatendido)."""
+        self._exigir_desbloqueo()
+        guardado = _pin_guardado()
+        if guardado is not None and not _pin_correcto(actual, guardado):
+            return {"error": "El PIN actual no es correcto."}
+        pin = _pin_formato(nuevo)
+        if pin is None:
+            return {"error": "El PIN debe tener entre 4 y 8 cifras."}
+        if pin != str(repetido or "").strip():
+            return {"error": "Los dos PIN no coinciden."}
+        _config_cambiar(pin=_pin_nuevo(pin), pin_intentos=None)
+        return {"ok": True}
+
+    def pin_quitar(self, actual):
+        self._exigir_desbloqueo()
+        guardado = _pin_guardado()
+        if guardado is not None and not _pin_correcto(actual, guardado):
+            return {"error": "El PIN actual no es correcto."}
+        _config_cambiar(pin=None, pin_intentos=None)
+        return {"ok": True}
+
+    def pin_olvidado(self):
+        """Sin el PIN no hay forma de entrar: se borra la configuracion entera
+        (API key, favoritas, plantillas, permisos, festivos...) y se empieza de
+        cero con el asistente. Las horas de OpenProject no se tocan. Reinstalar
+        no serviria: config.json vive en la carpeta del usuario, no en la del
+        programa, y el desinstalador no la borra."""
+        if _pin_guardado() is None:
+            return {"ok": True}
+        try:
+            import recordatorio
+            if recordatorio.recordatorios_soportados() and recordatorio.recordatorio_activo():
+                recordatorio.desactivar_recordatorio()
+        except Exception:
+            pass      # el aviso, sin config, ya no puede consultar nada
+        try:
+            os.remove(ccore.CONFIG_PATH)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            return {"error": f"No se pudo borrar la configuración: {e}"}
+        self._cache.clear()
+        self._desbloqueada = True
+        self._de_cero = True
+        return {"ok": True}
 
     # ---- arranque ----
     def inicio(self):
+        self._exigir_desbloqueo()
         logo = ""
         try:
             with open(_recurso("logo_ugr.png"), "rb") as f:
@@ -1366,6 +1509,7 @@ class Api:
     def cfg_cargar(self):
         """Lo que el asistente necesita para rellenar sus pasos. La API key NO se
         manda: solo si hay una guardada (campo vacio = conservarla)."""
+        self._exigir_desbloqueo()
         previa = ccore.cargar_previa() or {}
         des = previa.get("desayuno") or 0
         logo = ""
@@ -1375,7 +1519,8 @@ class Api:
         except OSError:
             pass
         return {
-            "primera_vez": core is None,
+            "primera_vez": core is None or self._de_cero,
+            "hay_pin": "pin" in previa,
             "aviso": ERROR_ARRANQUE if ERROR_ARRANQUE and "No encuentro" not in ERROR_ARRANQUE else "",
             "experimento": EXPERIMENTO,
             "logo": logo,
@@ -1456,6 +1601,12 @@ class Api:
     def cfg_guardar(self, d):
         """Guarda las claves del asistente SOBRE la config existente (nunca borra
         festivos, permisos, plantillas...) y recarga el motor con ellas."""
+        self._exigir_desbloqueo()
+        pin = None
+        if d.get("pin_si") and not _pin_guardado():
+            pin = _pin_formato(d.get("pin"))
+            if pin is None or pin != str(d.get("pin2") or "").strip():
+                return {"error": "Revisa el PIN: de 4 a 8 cifras y el mismo las dos veces."}
         url = (d.get("url") or "").strip().rstrip("/")
         key = self._cfg_key(d.get("key"))
         if not url or not key:
@@ -1480,12 +1631,20 @@ class Api:
             "actividad_defecto": d.get("actividad") or "soporte",
             "favoritos": [{"id": int(f["id"]), "nombre": f["nombre"]}
                           for f in d.get("favoritos", [])],
-            # recien configurada: sus novedades no son "nuevas" para nadie
-            "ultima_version_abierta": cfg.get("ultima_version_abierta") or core.VERSION,
         })
+        if pin:
+            cfg["pin"] = _pin_nuevo(pin)
+        # recien configurada: sus novedades no son "nuevas" para nadie (la primera
+        # vez aun no hay motor: se apunta despues de cargarlo)
+        sin_motor = core is None
+        if not sin_motor and not cfg.get("ultima_version_abierta"):
+            cfg["ultima_version_abierta"] = core.VERSION
         ccore.escribir_config(cfg)
+        self._de_cero = False
         if not _cargar_motor():
             return {"error": f"Se guardó, pero no se pudo cargar: {ERROR_ARRANQUE}"}
+        if sin_motor and not core.config_valor("ultima_version_abierta"):
+            core.guardar_config_valor("ultima_version_abierta", core.VERSION)
         self._cache.clear()
         return {"ok": True}
 

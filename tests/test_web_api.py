@@ -583,6 +583,79 @@ class TestAsistente(unittest.TestCase):
         self.assertIn("red", web._motivo_conexion(RuntimeError("Max retries exceeded")))
 
 
+class TestPin(unittest.TestCase):
+    """PIN de acceso: bloqueo de pantalla con hash, espera tras fallos y
+    "lo he olvidado" = configuracion borrada."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="fichacsirc_pin_")
+        self.ruta = os.path.join(self.dir, "config.json")
+        with open(self.ruta, "w", encoding="utf-8") as f:
+            f.write('{"base_url": "https://op.test", "api_key": "k"}')
+        p = mock.patch.object(web.ccore, "CONFIG_PATH", self.ruta)
+        p.start()
+        self.addCleanup(p.stop)
+        self.api = web.Api()
+
+    def _cfg(self):
+        import json
+        with open(self.ruta, encoding="utf-8") as f:
+            return json.load(f)
+
+    def test_activar_guarda_solo_el_hash_y_bloquea_al_abrir(self):
+        self.assertEqual(self.api.pin_estado(), {"activo": False, "desbloqueada": True})
+        self.assertIn("error", self.api.pin_fijar("12a4", "12a4"))
+        self.assertIn("error", self.api.pin_fijar("1234", "1235"))
+        self.assertEqual(self.api.pin_fijar("1234", "1234"), {"ok": True})
+        self.assertNotIn("1234", str(self._cfg()))
+        nueva = web.Api()                      # proximo arranque
+        self.assertEqual(nueva.pin_estado(), {"activo": True, "desbloqueada": False})
+        with self.assertRaises(PermissionError):
+            nueva.inicio()
+        with self.assertRaises(PermissionError):
+            nueva.cfg_cargar()                 # "FichaCSIRC - Configurar" tampoco entra
+        self.assertEqual(nueva.pin_comprobar("1234"), {"ok": True})
+        self.assertTrue(nueva.pin_estado()["desbloqueada"])
+
+    def test_cambiar_y_quitar_piden_el_actual(self):
+        self.api.pin_fijar("1234", "1234")
+        self.assertIn("error", self.api.pin_fijar("5678", "5678", "0000"))
+        self.assertEqual(self.api.pin_fijar("5678", "5678", "1234"), {"ok": True})
+        self.assertIn("error", self.api.pin_quitar("1234"))
+        self.assertEqual(self.api.pin_quitar("5678"), {"ok": True})
+        self.assertNotIn("pin", self._cfg())
+
+    def test_espera_tras_varios_fallos_aunque_se_reinicie(self):
+        self.api.pin_fijar("1234", "1234")
+        for _ in range(web.PIN_FALLOS_LIBRES):
+            self.assertEqual(web.Api().pin_comprobar("0000"), {"error": "PIN incorrecto."})
+        r = web.Api().pin_comprobar("0000")
+        self.assertEqual(r["espera"], 5)
+        r = web.Api().pin_comprobar("1234")    # aun acertando, hay que esperar
+        self.assertIn("espera", r)
+        self.assertFalse(r.get("ok"))
+
+    def test_olvidado_borra_la_configuracion(self):
+        self.api.pin_fijar("1234", "1234")
+        nueva = web.Api()
+        with mock.patch("recordatorio.recordatorios_soportados", return_value=False):
+            self.assertEqual(nueva.pin_olvidado(), {"ok": True})
+        self.assertFalse(os.path.exists(self.ruta))
+        self.assertTrue(nueva.pin_estado()["desbloqueada"])
+        self.assertTrue(nueva.cfg_cargar()["primera_vez"])
+
+    def test_asistente_puede_activar_el_pin(self):
+        d = {"url": "https://op.test", "key": "", "jornada": "7", "desayuno_si": False,
+             "verano_si": False, "actividad": "soporte", "favoritos": [],
+             "pin_si": True, "pin": "2468", "pin2": "2460"}
+        self.assertIn("error", self.api.cfg_guardar(d))
+        d["pin2"] = "2468"
+        with mock.patch.object(web, "_cargar_motor", return_value=True):
+            self.assertEqual(self.api.cfg_guardar(d), {"ok": True})
+        self.assertFalse(web.Api().pin_estado()["desbloqueada"])
+        self.assertEqual(web.Api().pin_comprobar("2468"), {"ok": True})
+
+
 class TestExperimento(unittest.TestCase):
     """Con EXPERIMENTO = True no se toca nada de la app de produccion."""
 
