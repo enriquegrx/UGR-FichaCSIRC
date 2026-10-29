@@ -140,6 +140,8 @@ async function arrancar() {
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
   // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
   if (ini.toca_permisos_anio) setTimeout(() => dlgPermisosAnio({ manual: false }), 700);
+  // Recien actualizada: lo nuevo de esta version, una sola vez.
+  if (ini.novedades_tras_actualizar) setTimeout(() => dlgNovedades(ini.novedades_tras_actualizar), 400);
   // Version nueva (como mucho cada pocas horas; si falla, en silencio).
   setTimeout(() => dlgActualizacion({ forzar: false }), 1500);
   // Mac: avisar si la app no esta en Aplicaciones (una vez por ruta).
@@ -357,10 +359,27 @@ function apuntesTarjeta(d) {
       el("div", { class: "linea-ap" },
         el("span", { class: "linea-h", text: a.horas_txt }),
         el("span", { class: "linea-t", text: a.tarea })),
-      a.actividad ? el("div", { class: "linea-act", text: a.actividad }) : null));
+      a.actividad ? el("div", { class: "linea-act", text: a.actividad }) : null,
+      accionesTarjeta(d, a)));
   const resto = d.apuntes.length - MAX_APUNTES_TARJETA;
   if (resto > 0) out.push(el("div", { class: "linea-mas", text: `+${resto} más` }));
   return out;
+}
+
+// Editar y borrar ese apunte sin salir de la tarjeta. Salen al pasar el raton
+// (o con el foco del teclado): siempre a la vista, un clic para marcar el dia
+// acabaria a veces en la papelera.
+function accionesTarjeta(d, a) {
+  const boton = (clase, titulo, icon, accion) => {
+    const b = el("button", { class: clase, title: titulo, "aria-label": `${titulo}: ${a.tarea}` }, icono(icon));
+    b.addEventListener("click", (e) => { e.stopPropagation(); accion(); });
+    b.addEventListener("keydown", (e) => e.stopPropagation());   // Enter no marca el dia
+    return b;
+  };
+  return el("span", { class: "ap-acciones" },
+    boton("icono", "Editar", "editar", () => dlgEditar(d, a)),
+    boton("icono borrar", "Eliminar", "borrar",
+          () => borrarItems([{ fecha: d.iso, id: a.id, destino: a.destino || "op" }])));
 }
 
 // Texto corto de una celda del mes (la tarjeta de la semana tiene sitio para
@@ -475,6 +494,8 @@ function menuDia(x, y, d) {
   const items = [{ titulo: `${d.nombre} ${d.fecha}` },
                  { texto: "⧉ Copiar día anterior", clase: "destacado",
                    accion: () => dlgCopiarDia([d.iso]) },
+                 { texto: "✎ Editar día…", desactivado: d.estado === "error",
+                   accion: () => dlgEditarDia(d) },
                  "-"];
   const marca = (accion, motivo = "") => async () => {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))

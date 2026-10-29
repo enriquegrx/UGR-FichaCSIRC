@@ -261,7 +261,7 @@ class Api:
 
     def __init__(self):
         self._cache = {}          # iso -> apuntes (None si fallo la lectura)
-        self._ultimo_borrado = None
+        self._deshacer = None     # pasos para deshacer lo ultimo (borrar / editar dia)
         self._extras = []         # tareas elegidas con Buscar en esta sesion
         self._copia = None        # copia preparada (dia/semana anterior)
         self._ventana = None      # ventana pywebview (dialogo de guardar)
@@ -286,6 +286,7 @@ class Api:
             "inari_listo": destinos.configurado(),
             "asociaciones": self.asociaciones(),
             "toca_permisos_anio": core.toca_anadir_permisos_del_anio(),
+            "novedades_tras_actualizar": self._novedades_tras_actualizar(),
             "plataforma": "macOS" if sys.platform == "darwin" else
                           ("Windows" if os.name == "nt" else sys.platform),
             "lunes": (hoy - dt.timedelta(days=hoy.weekday())).isoformat(),
@@ -299,6 +300,22 @@ class Api:
             # Ultima vista elegida (semana/mes): se abre como se dejo.
             "vista": self.vista(),
         }
+
+    def _novedades_tras_actualizar(self):
+        """La primera vez que se abre una version distinta de la ultima abierta
+        (= se acaba de actualizar) devuelve {'desde': version anterior} para
+        ensenar solas las Novedades; si no, None. Queda apuntada al momento:
+        sale una sola vez. Una instalacion nueva no la ve, porque el asistente
+        ya deja apuntada la version; sin nada apuntado (se viene de la 3.0.x o
+        anterior) 'desde' va vacio y se ensena la ultima version."""
+        anterior = core.config_valor("ultima_version_abierta") or ""
+        if anterior == core.VERSION:
+            return None
+        try:
+            core.guardar_config_valor("ultima_version_abierta", core.VERSION)
+        except Exception:
+            return None     # si no se puede apuntar, saldria en cada arranque
+        return {"desde": anterior}
 
     def usuario(self):
         return core.nombre_usuario()
@@ -663,42 +680,127 @@ class Api:
             pass   # comodidad: nunca debe romper el registro
 
     # ---- borrar / deshacer ----
+    def _borrar_uno(self, fecha, entry_id, destino):
+        """Borra un apunte y devuelve el paso para deshacerlo (None si es un
+        slot de INARI: esos no se pueden recrear tal cual)."""
+        if destino == "inari":
+            destinos.borrar(entry_id)
+            return None
+        datos = next((a for a in (self._cache.get(fecha) or [])
+                      if str(a["id"]) == str(entry_id)), None)
+        core.eliminar_entrada(entry_id)
+        if not datos:
+            return None
+        return {"tipo": "crear", "fecha": fecha, "wp_id": datos["wp_id"],
+                "horas": datos["horas"], "comentario": datos["comentario"],
+                "actividad": datos["actividad"]}
+
     def eliminar(self, items):
         """items: [{id, fecha, destino}]. Borra y guarda lo necesario para deshacer."""
         n_ok, errores, ultimo, deshacer = 0, 0, "", []
         for it in items:
             try:
-                if it.get("destino") == "inari":
-                    destinos.borrar(it["id"])
-                else:
-                    datos = next((a for a in (self._cache.get(it["fecha"]) or [])
-                                  if str(a["id"]) == str(it["id"])), None)
-                    core.eliminar_entrada(it["id"])
-                    if datos:
-                        deshacer.append({"fecha": it["fecha"], "wp_id": datos["wp_id"],
-                                         "horas": datos["horas"],
-                                         "comentario": datos["comentario"],
-                                         "actividad": datos["actividad"]})
+                paso = self._borrar_uno(it["fecha"], it["id"], it.get("destino"))
+                if paso:
+                    deshacer.append(paso)
                 n_ok += 1
             except Exception as e:
                 errores += 1
                 ultimo = str(e)
-        self._ultimo_borrado = deshacer or None
+        self._deshacer = deshacer or None
         return {"eliminados": n_ok, "errores": errores, "ultimo": ultimo,
                 "puede_deshacer": bool(deshacer)}
 
     def deshacer(self):
-        datos, self._ultimo_borrado = self._ultimo_borrado, None
+        """Lo contrario de lo ultimo, del final al principio: recrea lo borrado,
+        devuelve las horas editadas a como estaban y borra lo que se anadio."""
+        pasos, self._deshacer = self._deshacer, None
         restaurados, errores, ultimo = 0, 0, ""
-        for a in datos or []:
+        for p in reversed(pasos or []):
             try:
-                core.crear_entrada(a["fecha"], a["wp_id"], a["horas"],
-                                   a["comentario"], a["actividad"])
+                if p["tipo"] == "crear":
+                    core.crear_entrada(p["fecha"], p["wp_id"], p["horas"],
+                                       p["comentario"], p["actividad"])
+                elif p["tipo"] == "editar":
+                    core.actualizar_entrada(p["id"], p["horas"], p["comentario"],
+                                            p["actividad"] or None, p["wp_id"])
+                else:
+                    core.eliminar_entrada(p["id"])
                 restaurados += 1
             except Exception as e:
                 errores += 1
                 ultimo = str(e)
         return {"restaurados": restaurados, "errores": errores, "ultimo": ultimo}
+
+    # ---- editar un dia entero (boton derecho -> Editar dia) ----
+    def guardar_dia(self, fecha, cambios):
+        """Aplica de una vez lo cambiado en "Editar día":
+        cambios = {editar: [{id, horas, actividad}], borrar: [{id, destino}],
+                   anadir: [{wp_id, horas, actividad, comentario}]}.
+        Se valida TODO antes de tocar nada (una hora mal escrita no deja el dia
+        a medias) y de cada paso que sale bien se guarda su contrario, para que
+        "Deshacer" devuelva el dia a como estaba."""
+        def num(v):
+            h = float(str(v).replace(",", "."))
+            if not 0 < h <= 24:
+                raise ValueError
+            return h
+
+        actuales = {str(a["id"]): a for a in (self._cache.get(fecha) or [])}
+        editar, anadir = [], []
+        try:
+            for e in cambios.get("editar") or []:
+                a = actuales.get(str(e["id"]))
+                if a is None:
+                    return {"error": "Algún apunte ya no está en la semana cargada (pulsa F5)."}
+                h = num(e["horas"])
+                act = e.get("actividad") or a["actividad"]
+                if abs(h - a["horas"]) < 0.001 and act == a["actividad"]:
+                    continue
+                if a.get("destino") == "inari":
+                    return {"error": "Para corregir un slot de INARI, bórralo y vuelve a registrarlo."}
+                editar.append((a, h, act))
+            for n in cambios.get("anadir") or []:
+                anadir.append((n, num(n["horas"]), int(n["wp_id"])))
+        except (ValueError, TypeError, KeyError):
+            return {"error": "Las horas deben ser un número entre 0 y 24 (por ejemplo 3,5)."}
+
+        hechos, errores, ultimo, deshacer = 0, 0, "", []
+        for a, h, act in editar:
+            try:
+                core.actualizar_entrada(a["id"], h, a["comentario"], act or None, a["wp_id"])
+                deshacer.append({"tipo": "editar", "id": a["id"], "horas": a["horas"],
+                                 "comentario": a["comentario"], "actividad": a["actividad"],
+                                 "wp_id": a["wp_id"]})
+                hechos += 1
+            except Exception as e:
+                errores += 1
+                ultimo = str(e)
+        for b in cambios.get("borrar") or []:
+            try:
+                paso = self._borrar_uno(fecha, b["id"], b.get("destino"))
+                if paso:
+                    deshacer.append(paso)
+                hechos += 1
+            except Exception as e:
+                errores += 1
+                ultimo = str(e)
+        for n, h, wp_id in anadir:
+            com = (n.get("comentario") or "").strip()
+            if not com and core.es_guardia(fecha):
+                com = core.comentario_guardia()
+            try:
+                nuevo = core.crear_entrada(fecha, wp_id, h, com, n.get("actividad") or None)
+                if nuevo:
+                    deshacer.append({"tipo": "borrar", "id": nuevo})
+                self._recordar(wp_id, com, n.get("actividad"))
+                hechos += 1
+            except Exception as e:
+                errores += 1
+                ultimo = str(e)
+        self._deshacer = deshacer or None
+        return {"hechos": hechos, "errores": errores, "ultimo": ultimo,
+                "puede_deshacer": bool(deshacer)}
 
     # ---- menu del dia (marcas locales) ----
     def accion_dia(self, iso, accion, motivo=""):
@@ -1378,6 +1480,8 @@ class Api:
             "actividad_defecto": d.get("actividad") or "soporte",
             "favoritos": [{"id": int(f["id"]), "nombre": f["nombre"]}
                           for f in d.get("favoritos", [])],
+            # recien configurada: sus novedades no son "nuevas" para nadie
+            "ultima_version_abierta": cfg.get("ultima_version_abierta") or core.VERSION,
         })
         ccore.escribir_config(cfg)
         if not _cargar_motor():

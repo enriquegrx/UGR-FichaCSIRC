@@ -284,6 +284,65 @@ class TestBorrarYMarcas(Base):
         self.assertEqual(creados, [(L.isoformat(), "10", 2, "c", "soporte")])
         self.assertEqual(self.api.deshacer()["restaurados"], 0)   # solo una vez
 
+    def _dia_cargado(self):
+        with mock.patch.object(core, "entradas_dia",
+                               lambda iso: [apunte(7, 2, com="c"), apunte(8, 3, wp="20")]
+                               if iso == L.isoformat() else []):
+            self.api.semana(L.isoformat())
+
+    def test_guardar_dia_y_deshacer(self):
+        """Editar dia: cambia horas, borra y anade de una vez; Deshacer lo
+        devuelve todo a como estaba (en orden inverso)."""
+        self._dia_cargado()
+        llamadas = []
+        with mock.patch.object(core, "actualizar_entrada",
+                               lambda *a: llamadas.append(("editar",) + a)), \
+             mock.patch.object(core, "eliminar_entrada",
+                               lambda i: llamadas.append(("borrar", i))), \
+             mock.patch.object(core, "crear_entrada",
+                               lambda *a: llamadas.append(("crear",) + a) or 99), \
+             mock.patch.object(core, "guardar_config_valores"):
+            r = self.api.guardar_dia(L.isoformat(), {
+                "editar": [{"id": "7", "horas": "2,5", "actividad": "soporte"},
+                           {"id": "8", "horas": "3", "actividad": "soporte"}],   # sin cambios
+                "borrar": [{"id": "8", "destino": "op"}],
+                "anadir": [{"wp_id": "30", "horas": "1,5", "actividad": "dev",
+                            "comentario": ""}]})
+            self.assertEqual((r["hechos"], r["errores"], r["puede_deshacer"]), (3, 0, True))
+            self.assertEqual(llamadas, [
+                ("editar", 7, 2.5, "c", "soporte", "10"),
+                ("borrar", "8"),
+                ("crear", L.isoformat(), 30, 1.5, "", "dev")])
+            llamadas.clear()
+            self.assertEqual(self.api.deshacer()["restaurados"], 3)
+        self.assertEqual(llamadas, [
+            ("borrar", 99),
+            ("crear", L.isoformat(), "20", 3, "", "soporte"),
+            ("editar", 7, 2, "c", "soporte", "10")])
+
+    def test_guardar_dia_valida_antes_de_tocar_nada(self):
+        self._dia_cargado()
+        with mock.patch.object(core, "actualizar_entrada") as m_ed, \
+             mock.patch.object(core, "crear_entrada") as m_cr:
+            r = self.api.guardar_dia(L.isoformat(), {
+                "editar": [{"id": "7", "horas": "4"}],
+                "anadir": [{"wp_id": "30", "horas": "tres"}]})
+        self.assertIn("error", r)
+        m_ed.assert_not_called()
+        m_cr.assert_not_called()
+
+    def test_novedades_solo_la_primera_vez_tras_actualizar(self):
+        guardado = {}
+        with mock.patch.object(core, "config_valor", lambda k: guardado.get(k)), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.__setitem__(k, v)):
+            guardado["ultima_version_abierta"] = "3.0.0"
+            with mock.patch.object(core, "VERSION", "3.1.0"):
+                self.assertEqual(self.api._novedades_tras_actualizar(), {"desde": "3.0.0"})
+                self.assertIsNone(self.api._novedades_tras_actualizar())   # una sola vez
+            guardado.clear()                                  # se viene de la 3.0 (sin apuntar)
+            self.assertEqual(self.api._novedades_tras_actualizar(), {"desde": ""})
+
     def test_borrar_slot_inari_no_va_a_proyectostic(self):
         with mock.patch.object(web.destinos, "borrar") as m_inari, \
              mock.patch.object(core, "eliminar_entrada") as m_op:

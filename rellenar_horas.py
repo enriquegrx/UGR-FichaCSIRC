@@ -570,6 +570,11 @@ def crear_entrada(fecha_iso, wp_id, horas, comentario, actividad):
         LOG.error("Crear apunte fallo %s: %s", r.status_code, r.text[:200])
         raise RuntimeError(f"Error {r.status_code}: {r.text[:200]}")
     LOG.info("Apunte creado: %s %sh wp=%s", fecha_iso, horas, wp_id)
+    # El id permite deshacer un alta (Editar dia -> Deshacer la borra).
+    try:
+        return r.json().get("id")
+    except Exception:
+        return None
 
 
 def actualizar_entrada(entry_id, horas, comentario, actividad=None, wp_id=None):

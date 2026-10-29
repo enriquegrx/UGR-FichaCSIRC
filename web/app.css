@@ -383,6 +383,31 @@ body.aviso h2 { font-size: 16px; }
 .linea-act { font-size: 12px; color: var(--tenue); padding-left: 40px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sin-apuntes { margin-top: 6px; font-size: 12px; color: var(--tenue); }
 .dia .linea-mas { margin-top: 2px; }
+/* editar / borrar el apunte desde la tarjeta: al pasar el raton o con foco */
+.dia .ap-tarjeta { position: relative; }
+.ap-acciones { position: absolute; right: 0; top: 1px; display: flex; gap: 1px; opacity: 0; pointer-events: none;
+               background: var(--panel); border-radius: 6px; box-shadow: -6px 0 6px var(--panel); }
+.dia.marcado .ap-acciones { background: var(--seleccion); box-shadow: -6px 0 6px var(--seleccion); }
+/* opacity (no display:none): oculto pero alcanzable con Tab, y al tener el foco se ve */
+.ap-tarjeta:hover .ap-acciones, .ap-acciones:focus-within { opacity: 1; pointer-events: auto; }
+.ap-acciones .icono { padding: 3px; }
+
+/* ---------- dialogo "Editar dia" ---------- */
+.ed-cabeza { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ed-total { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ed-total.ok { color: var(--exito); }
+.ed-total.falta { color: var(--aviso); }
+.ed-total.mas { color: var(--primario); }
+.ed-lista { display: flex; flex-direction: column; border-top: 1px solid var(--borde); }
+.ed-fila { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 190px) 32px;
+           gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--borde); }
+.ed-h { white-space: nowrap; color: var(--tenue); }
+.ed-h .horas { width: 64px; text-align: right; }
+.ed-tarea { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-act, .ed-tarea-sel { min-width: 0; width: 100%; }
+.ed-fila.quitada .ed-tarea { text-decoration: line-through; color: var(--tenue); }
+.ed-fila.quitada { background: #fbeceb; }
+.ed-fila.nueva { background: var(--seleccion); }
 
 /* ---------- franja de resumen ---------- */
 .franja {

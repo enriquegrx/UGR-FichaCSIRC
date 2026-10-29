@@ -1,6 +1,6 @@
 name: Version candidata
 
-# SOLO para las ramas experimentales (experimento/...): construye lo MISMO que
+# SOLO para las ramas de prueba (experimento/... y mejoras/...): construye lo MISMO que
 # publicaria release.yml (instalador de Windows y .dmg de macOS) y lo deja como
 # ARTEFACTO descargable en la pagina del run (Actions > run > Artifacts).
 # No crea release ni etiqueta: no llega a nadie y el actualizador no lo ve.
@@ -8,7 +8,7 @@ name: Version candidata
 
 on:
   push:
-    branches: ["experimento/**"]
+    branches: ["experimento/**", "mejoras/**"]
   workflow_dispatch:
 
 permissions:

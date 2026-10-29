@@ -108,6 +108,153 @@ async function dlgEditar(dia, a) {
   }
 }
 
+// ================================================================ editar dia
+
+// Todo el dia de una vez: horas y actividad de cada apunte, quitar alguno o
+// anadir tareas. Nada se envia hasta "Guardar"; entonces va todo junto y
+// "Deshacer" (Ctrl+Z) lo devuelve a como estaba.
+function dlgEditarDia(dia) {
+  const filas = [];
+  const total = el("span", { class: "ed-total" });
+  const lista = el("div", { class: "ed-lista" });
+  const d = dialogo({ titulo: "Editar día", ancho: 680, botones: [
+    { texto: "+ Añadir tarea", izquierda: true, accion: () => nuevaFila() },
+    cancelarBoton,
+    { texto: "Guardar", clase: "primario", accion: guardar }] });
+  d.cuerpo.append(
+    el("div", { class: "ed-cabeza" }, el("p", { class: "dlg-sub", text: `${dia.nombre} ${dia.fecha}` }), total),
+    lista,
+    nota("Cambia las horas aquí mismo. La papelera quita la tarea (se puede deshacer)."));
+
+  const numero = (v) => Number(String(v).trim().replace(",", "."));
+  function recalcular() {
+    const suma = filas.filter((f) => !f.borrar)
+      .reduce((s, f) => s + (numero(f.horas.value) || 0), 0);
+    const r = Math.round(suma * 100) / 100;
+    total.textContent = `${fmtHoras(r)}h de ${fmtHoras(dia.obj)}h`;
+    total.className = "ed-total " + (dia.obj && r > dia.obj + 0.001 ? "mas"
+      : r >= dia.obj - 0.001 ? "ok" : "falta");
+  }
+
+  // Desplegable de actividades de una tarea: se rellena al abrirlo la primera
+  // vez (no se piden las de todas las tareas solo por abrir el dialogo).
+  function selectorActividad(wpId, actual) {
+    const s = el("select", { class: "ed-act" }, el("option", { value: actual || "", text: actual || "…" }));
+    let cargado = null;
+    s.cargar = () => (cargado ??= llamar("actividades", wpId).then((r) => {
+      const nombres = !actual || r.nombres.includes(actual) ? r.nombres : [actual, ...r.nombres];
+      s.replaceChildren(...nombres.map((n) => el("option", { value: n, text: n })));
+      s.value = actual || r.preferida;
+      return r;
+    }).catch(() => ({})));
+    s.addEventListener("focus", () => s.cargar(), { once: true });
+    s.addEventListener("mousedown", () => s.cargar(), { once: true });
+    return s;
+  }
+
+  function botonBorrar(f) {
+    const b = el("button", { class: "icono borrar", title: "Quitar esta tarea",
+                             "aria-label": "Quitar esta tarea" }, icono("borrar"));
+    b.onclick = () => {
+      if (f.nueva) { f.fila.remove(); filas.splice(filas.indexOf(f), 1); recalcular(); return; }
+      f.borrar = !f.borrar;
+      f.fila.classList.toggle("quitada", f.borrar);
+      f.horas.disabled = f.act.disabled = f.borrar;
+      b.title = f.borrar ? "Mantener esta tarea" : "Quitar esta tarea";
+      b.replaceChildren(f.borrar ? el("span", { text: "↺" }) : icono("borrar"));
+      recalcular();
+    };
+    return b;
+  }
+
+  function campoHoras(valor) {
+    const h = entrada(valor, { class: "horas", inputmode: "decimal", "aria-label": "Horas" });
+    h.addEventListener("input", recalcular);
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter") guardar(d); });
+    return h;
+  }
+
+  for (const a of dia.apuntes) {
+    const inari = a.destino === "inari";
+    const f = { a, horas: campoHoras(fmtHoras(a.horas)), borrar: false };
+    f.act = inari ? el("span", { class: "tenue", text: "slot de INARI" }) : selectorActividad(a.wp_id, a.actividad);
+    if (inari) { f.horas.disabled = true; f.horas.title = "Un slot de INARI no se edita: bórralo y regístralo de nuevo"; }
+    f.fila = el("div", { class: "ed-fila" },
+      el("span", { class: "ed-h" }, f.horas, " h"),
+      el("span", { class: "ed-tarea", title: a.tarea, text: a.tarea }),
+      f.act, botonBorrar(f));
+    filas.push(f);
+    lista.append(f.fila);
+  }
+
+  function nuevaFila() {
+    const tarea = el("select", { class: "ed-tarea-sel", "aria-label": "Tarea" },
+      el("option", { value: "", text: "Elige una tarea…" }),
+      ...[...st.tareas].map(([texto, id]) => el("option", { value: String(id), text: texto })));
+    const f = { nueva: true, tarea, horas: campoHoras(""), borrar: false,
+                act: el("select", { class: "ed-act", disabled: true }, el("option", { text: "…" })),
+                comentario: "" };
+    tarea.onchange = async () => {
+      const sel = selectorActividad(tarea.value, "");
+      f.act.replaceWith(sel);
+      f.act = sel;
+      const r = await sel.cargar();
+      f.comentario = r.comentario || "";
+      f.horas.focus();
+    };
+    f.fila = el("div", { class: "ed-fila nueva" },
+      el("span", { class: "ed-h" }, f.horas, " h"), tarea, f.act, botonBorrar(f));
+    filas.push(f);
+    lista.append(f.fila);
+    tarea.focus();
+    recalcular();
+  }
+
+  async function guardar(dd) {
+    const cambios = { editar: [], borrar: [], anadir: [] };
+    for (const f of filas) {
+      if (f.nueva) {
+        if (!f.tarea.value && !f.horas.value.trim()) continue;      // fila vacia: se ignora
+        if (!f.tarea.value) { await avisar("Falta tarea", "Elige la tarea de la fila nueva."); f.tarea.focus(); return; }
+        cambios.anadir.push({ wp_id: f.tarea.value, horas: f.horas.value,
+                              actividad: f.act.value || "", comentario: f.comentario });
+      } else if (f.borrar) {
+        cambios.borrar.push({ id: f.a.id, destino: f.a.destino || "op" });
+      } else if (f.a.destino !== "inari") {
+        cambios.editar.push({ id: f.a.id, horas: f.horas.value, actividad: f.act.value || f.a.actividad });
+      }
+    }
+    for (const f of filas.filter((x) => !x.borrar && !x.horas.disabled)) {
+      const h = numero(f.horas.value);
+      if ((f.nueva && !f.tarea.value) || (h > 0 && h <= 24)) continue;
+      await avisar("Horas no válidas", "Las horas deben ser un número entre 0 y 24 (por ejemplo 3,5).");
+      f.horas.focus();
+      f.horas.select();
+      return;
+    }
+    const cambiaAlgo = cambios.borrar.length || cambios.anadir.length || cambios.editar.some((e) => {
+      const a = dia.apuntes.find((x) => x.id === e.id);
+      return Math.abs(numero(e.horas) - a.horas) > 0.001 || e.actividad !== a.actividad;
+    });
+    if (!cambiaAlgo) { dd.cerrar(); return; }
+    estado("Guardando el día…");
+    const r = await llamar("guardar_dia", dia.iso, cambios);
+    if (r.error) { await avisar("No se pudo guardar", r.error); return; }
+    dd.cerrar();
+    if (r.errores) {
+      await avisar("Guardado con errores",
+        `Cambios hechos: ${r.hechos}. Con errores: ${r.errores}.\nÚltimo error: ${r.ultimo}`);
+    }
+    $("b-deshacer").hidden = !r.puede_deshacer;
+    await cargarSemana();
+    estado(`${dia.nombre} ${dia.fecha} actualizado${r.puede_deshacer ? " (Ctrl+Z para deshacer)" : ""}.`);
+  }
+
+  if (!dia.apuntes.length) nuevaFila();
+  else filas[0].horas.focus();
+  recalcular();
+}
+
 // ================================================================ buscar tarea
 
 function dlgBuscar() {
@@ -742,18 +889,46 @@ async function dlgSlotInari(dia) {
 
 // ================================================================ ayuda
 
-async function dlgNovedades() {
+// "3.1.0" > "3.0.2": compara numero a numero
+function versionMayor(a, b) {
+  const pa = String(a).split(".").map(Number), pb = String(b).split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return false;
+}
+
+/* tras = {desde}: se abre sola despues de actualizar y ensena solo lo nuevo
+   desde la version que se tenia (sin 'desde', solo la ultima version). */
+async function dlgNovedades(tras = null) {
   const bloques = await llamar("novedades");
+  let visibles = bloques;
+  if (tras) {
+    let version = null, versiones = 0;
+    visibles = bloques.filter((b) => {
+      if (b.estilo === "version") { version = b.texto.replace(/^Versión\s+/, ""); versiones++; }
+      return tras.desde ? version && versionMayor(version, tras.desde) : versiones === 1;
+    });
+    if (!visibles.length) return;
+  }
   const caja = el("div", { class: "novedades" });
-  for (const b of bloques) {
+  for (const b of visibles) {
     caja.append(el(b.estilo === "version" ? "h4" : "p", { class: b.estilo,
       text: b.estilo === "punto" ? `•  ${b.texto}` : b.texto }));
   }
   const botones = [cerrarBoton];
-  if (st.ini?.github) botones.unshift({ texto: "Ver todo en GitHub", izquierda: true,
-                                         accion: () => llamar("abrir_github", "releases") });
-  const d = dialogo({ titulo: `Novedades · FichaCSIRC ${st.ini?.version || ""}`, ancho: 680, botones });
-  d.cuerpo.append(nota(`Tienes la versión ${st.ini?.version || "?"}. (Prototipo web: lee el mismo fichero de novedades.)`), caja);
+  if (tras) {
+    botones.unshift({ texto: "Ver todas las versiones", izquierda: true,
+                      accion: (d) => { d.cerrar(); dlgNovedades(); } });
+  } else if (st.ini?.github) {
+    botones.unshift({ texto: "Ver todo en GitHub", izquierda: true,
+                      accion: () => llamar("abrir_github", "releases") });
+  }
+  const version = st.ini?.version || "?";
+  const d = dialogo({ titulo: tras ? `FichaCSIRC se ha actualizado a la ${version}`
+                                   : `Novedades · FichaCSIRC ${version}`, ancho: 680, botones });
+  d.cuerpo.append(nota(tras ? "Esto es lo nuevo. Lo tienes siempre en Ayuda → Novedades."
+                            : `Tienes la versión ${version}.`), caja);
 }
 
 function dlgAcerca() {

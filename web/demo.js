@@ -23,6 +23,7 @@
   const marcas = { nolab: {}, guardia: new Set(), tele: new Set() };
   let siguiente = 100;
   let borrados = null;
+  let diaAntes = null;      // [fecha, apuntes] antes de "Editar día" (deshacer)
 
   // semana actual con algo de todo
   const l = lunesDe(hoy);
@@ -82,6 +83,7 @@
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
       asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: true,
+      novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
     }),
     usuario: () => espera("Persona de Prueba"),
@@ -122,6 +124,12 @@
       return espera({ eliminados: borrados.length, errores: 0, ultimo: "", puede_deshacer: borrados.length > 0 });
     },
     deshacer: () => {
+      if (diaAntes) {
+        const [f, antes] = diaAntes;
+        apuntes[f] = antes;
+        diaAntes = null;
+        return espera({ restaurados: 1, errores: 0, ultimo: "" });
+      }
       const n = (borrados || []).length;
       for (const [f, a] of borrados || []) (apuntes[f] = apuntes[f] || []).push(a);
       borrados = null;
@@ -190,6 +198,27 @@
           estado: c.fecha_limite === "2026-11-10" ? "por_caducar" : "" })) };
     }) });
   Object.assign(window.pywebview.api, {
+    guardar_dia: (fecha, c) => {
+      const num = (v) => parseFloat(String(v).replace(",", "."));
+      const lista = (apuntes[fecha] = apuntes[fecha] || []);
+      diaAntes = [fecha, lista.map((a) => ({ ...a }))];
+      borrados = null;
+      for (const e of c.editar) {
+        const a = lista.find((x) => String(x.id) === String(e.id));
+        if (a) { a.horas = num(e.horas); a.actividad = e.actividad || a.actividad; }
+      }
+      for (const b of c.borrar) {
+        const k = lista.findIndex((x) => String(x.id) === String(b.id));
+        if (k >= 0) lista.splice(k, 1);
+      }
+      for (const n of c.anadir) {
+        const t = tareas.find((x) => String(x.id) === String(n.wp_id));
+        lista.push({ id: siguiente++, horas: num(n.horas), tarea: t ? t.nombre : `Tarea ${n.wp_id}`,
+                     wp_id: String(n.wp_id), actividad: n.actividad, comentario: n.comentario || "" });
+      }
+      return espera({ hechos: c.editar.length + c.borrar.length + c.anadir.length,
+                      errores: 0, ultimo: "", puede_deshacer: true });
+    },
     editar: (fecha, id, horas) => {
       const a = (apuntes[fecha] || []).find((x) => String(x.id) === String(id));
       if (!a) return espera({ error: "Ese apunte ya no está." });
