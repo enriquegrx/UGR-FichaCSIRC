@@ -191,6 +191,13 @@ La app recuerda la vista que dejaste.
 - 🪟 **Deja a la vista solo lo que uses**: las cajas de abajo se minimizan
   (**–**) o se cierran (**×**), y el menú **Ver** las vuelve a poner (también
   la franja de resumen y la leyenda de colores).
+- 🌙 **Tema oscuro** y 🔍 **tamaño de letra**: menú *Ver* (o Ctrl + / Ctrl − /
+  Ctrl 0).
+- 📅 **Días propios de la UGR**: *Importar festivos* los propone calculados
+  (cierre de Navidad, Semana Santa, San Pascual, Feria); compáralos con el
+  calendario laboral del PTGAS y desmarca los que no coincidan.
+- 🧰 **Bandeja del sistema** (Windows, *Herramientas*): cerrar la ventana la
+  esconde junto al reloj, y puede arrancar con Windows ya escondida.
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
   más rápida de crear una: **botón derecho sobre el día** → *Guardar este día
   como plantilla*.
@@ -211,7 +218,8 @@ La app recuerda la vista que dejaste.
 - 🆕 **Ayuda → Novedades**: qué ha cambiado en cada versión, dentro de la propia
   aplicación. Tras actualizar, sale sola la primera vez.
 - 🔒 **PIN de acceso** (*Herramientas*, o en el asistente al instalar): si
-  compartes el equipo, FichaCSIRC pide un PIN de 4 a 8 cifras al abrirse. Si lo
+  compartes el equipo, FichaCSIRC pide un PIN de 4 a 8 cifras al abrirse y,
+  si la dejas abierta, tras 15 minutos sin usarla (configurable). Si lo
   olvidas, *He olvidado el PIN* borra la configuración de ese equipo y vuelves a
   configurar con el asistente (tus horas en ProyectosTIC no se pierden;
   reinstalar no sirve, la configuración no está en la carpeta del programa).
@@ -219,7 +227,10 @@ La app recuerda la vista que dejaste.
 - 📤 **Exportar CSV**: tus horas en un archivo que abre Excel.
 - ⏰ **Aviso diario de fichaje** (*Herramientas*): si sueles olvidarte, actívalo y
   el sistema te avisará a la hora que elijas (por defecto las **16:00**), solo si
-  te faltan horas (Windows y macOS).
+  te faltan horas (Windows y macOS). **Desde el propio aviso puedes fichar**: cada
+  día con huecos trae tu tarea habitual y las horas que faltan; un clic y listo.
+- 📣 Al abrir, si la **semana pasada** quedó con huecos, un aviso te dice qué días
+  y te lleva allí.
 
 ---
 

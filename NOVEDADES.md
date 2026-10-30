@@ -51,6 +51,32 @@ instalada aparece en el pie de la ventana.
   quitar o poner la **franja de resumen** y la **leyenda de colores**. La app
   recuerda cómo lo dejaste.
 
+**Más seguridad, menos olvidos**
+- Con PIN, si dejas la app abierta y **pasas 15 minutos sin tocarla**, vuelve
+  a pedirlo (se cambia o se quita en *Herramientas → PIN de acceso*).
+- **Fichar desde el aviso diario**: la ventanita de las 16:00 trae cada día con
+  huecos con tu tarea habitual y las horas que faltan ya puestas. Un clic y
+  fichado, sin abrir la app.
+- Al abrir, si **la semana pasada quedó con huecos**, un aviso te dice qué días
+  y te lleva allí con un clic.
+
+**Tema oscuro y tamaño de letra**
+- Menú **Ver → Tema del sistema / claro / oscuro**. En «sistema» sigue al
+  ordenador y cambia al momento.
+- **Ctrl +** y **Ctrl −** agrandan o reducen la letra (Ctrl 0, normal). Se
+  recuerda.
+
+**Días propios de la UGR**
+- *Herramientas → Importar festivos* propone ya los **días propios de la UGR**
+  del año (cierre de Navidad, lunes a miércoles santo, San Pascual Bailón y el
+  viernes de la Feria del Corpus), uno a uno para que desmarques los que no
+  coincidan con el calendario laboral del PTGAS, y permite añadir otros a mano.
+
+**Bandeja del sistema (Windows)**
+- *Herramientas → Bandeja e inicio con Windows*: icono junto al reloj; cerrar
+  la ventana la esconde, y desde el icono la abres, vas a «hoy» o sales.
+  Opcionalmente, FichaCSIRC **arranca con Windows** escondida en la bandeja.
+
 **Mejoras**
 - **Logo nuevo** de FichaCSIRC en la cabecera: un reloj con check («hora
   fichada») junto al logo de la UGR.

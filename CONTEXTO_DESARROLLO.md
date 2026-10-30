@@ -65,7 +65,9 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
 4. **`INSTRUCCIONES.md`**: si cambia el uso diario (menus, botones, flujos).
 5. **`config.example.json`**: claves nuevas que lea el codigo.
 6. Entrada en "Hecho recientemente" de este fichero, con el **porque**, no solo el que.
-7. `python -m unittest discover -s tests -t .` en verde.
+7. `python -m unittest discover -s tests -t .` en verde. Desde **PowerShell o
+   cmd** (`run_tests.bat`): lanzado desde Git Bash/MSYS, Edge sin ventana sale
+   sin pintar nada y `test_js_humo` falla aunque todo esté bien.
 
 ## Hecho recientemente
 - Revisión UX aplicada (jul 2026): quick wins + llamadas a la API en hilos en la
@@ -471,6 +473,25 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
 - v3.1.0 (oct 2026, rama `mejoras/3.1`, sin publicar):
+  - **Pruebas de humo del JS** (`web/humo.js` + `tests/test_js_humo.py`): copia
+    de `web/` en un temporal con `humo.html` = index + humo.js, abierta con
+    `--headless=new --dump-dom --virtual-time-budget` y `?demo&humo`; el script
+    deja OK/FALLO en un `<pre>`. Por qué: el JS ya era la mitad de la app y no
+    tenía red. Ojo: el navegador hereda `CHROME_CRASHPAD_PIPE_NAME` si se lanza
+    desde Electron (se limpia) y desde Git Bash no arranca (se avisa).
+  - **Bandeja** (`bandeja.py`): pystray en un hilo (Windows); `events.closing`
+    devuelve False para esconder en vez de cerrar; `Api.cerrar` pasa por
+    `Bandeja.salir`. Inicio con Windows = HKCU Run con `--minimizado` (ventana
+    `hidden=True`). Mac fuera: pystray/darwin exige el hilo principal.
+  - **Tema oscuro**: todos los colores son variables; `data-tema` en `<html>` y
+    `.sistema-oscuro` según `prefers-color-scheme` (comun.js `aplicarTema`);
+    la ventana nace con fondo oscuro si `tema=oscuro` (`_fondo_ventana`).
+  - **Bloqueo por inactividad** (JS `vigilarInactividad` → `pin_bloquear`),
+    **zoom** por `document.documentElement.style.zoom`, **aviso de semana
+    anterior** (`semana_anterior_pendiente`, una consulta por rango), **fichar
+    desde el aviso** (`aviso_fichar`, pide el PIN si lo hay), **días UGR
+    propuestos** (`propuesta_dias_ugr`, excluye lo que ya es festivo; el
+    usuario desmarca).
   - **Editar día** (`Api.guardar_dia`): valida TODO antes de tocar nada (una hora
     mal escrita no deja el día a medias) y guarda el contrario de cada paso que
     sale bien en `_deshacer` (crear / editar / borrar), que `deshacer()` aplica

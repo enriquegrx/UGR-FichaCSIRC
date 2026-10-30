@@ -37,12 +37,20 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - ✎ **Editar un día entero** (botón derecho → *Editar día…*): horas y actividad
   de cada apunte, quitar y añadir tareas; se guarda todo junto y *Deshacer* lo
   revierte entero.
+- 🌙 **Tema oscuro** (sistema / claro / oscuro) y tamaño de letra con Ctrl +/−
+  (`tema`, `zoom`). 🪟 Cajas minimizables y menú Ver (`paneles`).
+- 📣 Aviso al abrir si la semana anterior quedó con huecos (`aviso_semana_vista`);
+  **fichar desde el aviso diario** sin abrir la app (`Api.aviso_fichar`).
+- 🧰 **Bandeja del sistema** e inicio con Windows (`bandeja.py`, pystray; solo
+  Windows: en Mac pystray exige el hilo principal, que es de pywebview).
+- 📅 Días propios de la UGR **propuestos** por año (`propuesta_dias_ugr`) y
+  revisables al importar festivos, más altas a mano (`dias_ugr`).
 - ➕ Trabajar **desde las propias fichas**: «+» con las tareas habituales,
   «Completar con…», horas editables con doble clic, arrastrar para copiar o
   mover, Ctrl+C / Ctrl+V de días y un aviso con *Deshacer* tras cada cambio
   (Ctrl+Z deshace también altas, copias y ediciones).
-- 🔒 **PIN de acceso** opcional al abrir la app (y el asistente). Es un bloqueo
-  de pantalla: en `config.json` solo se guarda un hash PBKDF2 con sal (`pin`) y
+- 🔒 **PIN de acceso** opcional al abrir la app (y el asistente), y de nuevo
+  tras N minutos sin usarla (`pin_auto_min`). Es un bloqueo de pantalla: en `config.json` solo se guarda un hash PBKDF2 con sal (`pin`) y
   los fallos (`pin_intentos`, con espera creciente). La API key sigue en claro
   para que el aviso diario funcione sin pedir nada; olvidar el PIN = borrar la
   configuración y volver al asistente.
@@ -214,6 +222,8 @@ configuración.
 | `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
 | `build_macos.sh` | Compilación local de apps macOS y su `.dmg`. |
 | `NOVEDADES.md` | Changelog para usuarios; se empaqueta y se ve en Ayuda → Novedades. |
+| `bandeja.py` | Icono en la bandeja (pystray) e inicio con Windows; solo Windows. |
+| `web/humo.js` + `tests/test_js_humo.py` | Pruebas de humo de la interfaz en Edge/Chrome sin ventana (se saltan sin navegador; desde Git Bash no arranca el navegador: usar PowerShell/cmd). |
 | `TECNOLOGIA.md` | Stack y plan de migración a Rust/Tauri, para usuarios; se empaqueta y se ve en Ayuda → Tecnología utilizada. |
 | `.github/workflows/` | Tests y publicación automática de releases. |
 | `tests/` | Tests del motor, del cliente INARI, del puente de destinos y de flujos de la GUI. |
