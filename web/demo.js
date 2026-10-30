@@ -84,6 +84,7 @@
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
       asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: false,
       novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
+      sugerir_pin: /[?&]sugerirpin\b/.test(location.search),
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
       paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
     }),
@@ -206,6 +207,7 @@
     pin_comprobar: (p) => { pinOk = pinOk || p === "1234"; return espera(pinOk ? { ok: true } : { error: "PIN incorrecto." }); },
     pin_fijar: (n, r) => espera(!/^\d{4,8}$/.test(n) ? { error: "El PIN debe tener entre 4 y 8 cifras." }
       : n !== r ? { error: "Los dos PIN no coinciden." } : (pinActivo = true, { ok: true })),
+    pin_no_sugerir: () => espera({ ok: true, hasta: "29/11/2026" }),
     pin_quitar: () => { pinActivo = false; return espera({ ok: true }); },
     pin_olvidado: () => { pinActivo = false; pinOk = true; return espera({ ok: true }); },
     mover_apunte: (fecha, id, destino) => {

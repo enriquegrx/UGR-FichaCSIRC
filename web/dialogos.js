@@ -256,6 +256,38 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
 
 // ================================================================ PIN de acceso
 
+// Al abrir, si no hay PIN: se puede poner AHI MISMO (sin otra ventana).
+// "Ahora no" vuelve a salir la proxima vez; "No mostrar mas" lo calla 30 dias.
+function dlgSugerirPin() {
+  const campo = (etiqueta) => entrada("", { type: "password", inputmode: "numeric", maxlength: "8",
+                                            autocomplete: "off", class: "horas", "aria-label": etiqueta });
+  const nuevo = campo("PIN nuevo"), repetido = campo("Repite el PIN");
+  const d = dialogo({ titulo: "🔒 Protege FichaCSIRC con un PIN", ancho: 500, botones: [
+    { texto: "No mostrar más", izquierda: true, accion: async (dd) => {
+      const r = await llamar("pin_no_sugerir");
+      dd.cerrar();
+      estado(`De acuerdo: no volverá a salir hasta el ${r.hasta}.`);
+    } },
+    { texto: "Ahora no", accion: (dd) => dd.cerrar() },
+    { texto: "Activar PIN", clase: "primario", accion: activar }] });
+  d.cuerpo.append(
+    el("p", { text: "Aún no tienes PIN. Si compartes el equipo o lo dejas sin bloquear, "
+                    + "cualquiera puede abrir FichaCSIRC y ver o cambiar tus horas." }),
+    rejilla(["PIN (4 a 8 cifras)", nuevo], ["Repítelo", repetido]),
+    nota("Se pedirá cada vez que abras la app. «No mostrar más» calla este aviso 30 días; "
+         + "el PIN se pone o se quita cuando quieras en Herramientas → PIN de acceso."));
+  for (const i of [nuevo, repetido]) i.addEventListener("keydown", (e) => { if (e.key === "Enter") activar(d); });
+  nuevo.focus();
+
+  async function activar(dd) {
+    if (!nuevo.value.trim()) { nuevo.focus(); return; }
+    const r = await llamar("pin_fijar", nuevo.value, repetido.value, "");
+    if (r.error) { await avisar("PIN de acceso", r.error); nuevo.focus(); return; }
+    dd.cerrar();
+    estado("PIN activado: se pedirá al abrir FichaCSIRC.");
+  }
+}
+
 async function dlgPin() {
   const { activo } = await llamar("pin_estado");
   const campo = (etiqueta) => entrada("", { type: "password", inputmode: "numeric", maxlength: "8",

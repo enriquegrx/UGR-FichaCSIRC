@@ -715,6 +715,21 @@ class TestPin(unittest.TestCase):
         self.assertIn("espera", r)
         self.assertFalse(r.get("ok"))
 
+    def test_sugerir_pin_y_no_mostrar_mas_30_dias(self):
+        guardado = {}
+        with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)), \
+             mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.__setitem__(k, v)):
+            self.assertTrue(self.api._sugerir_pin())
+            self.api.pin_no_sugerir()
+            self.assertFalse(self.api._sugerir_pin())
+            hasta = dt.date.fromisoformat(guardado["pin_sugerencia_hasta"])
+            self.assertEqual((hasta - dt.date.today()).days, web.PIN_SUGERENCIA_DIAS)
+            guardado["pin_sugerencia_hasta"] = (dt.date.today()).isoformat()
+            self.assertTrue(self.api._sugerir_pin())          # pasados los 30 dias, vuelve
+            self.api.pin_fijar("1234", "1234")
+            self.assertFalse(self.api._sugerir_pin())         # con PIN, nunca
+
     def test_olvidado_borra_la_configuracion(self):
         self.api.pin_fijar("1234", "1234")
         nueva = web.Api()

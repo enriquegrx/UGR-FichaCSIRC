@@ -40,6 +40,8 @@ instalada aparece en el pie de la ventana.
   acceso…* o en el propio asistente al instalar.
 - Si lo olvidas, «He olvidado el PIN» borra la configuración de ese equipo y
   vuelves a empezar con el asistente. **Tus horas en ProyectosTIC no se tocan.**
+- Si no tienes PIN, al abrir la app te sugiere ponerlo. «No mostrar más» lo
+  calla 30 días.
 
 **Tu pantalla, a tu manera**
 - Las cajas **Añadir apunte**, **Tus tareas habituales** y **Apuntes de la

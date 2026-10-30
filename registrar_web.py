@@ -281,6 +281,7 @@ def _motivo_conexion(e):
 PIN_ITERACIONES = 200_000
 PIN_FALLOS_LIBRES = 3          # a partir del 4.o fallo, espera creciente
 PIN_ESPERA_MAX = 300
+PIN_SUGERENCIA_DIAS = 30       # "No mostrar mas" calla la sugerencia este tiempo
 
 
 def _pin_hash(pin, sal_hex, iteraciones=PIN_ITERACIONES):
@@ -378,6 +379,26 @@ class Api:
                     "espera": espera}
         return {"error": "PIN incorrecto."}
 
+    def _sugerir_pin(self):
+        """Al abrir, sin PIN: sugerir ponerlo, salvo que se pidiera "No mostrar
+        mas" hace menos de PIN_SUGERENCIA_DIAS (o el asistente acabe de
+        preguntarlo)."""
+        if _pin_guardado() is not None:
+            return False
+        hasta = core.config_valor("pin_sugerencia_hasta") or ""
+        try:
+            return dt.date.today() >= dt.date.fromisoformat(hasta)
+        except ValueError:
+            return True
+
+    def pin_no_sugerir(self):
+        hasta = dt.date.today() + dt.timedelta(days=PIN_SUGERENCIA_DIAS)
+        try:
+            core.guardar_config_valor("pin_sugerencia_hasta", hasta.isoformat())
+        except Exception:
+            pass
+        return {"ok": True, "hasta": hasta.strftime("%d/%m/%Y")}
+
     def pin_fijar(self, nuevo, repetido, actual=""):
         """Activa o cambia el PIN. Si ya habia uno, hay que escribir el actual
         (la app puede estar abierta en un equipo desatendido)."""
@@ -448,6 +469,7 @@ class Api:
             "asociaciones": self.asociaciones(),
             "toca_permisos_anio": core.toca_anadir_permisos_del_anio(),
             "novedades_tras_actualizar": self._novedades_tras_actualizar(),
+            "sugerir_pin": self._sugerir_pin(),
             "plataforma": "macOS" if sys.platform == "darwin" else
                           ("Windows" if os.name == "nt" else sys.platform),
             "lunes": (hoy - dt.timedelta(days=hoy.weekday())).isoformat(),
@@ -1736,6 +1758,9 @@ class Api:
         })
         if pin:
             cfg["pin"] = _pin_nuevo(pin)
+        elif not _pin_guardado():
+            cfg["pin_sugerencia_hasta"] = (dt.date.today() + dt.timedelta(
+                days=PIN_SUGERENCIA_DIAS)).isoformat()
         # recien configurada: sus novedades no son "nuevas" para nadie (la primera
         # vez aun no hay motor: se apunta despues de cargarlo)
         sin_motor = core is None

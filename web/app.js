@@ -245,6 +245,8 @@ async function arrancar() {
   if (ini.toca_permisos_anio) setTimeout(() => dlgPermisosAnio({ manual: false }), 700);
   // Recien actualizada: lo nuevo de esta version, una sola vez.
   if (ini.novedades_tras_actualizar) setTimeout(() => dlgNovedades(ini.novedades_tras_actualizar), 400);
+  // Sin PIN: sugerirlo (no a la vez que las novedades, para no amontonar).
+  else if (ini.sugerir_pin) setTimeout(dlgSugerirPin, 900);
   // Version nueva (como mucho cada pocas horas; si falla, en silencio).
   setTimeout(() => dlgActualizacion({ forzar: false }), 1500);
   // Mac: avisar si la app no esta en Aplicaciones (una vez por ruta).
