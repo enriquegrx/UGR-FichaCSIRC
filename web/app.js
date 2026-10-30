@@ -500,6 +500,8 @@ function menuDia(x, y, d) {
                    accion: () => dlgCopiarDia([d.iso]) },
                  { texto: "✎ Editar día…", desactivado: d.estado === "error",
                    accion: () => dlgEditarDia(d) },
+                 { texto: "🗑 Eliminar apuntes de este día…", clase: "destacado",
+                   desactivado: !d.apuntes.length, accion: () => dlgEliminarDia(d) },
                  "-"];
   const marca = (accion, motivo = "") => async () => {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
@@ -526,9 +528,7 @@ function menuDia(x, y, d) {
       accion: marca(d.teletrabajo ? "quitar_teletrabajo" : "teletrabajo") },
     "-",
     { texto: "Guardar este día como plantilla…", desactivado: !d.apuntes.length,
-      accion: () => dlgGuardarPlantillaDia(d) },
-    { texto: "Eliminar apuntes de este día…", desactivado: !d.apuntes.length,
-      accion: () => dlgEliminarDia(d) });
+      accion: () => dlgGuardarPlantillaDia(d) });
   if (d.teletrabajo && st.ini?.inari_listo) {
     items.push("-", { texto: "Registrar slot en INARI…", accion: () => dlgSlotInari(d) });
   }
