@@ -573,6 +573,20 @@ class TestDialogos(Base):
         self.assertTrue(any(b["estilo"] == "punto" for b in bloques))
         self.assertTrue(all("**" not in b["texto"] for b in bloques))
 
+    def test_tecnologia_y_va_en_cada_empaquetado(self):
+        bloques = self.api.tecnologia()
+        titulos = [b["texto"] for b in bloques if b["estilo"] == "version"]
+        self.assertIn("El futuro: Rust y Tauri", titulos)
+        self.assertTrue(all("**" not in b["texto"] for b in bloques))
+        # Si falta en un build, en la app saldria "No se encontro..."
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for f in (".github/workflows/release.yml", ".github/workflows/experimento.yml",
+                  "build_exe.bat", "build_macos.sh"):     # el .spec no se versiona
+            with open(os.path.join(raiz, f), encoding="utf-8") as fh:
+                texto = fh.read()
+            self.assertIn("NOVEDADES.md", texto, f)
+            self.assertIn("TECNOLOGIA.md", texto, f)
+
     def test_abrir_github_solo_el_repo(self):
         with mock.patch.object(web.webbrowser, "open") as m_open:
             self.api.abrir_github("releases")

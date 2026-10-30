@@ -56,7 +56,7 @@ echo "Construyendo FichaCSIRC.app..."
 "$PY" -m PyInstaller --noconfirm --clean --windowed \
   --name "FichaCSIRC" --icon "$ICNS" \
   --add-data "web:web" --add-data "logo_ugr.png:." --add-data "fichacsirc.ico:." \
-  --add-data "NOVEDADES.md:." \
+  --add-data "NOVEDADES.md:." --add-data "TECNOLOGIA.md:." \
   registrar_web.py
 
 # Se distribuye como .dmg (no .zip): al abrirlo, el Finder muestra la app

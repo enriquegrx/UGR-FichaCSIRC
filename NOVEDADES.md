@@ -50,6 +50,8 @@ instalada aparece en el pie de la ventana.
   recuerda cómo lo dejaste.
 
 **Mejoras**
+- Nuevo **Ayuda → Tecnología utilizada**: con qué está hecha FichaCSIRC, por
+  qué, y el plan de pasarla en el futuro a **Rust y Tauri**.
 - Después de actualizar, la primera vez que abres FichaCSIRC te enseña **qué hay
   de nuevo** en esa versión. Siempre lo tienes en *Ayuda → Novedades*.
 

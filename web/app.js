@@ -153,6 +153,7 @@ const MENUS = {
     { texto: "Comprobar actualizaciones", accion: () => dlgActualizacion({ forzar: true }) },
     st.ini?.github ? { texto: "Ver en GitHub", accion: () => llamar("abrir_github", "") } : null,
     "-",
+    { texto: "Tecnología utilizada", accion: dlgTecnologia },
     { texto: "Acerca de FichaCSIRC", accion: dlgAcerca },
   ].filter(Boolean),
 };

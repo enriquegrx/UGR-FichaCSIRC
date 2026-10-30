@@ -214,6 +214,7 @@ configuración.
 | `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
 | `build_macos.sh` | Compilación local de apps macOS y su `.dmg`. |
 | `NOVEDADES.md` | Changelog para usuarios; se empaqueta y se ve en Ayuda → Novedades. |
+| `TECNOLOGIA.md` | Stack y plan de migración a Rust/Tauri, para usuarios; se empaqueta y se ve en Ayuda → Tecnología utilizada. |
 | `.github/workflows/` | Tests y publicación automática de releases. |
 | `tests/` | Tests del motor, del cliente INARI, del puente de destinos y de flujos de la GUI. |
 

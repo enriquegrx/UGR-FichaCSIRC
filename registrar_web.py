@@ -1555,13 +1555,22 @@ class Api:
 
     # ---- ayuda ----
     def novedades(self):
-        """NOVEDADES.md como bloques {estilo, texto} (mismo criterio que la app
-        Tkinter: las lineas cortadas a 80 columnas se vuelven a juntar)."""
+        return self._md_a_bloques("NOVEDADES.md", "Versión ", "el fichero de novedades")
+
+    def tecnologia(self):
+        """Ayuda > Tecnologia utilizada: TECNOLOGIA.md, pintado como Novedades."""
+        return self._md_a_bloques("TECNOLOGIA.md", "", "la explicación de la tecnología")
+
+    @staticmethod
+    def _md_a_bloques(nombre, prefijo_seccion, que):
+        """Un .md de los que van con la app como bloques {estilo, texto} (mismo
+        criterio que la app Tkinter: las lineas cortadas a 80 columnas se vuelven
+        a juntar). '## X' es un titulo de seccion (estilo 'version')."""
         try:
-            with open(_recurso("NOVEDADES.md"), encoding="utf-8") as f:
+            with open(_recurso(nombre), encoding="utf-8") as f:
                 lineas = f.read().splitlines()
         except OSError:
-            return [{"estilo": "normal", "texto": "No se encontró el fichero de novedades."}]
+            return [{"estilo": "normal", "texto": f"No se encontró {que}."}]
         sin = lambda t: t.replace("**", "").replace("*", "").replace("`", "")
         out, actual = [], {"estilo": "normal", "texto": ""}
 
@@ -1571,11 +1580,11 @@ class Api:
             actual.update(estilo="normal", texto="")
         for ln in lineas:
             limpio = ln.strip()
-            if limpio in ("---", "# Novedades de FichaCSIRC"):
+            if limpio == "---" or limpio.startswith("# "):
                 continue
             if limpio.startswith("## "):
                 volcar()
-                out.append({"estilo": "version", "texto": "Versión " + limpio[3:]})
+                out.append({"estilo": "version", "texto": prefijo_seccion + limpio[3:]})
             elif limpio.startswith("**") and limpio.endswith("**"):
                 volcar()
                 out.append({"estilo": "apartado", "texto": sin(limpio)})

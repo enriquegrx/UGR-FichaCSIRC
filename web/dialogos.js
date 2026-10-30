@@ -966,10 +966,25 @@ async function dlgNovedades(tras = null) {
                             : `Tienes la versión ${version}.`), caja);
 }
 
+// Ayuda > Tecnologia utilizada: TECNOLOGIA.md, pintado igual que Novedades.
+async function dlgTecnologia() {
+  const bloques = await llamar("tecnologia");
+  const caja = el("div", { class: "novedades" });
+  for (const b of bloques) {
+    caja.append(el(b.estilo === "version" ? "h4" : "p", { class: b.estilo,
+      text: b.estilo === "punto" ? `•  ${b.texto}` : b.texto }));
+  }
+  const botones = [cerrarBoton];
+  if (st.ini?.github) botones.unshift({ texto: "Ver el código en GitHub", izquierda: true,
+                                         accion: () => llamar("abrir_github", "") });
+  const d = dialogo({ titulo: "Tecnología utilizada", ancho: 680, botones });
+  d.cuerpo.append(caja);
+}
+
 function dlgAcerca() {
   const d = dialogo({ titulo: "Acerca de FichaCSIRC", ancho: 420, botones: [cerrarBoton] });
   d.cuerpo.append(
-    el("p", { class: "dlg-sub", text: `FichaCSIRC v${st.ini?.version || "?"} · prototipo web` }),
+    el("p", { class: "dlg-sub", text: `FichaCSIRC v${st.ini?.version || "?"}${st.ini?.experimento ? " · prototipo web" : ""}` }),
     el("p", { text: "Registro de horas en OpenProject (ProyectosTic, UGR)." }),
     el("p", { text: "Desarrollador: Enrique Vargas Vega" }),
     el("p", { text: "Correo: quique@ugr.es" }),
