@@ -331,6 +331,39 @@ class TestBorrarYMarcas(Base):
         m_ed.assert_not_called()
         m_cr.assert_not_called()
 
+    def test_mover_apunte_y_deshacer(self):
+        self._dia_cargado()
+        llamadas = []
+        with mock.patch.object(core, "crear_entrada",
+                               lambda *a: llamadas.append(("crear",) + a) or 55),              mock.patch.object(core, "eliminar_entrada", lambda i: llamadas.append(("borrar", i))):
+            r = self.api.mover_apunte(L.isoformat(), "7", M.isoformat())
+            self.assertEqual(r, {"ok": True, "puede_deshacer": True})
+            self.assertEqual(llamadas, [("crear", M.isoformat(), "10", 2, "c", "soporte"),
+                                        ("borrar", "7")])
+            llamadas.clear()
+            self.assertEqual(self.api.deshacer()["restaurados"], 2)
+        self.assertEqual(llamadas, [("crear", L.isoformat(), "10", 2, "c", "soporte"),
+                                    ("borrar", 55)])
+
+    def test_anadir_y_pegar_se_pueden_deshacer(self):
+        self._dia_cargado()
+        with mock.patch.object(core, "crear_entrada", return_value=77),              mock.patch.object(core, "guardar_config_valores"):
+            r = self.api.anadir([L.isoformat()], "30", "1", "", "dev")
+        self.assertTrue(r["puede_deshacer"])
+        with mock.patch.object(core, "eliminar_entrada") as m_del:
+            self.api.deshacer()
+        m_del.assert_called_once_with(77)
+        # pegar el lunes en el martes (Ctrl+C / Ctrl+V): copia ESE dia
+        with mock.patch.object(core, "entradas_dia", lambda iso: [apunte(7, 2, com="c")]
+                               if iso == L.isoformat() else []):
+            self.api.semana(L.isoformat())
+            p = self.api.preparar_copia_dia([M.isoformat(), L.isoformat()], L.isoformat())
+        self.assertEqual((p["n"], p["dias"]), (1, 1))          # sobre si mismo, no
+        with mock.patch.object(core, "crear_entrada", return_value=88) as m_cr:
+            r = self.api.ejecutar_copia()
+        m_cr.assert_called_once_with(M.isoformat(), "10", 2, "c", "soporte")
+        self.assertTrue(r["puede_deshacer"])
+
     def test_novedades_solo_la_primera_vez_tras_actualizar(self):
         guardado = {}
         with mock.patch.object(core, "config_valor", lambda k: guardado.get(k)), \
@@ -372,8 +405,16 @@ class TestDialogos(Base):
     def test_editar(self):
         self._semana({L.isoformat(): [apunte(7, 2, wp="10")]})
         with mock.patch.object(core, "actualizar_entrada") as m_upd:
-            self.assertEqual(self.api.editar(L.isoformat(), "7", "3,5", " c ", "soporte"), {"ok": True})
+            self.assertEqual(self.api.editar(L.isoformat(), "7", "3,5", " c ", "soporte"),
+                             {"ok": True, "puede_deshacer": True})
         m_upd.assert_called_once_with("7", 3.5, "c", "soporte", "10")
+        # solo las horas (desde la ficha): comentario y actividad se conservan
+        with mock.patch.object(core, "actualizar_entrada") as m_upd:
+            self.api.editar(L.isoformat(), "7", "1,5")
+        m_upd.assert_called_once_with("7", 1.5, "", "soporte", "10")
+        with mock.patch.object(core, "actualizar_entrada") as m_upd:
+            self.assertEqual(self.api.deshacer()["restaurados"], 1)
+        m_upd.assert_called_once_with(7, 2, "", "soporte", "10")
         self.assertIn("error", self.api.editar(L.isoformat(), "7", "25", "", ""))
         self.assertIn("error", self.api.editar(L.isoformat(), "99", "1", "", ""))
 

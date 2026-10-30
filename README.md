@@ -37,6 +37,10 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - ✎ **Editar un día entero** (botón derecho → *Editar día…*): horas y actividad
   de cada apunte, quitar y añadir tareas; se guarda todo junto y *Deshacer* lo
   revierte entero.
+- ➕ Trabajar **desde las propias fichas**: «+» con las tareas habituales,
+  «Completar con…», horas editables con doble clic, arrastrar para copiar o
+  mover, Ctrl+C / Ctrl+V de días y un aviso con *Deshacer* tras cada cambio
+  (Ctrl+Z deshace también altas, copias y ediciones).
 - 🔒 **PIN de acceso** opcional al abrir la app (y el asistente). Es un bloqueo
   de pantalla: en `config.json` solo se guarda un hash PBKDF2 con sal (`pin`) y
   los fallos (`pin_intentos`, con espera creciente). La API key sigue en claro

@@ -109,7 +109,8 @@
       let creados = 0, saltados = 0;
       for (const i of dias) {
         if (!permitir && (apuntes[i] || []).some((a) => String(a.wp_id) === String(wp))) { saltados++; continue; }
-        (apuntes[i] = apuntes[i] || []).push({ id: siguiente++, horas: h, tarea: t.nombre, wp_id: String(wp), actividad, comentario });
+        (apuntes[i] = apuntes[i] || []).push({ id: siguiente++, horas: h, tarea: t ? t.nombre : "[ASG] Migración de correo",
+                                               wp_id: String(wp), actividad, comentario });
         creados++;
       }
       return espera({ creados, saltados, errores: 0, ultimo: "" });
@@ -206,6 +207,15 @@
       : n !== r ? { error: "Los dos PIN no coinciden." } : (pinActivo = true, { ok: true })),
     pin_quitar: () => { pinActivo = false; return espera({ ok: true }); },
     pin_olvidado: () => { pinActivo = false; pinOk = true; return espera({ ok: true }); },
+    mover_apunte: (fecha, id, destino) => {
+      const lista = apuntes[fecha] || [];
+      const k = lista.findIndex((x) => String(x.id) === String(id));
+      if (k < 0) return espera({ error: "Ese apunte ya no está." });
+      const [a] = lista.splice(k, 1);
+      (apuntes[destino] = apuntes[destino] || []).push(a);
+      borrados = null; diaAntes = null;
+      return espera({ ok: true, puede_deshacer: false });
+    },
     guardar_dia: (fecha, c) => {
       const num = (v) => parseFloat(String(v).replace(",", "."));
       const lista = (apuntes[fecha] = apuntes[fecha] || []);
@@ -244,10 +254,12 @@
       for (const t of ts) if (!tareas.some((x) => x.id === t.id)) tareas.unshift(t);
       return espera(tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })));
     },
-    preparar_copia_dia: (dias) => {
-      copia = dias.map((i) => [i, apuntes[d(0)] || []]);
-      return espera({ origen: "Lunes", n: (apuntes[d(0)] || []).length, dias: dias.length,
-        lineas: (apuntes[d(0)] || []).map((a) => `${fmt(a.horas)}  ${a.tarea}`) });
+    preparar_copia_dia: (dias, origen) => {
+      const src = (apuntes[origen || d(0)] || []).map((a) => ({ ...a }));
+      const dest = dias.filter((i) => i !== origen);
+      copia = dest.map((i) => [i, src]);
+      return espera({ origen: origen || "Lunes", n: src.length, dias: dest.length,
+        lineas: src.map((a) => `${fmt(a.horas)}  ${a.tarea}`) });
     },
     preparar_copia_semana: () => espera({ vacio: "La semana anterior no tiene apuntes (demo)." }),
     ejecutar_copia: () => {

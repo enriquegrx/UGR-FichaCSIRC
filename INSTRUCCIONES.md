@@ -175,6 +175,19 @@ La app recuerda la vista que dejaste.
   al pulsar *Guardar* y *Deshacer* lo devuelve a como estaba.
 - 🖱️ En la vista semanal, al pasar el ratón por una tarea de la ficha salen sus
   botones ✏️ editar y 🗑️ borrar.
+- ➕ **El «+» de cada día** (sale al pasar el ratón; o pulsa **+** con el día
+  seleccionado): tus tareas habituales con las horas ya puestas. Un clic y
+  añadida a ese día.
+- ✅ **Completar con…** (botón derecho sobre un día al que le faltan horas):
+  rellena lo que falta con una de tus tareas habituales.
+- 🔢 **Doble clic sobre las horas** de una tarea en la ficha para cambiarlas ahí
+  mismo (Enter guarda, Esc cancela).
+- 🫳 **Arrastra** una tarea a otro día: la copia (con **Mayús** pulsada, la
+  mueve). Arrastrar una de tus tareas habituales a un día la añade.
+- 📋 **Ctrl+C** sobre un día y **Ctrl+V** en los marcados: copia ese día tal
+  cual (también con botón derecho → *Copiar este día* / *Pegar aquí*).
+- ↩️ Después de borrar, editar, mover o añadir, abajo sale un aviso con
+  **Deshacer** (o Ctrl+Z).
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
   más rápida de crear una: **botón derecho sobre el día** → *Guardar este día
   como plantilla*.

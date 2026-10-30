@@ -16,6 +16,24 @@ instalada aparece en el pie de la ventana.
 - En la vista semanal, al pasar el ratón por una tarea de la ficha salen sus
   botones ✏️ **editar** y 🗑️ **borrar**.
 
+**Añadir, cambiar y borrar sin salir de las fichas**
+- **Botón «+» en cada día** (al pasar el ratón, o la tecla **+**): tus tareas
+  habituales con las horas ya puestas (lo que te falta, si es menos). Un clic y
+  añadida, sin marcar el día ni rellenar el formulario.
+- **Botón derecho → «Completar con…»**: rellena lo que le falta al día con una
+  de tus tareas habituales. Un clic y el día en verde.
+- **Doble clic sobre las horas** de una tarea en la ficha: las cambias ahí
+  mismo (Enter guarda, Esc cancela).
+- **Arrastra** una tarea a otro día para copiarla (con **Mayús**, para
+  moverla), o arrastra una de tus tareas habituales a un día para añadirla.
+- **Ctrl+C sobre un día y Ctrl+V** en los días marcados (o botón derecho →
+  *Copiar este día* / *Pegar aquí*).
+- Tras borrar, editar, mover o añadir sale abajo un aviso con **Deshacer**.
+  Ctrl+Z ya deshace también lo añadido, copiado o editado, no solo lo borrado.
+- «+N más» en una ficha de la semana despliega el resto de tareas del día.
+- En el botón derecho, **«Eliminar apuntes de este día»** pasa a ser la
+  tercera opción, destacada.
+
 **PIN de acceso**
 - Si compartes el equipo, FichaCSIRC puede **pedir un PIN al abrirse**
   (también el asistente de configuración). Se activa en *Herramientas → PIN de

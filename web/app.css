@@ -405,6 +405,33 @@ body.aviso h2 { font-size: 16px; }
 .ap-tarjeta:hover .ap-acciones, .ap-acciones:focus-within { opacity: 1; pointer-events: auto; }
 .ap-acciones .icono { padding: 3px; }
 
+/* ---------- "+" de cada dia, horas editables, arrastrar ---------- */
+.b-mas-dia { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; padding: 0;
+             border-radius: 6px; font-size: 17px; line-height: 1; font-weight: 600;
+             color: var(--primario); background: var(--panel); opacity: 0; }
+/* en la celda del mes, abajo a la derecha: arriba esta la cifra del dia */
+.celda .b-mas-dia { top: auto; bottom: 4px; right: 4px; width: 20px; height: 20px; font-size: 15px; }
+.dia:hover .b-mas-dia, .celda:hover .b-mas-dia, .b-mas-dia:focus-visible { opacity: 1; }
+.dia:hover .titulo { padding-right: 26px; }
+.linea-h.editable { cursor: text; border-radius: 3px; }
+.linea-h.editable:hover { background: var(--seleccion); outline: 1px solid #bcd7f5; }
+.horas-en-sitio { width: 44px; font-size: 12px; padding: 0 3px; height: 20px; margin-right: 2px; }
+[draggable="true"] { cursor: grab; }
+body.arrastrando .dia, body.arrastrando .celda { transition: none; }
+.soltar { outline: 2px dashed var(--primario); outline-offset: -3px; background: var(--seleccion) !important; }
+.boton-mas { border: 0; background: none; padding: 1px 0 1px 40px; cursor: pointer; text-align: left; }
+.boton-mas:hover { color: var(--primario); text-decoration: underline; }
+.celda .boton-mas { padding-left: 40px; }
+
+/* aviso con "Deshacer" tras borrar, editar, mover o añadir */
+.aviso-deshacer { position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%); z-index: 40;
+                  display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px);
+                  background: #1f2933; color: #fff; border-radius: 8px; padding: 9px 10px 9px 16px;
+                  box-shadow: 0 6px 20px rgba(15, 23, 42, .25); font-size: 14px; }
+.aviso-deshacer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aviso-deshacer .enlace { color: #8ec5ff; font-weight: 600; }
+.aviso-deshacer .cerrar-aviso { border: 0; background: none; color: #cbd5e1; font-size: 18px; padding: 0 4px; }
+
 /* ---------- dialogo "Editar dia" ---------- */
 .ed-cabeza { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .ed-total { font-weight: 600; font-variant-numeric: tabular-nums; }

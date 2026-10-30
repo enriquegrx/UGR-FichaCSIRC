@@ -104,7 +104,7 @@ async function dlgEditar(dia, a) {
     if (r.error) { await avisar("No se pudo guardar", r.error); return; }
     dd.cerrar();
     await cargarSemana();
-    estado("Apunte actualizado.");
+    trasCambio(r, "Apunte actualizado.");
   }
 }
 
@@ -113,7 +113,7 @@ async function dlgEditar(dia, a) {
 // Todo el dia de una vez: horas y actividad de cada apunte, quitar alguno o
 // anadir tareas. Nada se envia hasta "Guardar"; entonces va todo junto y
 // "Deshacer" (Ctrl+Z) lo devuelve a como estaba.
-function dlgEditarDia(dia) {
+function dlgEditarDia(dia, { nueva = false } = {}) {
   const filas = [];
   const total = el("span", { class: "ed-total" });
   const lista = el("div", { class: "ed-lista" });
@@ -245,12 +245,11 @@ function dlgEditarDia(dia) {
       await avisar("Guardado con errores",
         `Cambios hechos: ${r.hechos}. Con errores: ${r.errores}.\nÚltimo error: ${r.ultimo}`);
     }
-    $("b-deshacer").hidden = !r.puede_deshacer;
     await cargarSemana();
-    estado(`${dia.nombre} ${dia.fecha} actualizado${r.puede_deshacer ? " (Ctrl+Z para deshacer)" : ""}.`);
+    trasCambio(r, `${dia.nombre} ${dia.fecha} actualizado.`);
   }
 
-  if (!dia.apuntes.length) nuevaFila();
+  if (!dia.apuntes.length || nueva) nuevaFila();
   else filas[0].horas.focus();
   recalcular();
 }
@@ -364,11 +363,12 @@ function dlgBuscar() {
 
 // Destino: los dias marcados (desde Copiar / Plantillas) o el dia sobre el que
 // se hizo clic derecho (menuDia), sin tener que marcarlo antes.
-async function dlgCopiarDia(destino = null) {
+// origen: un dia concreto (pegar lo copiado con Ctrl+C); sin el, el ultimo con horas.
+async function dlgCopiarDia(destino = null, origen = null) {
   const dias = destino || [...st.marcados];
   if (!dias.length) { await avisar("Falta día", "Marca al menos un día de destino."); return; }
-  estado("Buscando el último día con horas…");
-  const r = await llamar("preparar_copia_dia", dias);
+  estado(origen ? "Preparando…" : "Buscando el último día con horas…");
+  const r = await llamar("preparar_copia_dia", dias, origen);
   if (r.error || r.vacio) { estado(""); await avisar("Copiar día", r.error || r.vacio); actualizarTotales(); return; }
   if (!(await preguntar("Copiar día",
       `¿Copiar los ${r.n} apuntes del ${r.origen}:\n\n${r.lineas.map((l) => `  · ${l}`).join("\n")}`
@@ -978,7 +978,11 @@ function dlgAcerca() {
 
 function dlgAtajos() {
   const filas = [["Enter", "Añadir el apunte (desde Horas o Comentario)"],
-    ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer el último borrado"],
+    ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…)"],
+    ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
+    ["+", "Sobre un día: añadirle una de tus tareas habituales"],
+    ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],
+    ["Arrastrar", "Un apunte a otro día lo copia (con Mayús, lo mueve); una tarea habitual, la añade"],
     ["F5", "Recargar la semana"], ["Ctrl+← / →", "Semana anterior / siguiente"],
     ["Alt+1..5", "Marcar/desmarcar lunes..viernes"], ["Esc", "Cerrar el diálogo o el menú"],
     ["Doble clic", "Editar un apunte"],

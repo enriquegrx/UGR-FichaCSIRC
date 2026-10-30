@@ -784,6 +784,7 @@ class Api:
         guardia_auto = comentario == core.comentario_guardia()
         creados = saltados = errores = 0
         ultimo = ""
+        deshacer = []
         for iso in dias_iso:
             existentes = self._cache.get(iso) or []
             if (not permitir_repetir
@@ -795,15 +796,41 @@ class Api:
             else:
                 com = "" if guardia_auto else comentario
             try:
-                core.crear_entrada(iso, int(wp_id), horas, com, actividad or None)
+                nuevo = core.crear_entrada(iso, int(wp_id), horas, com, actividad or None)
+                if nuevo:
+                    deshacer.append({"tipo": "borrar", "id": nuevo})
                 creados += 1
             except Exception as e:
                 errores += 1
                 ultimo = str(e)
         if creados:
             self._recordar(wp_id, comentario, actividad)
+        self._deshacer = deshacer or None
         return {"creados": creados, "saltados": saltados, "errores": errores,
-                "ultimo": ultimo}
+                "ultimo": ultimo, "puede_deshacer": bool(deshacer)}
+
+    # ---- arrastrar un apunte a otro dia (Mayus = moverlo) ----
+    def mover_apunte(self, fecha, entry_id, destino_iso):
+        """Lo crea en el otro dia y lo borra de este; Deshacer lo devuelve."""
+        a = next((x for x in (self._cache.get(fecha) or [])
+                  if str(x["id"]) == str(entry_id)), None)
+        if a is None:
+            return {"error": "Ese apunte ya no está en la semana cargada (pulsa F5)."}
+        if a.get("destino") == "inari":
+            return {"error": "Un slot de INARI no se puede mover: bórralo y regístralo en el otro día."}
+        if destino_iso == fecha:
+            return {"ok": True}
+        nuevo = core.crear_entrada(destino_iso, a["wp_id"], a["horas"], a["comentario"],
+                                   a["actividad"] or None)
+        deshacer = [{"tipo": "borrar", "id": nuevo}] if nuevo else []
+        try:
+            deshacer.append(self._borrar_uno(fecha, entry_id, "op"))
+        except Exception as e:
+            self._deshacer = deshacer or None
+            return {"error": f"Se copió al otro día, pero no se pudo quitar de este: {e}",
+                    "puede_deshacer": bool(deshacer)}
+        self._deshacer = [p for p in deshacer if p] or None
+        return {"ok": True, "puede_deshacer": self._deshacer is not None}
 
     def _recordar(self, wp_id, comentario, actividad):
         try:
@@ -971,7 +998,9 @@ class Api:
     # =============================================================== dialogos
 
     # ---- editar un apunte ----
-    def editar(self, fecha, entry_id, horas, comentario, actividad):
+    def editar(self, fecha, entry_id, horas, comentario=None, actividad=None):
+        """comentario/actividad None = dejarlos como estan (cambiar solo las
+        horas desde la propia ficha)."""
         try:
             horas = float(str(horas).replace(",", "."))
         except ValueError:
@@ -984,9 +1013,13 @@ class Api:
             return {"error": "Ese apunte ya no está en la semana cargada (pulsa F5)."}
         if apunte.get("destino") == "inari":
             return {"error": "Para corregir un slot de INARI, bórralo y vuelve a registrarlo."}
-        core.actualizar_entrada(entry_id, horas, (comentario or "").strip(),
-                                actividad or None, apunte["wp_id"])
-        return {"ok": True}
+        comentario = apunte["comentario"] if comentario is None else (comentario or "").strip()
+        actividad = apunte["actividad"] if actividad is None else actividad
+        core.actualizar_entrada(entry_id, horas, comentario, actividad or None, apunte["wp_id"])
+        self._deshacer = [{"tipo": "editar", "id": apunte["id"], "horas": apunte["horas"],
+                           "comentario": apunte["comentario"], "actividad": apunte["actividad"],
+                           "wp_id": apunte["wp_id"]}]
+        return {"ok": True, "puede_deshacer": True}
 
     # ---- asociar actividad <-> tarea (en los dos sentidos) ----
     def asociaciones(self):
@@ -1046,6 +1079,7 @@ class Api:
         se pudo leer se salta (podria duplicar), igual que la app de verdad."""
         creados = saltados = errores = 0
         ultimo = ""
+        deshacer = []
         for iso, apuntes in pares:
             if saltar_no_laborables and core.es_no_laborable(iso):
                 saltados += len(apuntes)
@@ -1061,20 +1095,36 @@ class Api:
                     saltados += 1
                     continue
                 try:
-                    core.crear_entrada(iso, a["wp_id"], a["horas"], a["comentario"],
-                                       a["actividad"])
+                    nuevo = core.crear_entrada(iso, a["wp_id"], a["horas"], a["comentario"],
+                                               a["actividad"])
+                    if nuevo:
+                        deshacer.append({"tipo": "borrar", "id": nuevo})
                     creados += 1
                 except Exception as e:
                     errores += 1
                     ultimo = str(e)
+        self._deshacer = deshacer or None
         return {"creados": creados, "saltados": saltados, "errores": errores,
-                "ultimo": ultimo}
+                "ultimo": ultimo, "puede_deshacer": bool(deshacer)}
 
-    def preparar_copia_dia(self, dias_iso):
+    def preparar_copia_dia(self, dias_iso, origen=None):
         """Busca el ultimo dia laborable con horas (14 dias atras) antes del
-        primero marcado. Devuelve el resumen para confirmar, o {'vacio': ...}."""
+        primero marcado; con origen (Ctrl+C / Ctrl+V), copia ESE dia. Devuelve
+        el resumen para confirmar, o {'vacio': ...}."""
         if not dias_iso:
             return {"error": "Marca al menos un día de destino."}
+        if origen:
+            o = dt.date.fromisoformat(origen)
+            apuntes = [a for a in core.entradas_dia(origen) if a.get("destino", "op") == "op"]
+            if not apuntes:
+                return {"vacio": f"El {o.strftime('%d/%m')} ya no tiene apuntes que copiar."}
+            destino = sorted(i for i in dias_iso if i != origen)
+            if not destino:
+                return {"error": "Elige otro día: no se puede pegar un día sobre sí mismo."}
+            self._copia = ("dia", [(i, apuntes) for i in destino])
+            return {"origen": f"{core.DIAS_ES[o.weekday()]} {o.strftime('%d/%m')}",
+                    "lineas": [f"{_horas(a['horas'])}  {a['wp_titulo']}" for a in apuntes],
+                    "n": len(apuntes), "dias": len(destino)}
         primero = dt.date.fromisoformat(min(dias_iso))
         d = primero - dt.timedelta(days=1)
         for _ in range(14):

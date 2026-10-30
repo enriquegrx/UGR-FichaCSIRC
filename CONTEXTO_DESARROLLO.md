@@ -482,6 +482,14 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     `cfg_guardar`: el acceso "FichaCSIRC - Configurar" también lo pide.
     "Olvidé el PIN" borra config.json (y el aviso diario): reinstalar no serviría
     porque la config vive en %APPDATA%/Library y el desinstalador no la toca.
+  - **Fichas**: «+» por día y «Completar con…» usan las habituales de
+    `resumen_franja` (guardadas en `st.habituales`) y pasan por `comprobar` igual
+    que el formulario. Horas editables con doble clic (`editar` con comentario y
+    actividad None = se conservan). Arrastrar: HTML5 DnD con el dato en
+    `st.arrastre` (en `dragover` no se puede leer dataTransfer); Mayús = mover
+    (`Api.mover_apunte`). Ctrl+C/V reutiliza la copia de día con `origen`.
+    `anadir`, `_copiar` (copias y plantillas) y `editar` guardan ya su contrario
+    en `_deshacer`, así que Ctrl+Z y el aviso deshacen cualquier cambio.
   - **Novedades tras actualizar**: `ultima_version_abierta`; sin ella (se viene
     de la 3.0) se enseña la última versión; el asistente la deja apuntada para
     que una instalación nueva no las vea.

@@ -29,6 +29,10 @@ const st = {
   comAuto: "",
   comHabitual: "",
   ocupado: false,
+  habituales: null,     // tareas habituales (las del "+" de cada dia)
+  portapapeles: null,   // {iso, texto}: dia copiado con Ctrl+C
+  expandidos: new Set(),// dias de la semana con "+N mas" desplegado
+  arrastre: null,       // lo que se esta arrastrando (apunte o tarea habitual)
 };
 
 // ---------------------------------------------------------------- utilidades
@@ -60,10 +64,33 @@ async function informarLote(r, { hecho, nada }) {
   }
   await cargarSemana();
   if (r.creados) {
-    estado(`${hecho(r.creados)}${r.saltados ? ` Saltados ${r.saltados} (ya existían).` : ""}`);
+    trasCambio(r, `${hecho(r.creados)}${r.saltados ? ` Saltados ${r.saltados} (ya existían).` : ""}`);
   } else if (!r.errores) {
     estado(nada);
   }
+}
+
+// ---------------------------------------------------------------- aviso "Deshacer"
+
+// Tras borrar, editar, mover o anadir: un aviso abajo con su "Deshacer" (mas a
+// la vista que el boton del panel, que sigue ahi, igual que Ctrl+Z).
+let avisoT = null;
+function trasCambio(r, texto) {
+  estado(texto);
+  if (!r.puede_deshacer) { $("b-deshacer").hidden = true; ocultarAviso(); return; }
+  $("b-deshacer").hidden = false;
+  const a = $("aviso-deshacer");
+  a.replaceChildren(el("span", { text: texto }),
+    el("button", { class: "enlace", text: "Deshacer", onclick: () => deshacer() }),
+    el("button", { class: "cerrar-aviso", text: "×", title: "Cerrar", "aria-label": "Cerrar",
+                   onclick: ocultarAviso }));
+  a.hidden = false;
+  clearTimeout(avisoT);
+  avisoT = setTimeout(ocultarAviso, 10000);
+}
+function ocultarAviso() {
+  clearTimeout(avisoT);
+  $("aviso-deshacer").hidden = true;
 }
 
 // ---------------------------------------------------------------- menus
@@ -219,6 +246,7 @@ async function refrescarFranja() {
       el("span", { text: `quedan ${r.vacaciones.quedan} de ${r.vacaciones.cupo} días` })));
   }
   $("franja").replaceChildren(...items);
+  st.habituales = r.habituales;
   pintarHabituales(r.habituales);
   $("franja").hidden = items.length < 2;
 }
@@ -247,6 +275,8 @@ function pintarHabituales(h) {
         barra),
       el("button", { class: "hab-mas", title: `Añadir ${f.tipico_txt} a los días marcados`,
                      onclick: () => usarHabitual(f, true) }, `+ ${f.tipico_txt}`));
+    arrastrable(fila, { tipo: "habitual", f });
+    fila.title = "Arrástrala a un día para añadirla";
     requestAnimationFrame(() => { barra.firstChild.style.width = `${Math.round((f.horas / max) * 100)}%`; });
     return fila;
   }));
@@ -315,7 +345,24 @@ function eventosDia(nodo, d) {
   nodo.dataset.iso = d.iso;
   nodo.addEventListener("click", (e) => alternarDia(d.iso, e));
   nodo.addEventListener("contextmenu", (e) => { e.preventDefault(); menuDia(e.clientX, e.clientY, d); });
+  nodo.addEventListener("dragover", (e) => {
+    if (!st.arrastre || d.estado === "error") return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = e.shiftKey && st.arrastre.tipo === "apunte" ? "move" : "copy";
+    nodo.classList.add("soltar");
+  });
+  nodo.addEventListener("dragleave", (e) => {
+    if (!nodo.contains(e.relatedTarget)) nodo.classList.remove("soltar");
+  });
+  nodo.addEventListener("drop", (e) => {
+    e.preventDefault();
+    nodo.classList.remove("soltar");
+    const a = st.arrastre;
+    st.arrastre = null;
+    if (a) soltarEnDia(d, a, e.shiftKey);
+  });
   nodo.addEventListener("keydown", (e) => {
+    if (e.key === "+") { e.preventDefault(); const r = nodo.getBoundingClientRect(); menuAnadirRapido(d, r.left + 20, r.top + 30); }
     if (e.key === " " || e.key === "Enter") { e.preventDefault(); alternarDia(d.iso, e); }
     if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
       e.preventDefault();
@@ -346,7 +393,8 @@ function pintarDiasSemana(s) {
       barra,
       el("div", { class: "cifra", text: d.texto }),
       chips.childElementCount ? chips : null,
-      ...apuntesTarjeta(d));
+      ...apuntesTarjeta(d),
+      botonMasDia(d));
     eventosDia(tarjeta, d);
     cont.append(tarjeta);
     requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
@@ -358,16 +406,212 @@ function pintarDiasSemana(s) {
 const MAX_APUNTES_TARJETA = 3;
 function apuntesTarjeta(d) {
   if (d.estado === "vacio") return [el("div", { class: "sin-apuntes", text: "Sin apuntes" })];
-  const out = d.apuntes.slice(0, MAX_APUNTES_TARJETA).map((a) =>
-    el("div", { class: "ap-tarjeta" },
+  const abierto = st.expandidos.has(d.iso);
+  const max = abierto ? Infinity : MAX_APUNTES_TARJETA;
+  const out = d.apuntes.slice(0, max).map((a) => {
+    const n = el("div", { class: "ap-tarjeta" },
       el("div", { class: "linea-ap" },
-        el("span", { class: "linea-h", text: a.horas_txt }),
+        horasEditables(d, a),
         el("span", { class: "linea-t", text: a.tarea })),
       a.actividad ? el("div", { class: "linea-act", text: a.actividad }) : null,
-      accionesTarjeta(d, a)));
+      accionesTarjeta(d, a));
+    arrastrableApunte(n, d, a);
+    return n;
+  });
   const resto = d.apuntes.length - MAX_APUNTES_TARJETA;
-  if (resto > 0) out.push(el("div", { class: "linea-mas", text: `+${resto} más` }));
+  if (resto > 0) {
+    out.push(botonMas(abierto ? "ver menos" : `+${resto} más`, () => {
+      if (abierto) st.expandidos.delete(d.iso); else st.expandidos.add(d.iso);
+      pintarDiasSemana(st.semana);
+      pintarMarcados();
+    }));
+  }
   return out;
+}
+
+// "+N mas" como boton: no marca el dia al pulsarlo.
+function botonMas(texto, accion) {
+  const b = el("button", { class: "linea-mas boton-mas", text: texto });
+  b.addEventListener("click", (e) => { e.stopPropagation(); accion(); });
+  b.addEventListener("keydown", (e) => e.stopPropagation());
+  return b;
+}
+
+// ---------------------------------------------------------------- añadir desde la ficha
+
+// "+" en la esquina de cada dia (al pasar el raton): tus tareas habituales con
+// las horas ya puestas; un clic y añadida, sin marcar el dia ni el formulario.
+function botonMasDia(d) {
+  if (d.estado === "error") return null;
+  const b = el("button", { class: "b-mas-dia", title: "Añadir una tarea a este día (tecla +)",
+                           "aria-label": `Añadir una tarea al ${d.nombre} ${d.fecha}`, text: "+" });
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const r = b.getBoundingClientRect();
+    menuAnadirRapido(d, r.left, r.bottom + 2);
+  });
+  b.addEventListener("keydown", (e) => e.stopPropagation());
+  return b;
+}
+
+// Horas que se proponen para una tarea habitual en un dia: lo que falta si es
+// menos que lo de siempre (el hueco de la tarde), y si no, lo de siempre.
+function horasPropuestas(d, f) {
+  const falta = Math.max(0, d.falta || 0);
+  return falta > 0.001 ? Math.min(f.tipico, falta) : f.tipico;
+}
+
+const corto = (t, n = 38) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
+
+function menuAnadirRapido(d, x, y) {
+  if (d.estado === "error") return;
+  const filas = st.habituales?.filas || [];
+  const items = [{ titulo: `Añadir al ${d.nombre.toLowerCase()} ${d.fecha}`
+                           + (d.falta > 0.001 ? ` · faltan ${fmtHoras(d.falta)}h` : "") }];
+  for (const f of filas) {
+    const h = horasPropuestas(d, f);
+    items.push({ texto: `+ ${fmtHoras(h)}h   ${corto(f.tarea)}${f.actividad ? ` · ${f.actividad}` : ""}`,
+                 accion: () => anadirRapido(d, f, h) });
+  }
+  if (filas.length) items.push("-");
+  items.push({ texto: "Otra tarea u otras horas…", accion: () => dlgEditarDia(d, { nueva: true }) });
+  mostrarMenu(x, y, items);
+}
+
+// Añade UNA tarea a UN dia pasando por los mismos avisos que el formulario
+// (tarea repetida ese dia, pasarse de la jornada). f: {wp_id, tarea, actividad}.
+async function anadirRapido(d, f, horas, comentario = null) {
+  if (st.ocupado) return;
+  const h = fmtHoras(horas);
+  const chk = await llamar("comprobar", [d.iso], f.wp_id, h);
+  if (chk.error) { await avisar("No se puede añadir", chk.error); return; }
+  for (const a of chk.avisos) {
+    if (!(await preguntar(a.titulo, a.texto))) return;
+  }
+  st.ocupado = true;
+  estado("Registrando…");
+  try {
+    if (comentario === null) {
+      comentario = (await llamar("actividades", f.wp_id).catch(() => ({}))).comentario || "";
+    }
+    const r = await llamar("anadir", [d.iso], f.wp_id, h, comentario, f.actividad || "", true);
+    await informarLote(r, { hecho: () => `${h}h de «${corto(f.tarea, 50)}» al ${d.nombre.toLowerCase()} ${d.fecha}.`,
+                            nada: "No se añadió nada." });
+  } finally {
+    st.ocupado = false;
+  }
+}
+
+// ---------------------------------------------------------------- cambiar horas en la ficha
+
+// Doble clic sobre las horas de un apunte: se escriben ahi mismo (Enter guarda,
+// Esc cancela). Para el retoque de media hora, sin abrir ninguna ventana.
+function horasEditables(d, a) {
+  const s = el("span", { class: "linea-h", text: a.horas_txt });
+  if (a.destino === "inari" || d.estado === "error") return s;
+  s.classList.add("editable");
+  s.title = "Doble clic: cambiar las horas";
+  s.addEventListener("dblclick", (e) => { e.stopPropagation(); editarHorasEnSitio(s, d, a); });
+  return s;
+}
+
+function editarHorasEnSitio(s, d, a) {
+  const i = el("input", { class: "horas-en-sitio", inputmode: "decimal",
+                          "aria-label": `Horas de ${a.tarea}` });
+  i.value = fmtHoras(a.horas);
+  const padre = s.closest("[draggable]");
+  if (padre) padre.draggable = false;        // para poder seleccionar el texto
+  let hecho = false;
+  const terminar = async (guardar) => {
+    if (hecho) return;
+    hecho = true;
+    const v = i.value.trim();
+    i.replaceWith(s);
+    if (padre) padre.draggable = true;
+    const n = Number(v.replace(",", "."));
+    if (!guardar || !v || Math.abs(n - a.horas) < 0.001) return;
+    if (!(n > 0 && n <= 24)) { await avisar("Horas no válidas", "Escribe un número entre 0 y 24 (por ejemplo 3,5)."); return; }
+    s.textContent = `${fmtHoras(n)}h`;
+    const r = await llamar("editar", d.iso, a.id, v);
+    if (r.error) { s.textContent = a.horas_txt; await avisar("No se pudo cambiar", r.error); return; }
+    await cargarSemana();
+    trasCambio(r, `${corto(a.tarea, 40)}: ${a.horas_txt} → ${fmtHoras(n)}h.`);
+  };
+  i.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); terminar(true); }
+    if (e.key === "Escape") { e.preventDefault(); terminar(false); }
+  });
+  for (const ev of ["click", "dblclick", "mousedown"]) i.addEventListener(ev, (e) => e.stopPropagation());
+  i.addEventListener("blur", () => terminar(true));
+  s.replaceWith(i);
+  i.focus();
+  i.select();
+}
+
+// ---------------------------------------------------------------- arrastrar a otro dia
+
+// Arrastrar un apunte a otro dia lo COPIA; con Mayus pulsada al soltar, lo
+// MUEVE. Una tarea habitual arrastrada a un dia se añade con sus horas.
+function arrastrable(nodo, datos) {
+  nodo.draggable = true;
+  nodo.addEventListener("dragstart", (e) => {
+    e.stopPropagation();
+    st.arrastre = datos;
+    e.dataTransfer.setData("text/plain", datos.tipo === "apunte" ? datos.a.tarea : datos.f.tarea);
+    e.dataTransfer.effectAllowed = "copyMove";
+    document.body.classList.add("arrastrando");
+  });
+  nodo.addEventListener("dragend", () => {
+    document.body.classList.remove("arrastrando");
+    setTimeout(() => { st.arrastre = null; }, 0);
+  });
+}
+
+function arrastrableApunte(nodo, d, a) {
+  if (a.destino === "inari" || d.estado === "error") return;
+  arrastrable(nodo, { tipo: "apunte", fecha: d.iso, a });
+  nodo.title = "Arrástralo a otro día para copiarlo (con Mayús, para moverlo)";
+}
+
+async function soltarEnDia(d, x, mover) {
+  if (x.tipo === "habitual") { await anadirRapido(d, x.f, horasPropuestas(d, x.f)); return; }
+  if (x.fecha === d.iso) return;
+  const tarea = { wp_id: x.a.wp_id, tarea: x.a.tarea, actividad: x.a.actividad };
+  if (!mover) { await anadirRapido(d, tarea, x.a.horas, x.a.comentario || ""); return; }
+  if (st.ocupado) return;
+  st.ocupado = true;
+  estado("Moviendo…");
+  try {
+    const r = await llamar("mover_apunte", x.fecha, x.a.id, d.iso);
+    if (r.error) await avisar("No se pudo mover", r.error);
+    await cargarSemana();
+    if (!r.error) trasCambio(r, `«${corto(x.a.tarea, 40)}» movido al ${d.nombre.toLowerCase()} ${d.fecha}.`);
+  } finally {
+    st.ocupado = false;
+  }
+}
+
+// ---------------------------------------------------------------- copiar y pegar dias
+
+// Ctrl+C sobre un dia (con el foco, o el unico marcado) y Ctrl+V sobre los
+// marcados (o el que tiene el foco). Tambien desde el boton derecho.
+function diaConFoco() {
+  const n = document.activeElement?.closest?.("[data-iso]");
+  return n ? st.dias.find((d) => d.iso === n.dataset.iso) : null;
+}
+
+function copiarDia(d) {
+  if (!d) return;
+  if (!d.apuntes.length) { estado(`El ${d.nombre.toLowerCase()} ${d.fecha} no tiene apuntes que copiar.`); return; }
+  st.portapapeles = { iso: d.iso, texto: `${d.nombre} ${d.fecha}` };
+  estado(`${st.portapapeles.texto} copiado: marca los días de destino y pulsa Ctrl+V (o botón derecho → Pegar).`);
+}
+
+function pegarDia(destino = null) {
+  if (!st.portapapeles) return;
+  const dias = destino ? [destino] : [...st.marcados];
+  return dlgCopiarDia(dias.length ? dias : null, st.portapapeles.iso);
 }
 
 // Editar y borrar ese apunte sin salir de la tarjeta. Salen al pasar el raton
@@ -411,10 +655,13 @@ function pintarMes(m) {
   for (const d of m.semanas.flat()) {
     const iconos = [d.guardia ? "⚙" : "", d.teletrabajo ? "⌂" : "", d.permiso ? "🕐" : ""].join(" ").trim();
     const barra = el("div", { class: "barra" }, el("i"));
-    const lineas = d.apuntes.slice(0, MAX_APUNTES_CELDA).map((a) =>
-      el("div", { class: "linea-ap" },
-        el("span", { class: "linea-h", text: a.horas_txt }),
-        el("span", { class: "linea-t", text: a.tarea })));
+    const lineas = d.apuntes.slice(0, MAX_APUNTES_CELDA).map((a) => {
+      const n = el("div", { class: "linea-ap" },
+        horasEditables(d, a),
+        el("span", { class: "linea-t", text: a.tarea }));
+      arrastrableApunte(n, d, a);
+      return n;
+    });
     const resto = d.apuntes.length - MAX_APUNTES_CELDA;
     const celda = el("div", {
       class: `celda ${d.estado}${d.es_hoy ? " hoy" : ""}${d.del_mes ? "" : " fuera"}${d.futuro ? " futuro" : ""}`,
@@ -430,7 +677,8 @@ function pintarMes(m) {
         el("span", { class: "cifra", text: cifraMes(d) })),
       barra,
       ...lineas,
-      resto > 0 ? el("div", { class: "linea-mas", text: `+${resto} más` }) : null);
+      resto > 0 ? botonMas(`+${resto} más`, () => dlgEditarDia(d)) : null,
+      botonMasDia(d));
     eventosDia(celda, d);
     cont.append(celda);
     requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
@@ -503,6 +751,21 @@ function menuDia(x, y, d) {
                  { texto: "🗑 Eliminar apuntes de este día…", clase: "destacado",
                    desactivado: !d.apuntes.length, accion: () => dlgEliminarDia(d) },
                  "-"];
+  // Rellenar lo que falta con una tarea habitual: un clic y el dia en verde.
+  if (d.falta > 0.001 && !d.no_laborable && d.estado !== "error") {
+    for (const f of (st.habituales?.filas || []).slice(0, 2)) {
+      items.push({ texto: `＋ Completar con ${corto(f.tarea, 32)} (+${fmtHoras(d.falta)}h)`,
+                   accion: () => anadirRapido(d, f, d.falta) });
+    }
+    items.push({ texto: "＋ Añadir otra tarea…", accion: () => menuAnadirRapido(d, x, y) }, "-");
+  }
+  items.push({ texto: "Copiar este día (Ctrl+C)", desactivado: !d.apuntes.length,
+               accion: () => copiarDia(d) });
+  if (st.portapapeles && st.portapapeles.iso !== d.iso) {
+    items.push({ texto: `Pegar aquí lo del ${st.portapapeles.texto.toLowerCase()} (Ctrl+V)`,
+                 accion: () => pegarDia(d.iso) });
+  }
+  items.push("-");
   const marca = (accion, motivo = "") => async () => {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
         && !(await preguntar("Teletrabajo",
@@ -828,9 +1091,8 @@ async function borrarItems(items, { confirmar = true } = {}) {
       await avisar("Eliminado con errores",
         `Eliminados: ${r.eliminados}. Con errores: ${r.errores}.\nÚltimo error: ${r.ultimo}`);
     }
-    $("b-deshacer").hidden = !r.puede_deshacer;
     await cargarSemana();
-    estado(r.eliminados === 1 ? "Apunte eliminado." : `${r.eliminados} apuntes eliminados.`);
+    trasCambio(r, r.eliminados === 1 ? "Apunte eliminado." : `${r.eliminados} apuntes eliminados.`);
   } finally {
     st.ocupado = false;
   }
@@ -851,6 +1113,7 @@ function eliminarSeleccion() {
 async function deshacer() {
   if ($("b-deshacer").hidden || st.ocupado) return;
   $("b-deshacer").hidden = true;
+  ocultarAviso();
   st.ocupado = true;
   estado("Restaurando…");
   try {
@@ -883,6 +1146,7 @@ function navegar(delta) {
     st.lunes = delta === 0 ? st.hoyLunes : sumarDias(st.lunes, 7 * delta);
   }
   $("b-deshacer").hidden = true;
+  ocultarAviso();
   st.ancla = null;
   cargarSemana({ marcarHoy: true });
 }
@@ -945,7 +1209,14 @@ document.addEventListener("keydown", (e) => {
   if (enCampo(e)) return;
   if (e.ctrlKey && e.key === "ArrowLeft") { e.preventDefault(); navegar(-1); }
   else if (e.ctrlKey && e.key === "ArrowRight") { e.preventDefault(); navegar(1); }
-  else if (e.ctrlKey && e.key.toLowerCase() === "z") { e.preventDefault(); deshacer(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); deshacer(); }
+  else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+    const d = diaConFoco() || (st.marcados.size === 1 ? diasMarcados()[0] : null);
+    if (d) { e.preventDefault(); copiarDia(d); }
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v" && st.portapapeles) {
+    e.preventDefault();
+    pegarDia(st.marcados.size ? null : diaConFoco()?.iso);
+  }
   else if (e.key === "Delete") { e.preventDefault(); eliminarSeleccion(); }
 });
 
