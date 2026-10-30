@@ -188,6 +188,9 @@ La app recuerda la vista que dejaste.
   cual (también con botón derecho → *Copiar este día* / *Pegar aquí*).
 - ↩️ Después de borrar, editar, mover o añadir, abajo sale un aviso con
   **Deshacer** (o Ctrl+Z).
+- 🪟 **Deja a la vista solo lo que uses**: las cajas de abajo se minimizan
+  (**–**) o se cierran (**×**), y el menú **Ver** las vuelve a poner (también
+  la franja de resumen y la leyenda de colores).
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
   más rápida de crear una: **botón derecho sobre el día** → *Guardar este día
   como plantilla*.

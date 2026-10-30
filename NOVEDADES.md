@@ -41,6 +41,14 @@ instalada aparece en el pie de la ventana.
 - Si lo olvidas, «He olvidado el PIN» borra la configuración de ese equipo y
   vuelves a empezar con el asistente. **Tus horas en ProyectosTIC no se tocan.**
 
+**Tu pantalla, a tu manera**
+- Las cajas **Añadir apunte**, **Tus tareas habituales** y **Apuntes de la
+  semana** tienen arriba a la derecha **–** (minimizar: queda solo el título;
+  un clic en él la vuelve a abrir) y **×** (cerrar).
+- Nuevo menú **Ver** para volver a poner las que cerraste, y también para
+  quitar o poner la **franja de resumen** y la **leyenda de colores**. La app
+  recuerda cómo lo dejaste.
+
 **Mejoras**
 - Después de actualizar, la primera vez que abres FichaCSIRC te enseña **qué hay
   de nuevo** en esa versión. Siempre lo tienes en *Ayuda → Novedades*.

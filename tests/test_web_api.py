@@ -378,6 +378,17 @@ class TestBorrarYMarcas(Base):
         m_cr.assert_called_once_with(M.isoformat(), "10", 2, "c", "soporte")
         self.assertTrue(r["puede_deshacer"])
 
+    def test_paneles_se_recuerdan_y_se_validan(self):
+        guardado = {}
+        with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)),              mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.__setitem__(k, v)):
+            self.assertEqual(set(self.api.paneles().values()), {"abierto"})
+            p = self.api.guardar_paneles({"habituales": "min", "apuntes": "oculto",
+                                          "franja": "min",      # la franja no se minimiza
+                                          "otra": "oculto"})    # caja desconocida
+        self.assertEqual((p["habituales"], p["apuntes"], p["franja"]), ("min", "oculto", "abierto"))
+        self.assertNotIn("otra", p)
+
     def test_novedades_solo_la_primera_vez_tras_actualizar(self):
         guardado = {}
         with mock.patch.object(core, "config_valor", lambda k: guardado.get(k)), \

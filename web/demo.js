@@ -85,6 +85,7 @@
       asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: true,
       novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
+      paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
     }),
     usuario: () => espera("Persona de Prueba"),
     semana: (lunes) => espera(semana(lunes)),
@@ -360,6 +361,7 @@
     mes: (a, m) => espera(mesDemo(a, m)),
     repintar_mes: (a, m) => espera(mesDemo(a, m)),
     guardar_vista: () => espera({ ok: true }),
+    guardar_paneles: (p) => espera(p),
     resumen_franja: () => espera({
       meses: [{ titulo: "Octubre", anio: 2026, mes: 10, al_dia: false, texto: "faltan 4h" },
               { titulo: "Septiembre", anio: 2026, mes: 9, al_dia: false, texto: "faltan 17,5h" }],

@@ -490,6 +490,10 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     (`Api.mover_apunte`). Ctrl+C/V reutiliza la copia de día con `origen`.
     `anadir`, `_copiar` (copias y plantillas) y `editar` guardan ya su contrario
     en `_deshacer`, así que Ctrl+Z y el aviso deshacen cualquier cambio.
+  - **Cajas y menú Ver**: `Api.PANELES` (estados válidos por caja) y config
+    `paneles`. Cerrar usa la clase `.cerrado`, no `hidden`, porque la franja y
+    las habituales ya usan `hidden` para "no hay datos". Si una columna se queda
+    sin cajas, `.una-columna`.
   - **Novedades tras actualizar**: `ultima_version_abierta`; sin ella (se viene
     de la 3.0) se enseña la última versión; el asistente la deja apuntada para
     que una instalación nueva no las vea.

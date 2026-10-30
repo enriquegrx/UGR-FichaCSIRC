@@ -33,6 +33,7 @@ const st = {
   portapapeles: null,   // {iso, texto}: dia copiado con Ctrl+C
   expandidos: new Set(),// dias de la semana con "+N mas" desplegado
   arrastre: null,       // lo que se esta arrastrando (apunte o tarea habitual)
+  paneles: {},          // caja -> "abierto" | "min" | "oculto" (menu Ver)
 };
 
 // ---------------------------------------------------------------- utilidades
@@ -126,6 +127,15 @@ const MENUS = {
     { texto: "Exportar a CSV…", accion: dlgExportar },
     { texto: "Resumen del mes", accion: dlgResumen },
   ],
+  ver: () => [
+    ...PANELES.map(([id, nombre]) => ({
+      texto: `${st.paneles[id] === "oculto" ? "      " : "✓   "}${nombre}`
+             + (st.paneles[id] === "min" ? "  (minimizada)" : ""),
+      accion: () => ponerPanel(id, st.paneles[id] === "oculto" ? "abierto" : "oculto"),
+    })),
+    "-",
+    { texto: "Mostrar todo", accion: () => { for (const [id] of PANELES) ponerPanel(id, "abierto", false); guardarPaneles(); } },
+  ],
   herramientas: () => [
     { texto: "Plantillas…", accion: dlgPlantillas },
     { texto: "Importar festivos…", accion: dlgFestivos },
@@ -147,6 +157,64 @@ const MENUS = {
   ].filter(Boolean),
 };
 
+// ---------------------------------------------------------------- cajas (menu Ver)
+
+// Cada caja se puede minimizar (queda su titulo; un clic la abre) o cerrar, y
+// volver a poner desde Ver. La franja y la leyenda, solo mostrar u ocultar.
+const PANELES = [["form", "Añadir apunte"], ["habituales", "Tus tareas habituales"],
+                 ["apuntes", "Apuntes de la semana"], ["franja", "Franja de resumen"],
+                 ["leyenda", "Leyenda de colores"]];
+const MINIMIZABLES = ["form", "habituales", "apuntes"];
+const nodoPanel = (id) => document.querySelector(`[data-panel="${id}"]`);
+
+function controlesPaneles() {
+  for (const id of MINIMIZABLES) {
+    const cab = nodoPanel(id).querySelector(".cabeza-seccion");
+    const min = el("button", { class: "b-panel", "data-accion": "min" });
+    const cerrar = el("button", { class: "b-panel", text: "×", title: "Cerrar (vuelve desde el menú Ver)",
+                                  "aria-label": "Cerrar esta caja" });
+    min.onclick = (e) => { e.stopPropagation(); ponerPanel(id, st.paneles[id] === "min" ? "abierto" : "min"); };
+    cerrar.onclick = (e) => { e.stopPropagation(); ponerPanel(id, "oculto"); };
+    cab.append(el("span", { class: "controles-panel" }, min, cerrar));
+    // minimizada: un clic en su titulo la vuelve a abrir
+    cab.querySelector("h2").addEventListener("click", () => {
+      if (st.paneles[id] === "min") ponerPanel(id, "abierto");
+    });
+  }
+}
+
+function pintarPaneles() {
+  for (const [id] of PANELES) {
+    const n = nodoPanel(id);
+    const e = st.paneles[id] || "abierto";
+    n.classList.toggle("cerrado", e === "oculto");
+    n.classList.toggle("minimizado", e === "min");
+    const b = n.querySelector('.b-panel[data-accion="min"]');
+    if (b) {
+      b.textContent = e === "min" ? "▢" : "–";
+      b.title = e === "min" ? "Abrir" : "Minimizar (queda solo el título)";
+      b.setAttribute("aria-label", b.title);
+    }
+  }
+  // Una columna si la otra se quedo sin cajas; ninguna, si se cerraron todas.
+  const izq = ["form", "habituales"].some((id) => st.paneles[id] !== "oculto");
+  const der = st.paneles.apuntes !== "oculto";
+  const zona = document.querySelector(".zona-trabajo");
+  zona.classList.toggle("una-columna", izq !== der);
+  zona.classList.toggle("cerrado", !izq && !der);
+  document.querySelector(".col-izq").classList.toggle("cerrado", !izq);
+}
+
+function ponerPanel(id, estadoPanel, guardar = true) {
+  st.paneles[id] = estadoPanel;
+  pintarPaneles();
+  if (guardar) guardarPaneles();
+}
+
+function guardarPaneles() {
+  llamar("guardar_paneles", st.paneles).catch(() => {});
+}
+
 // ---------------------------------------------------------------- arranque
 
 async function arrancar() {
@@ -154,6 +222,9 @@ async function arrancar() {
   // la configuracion, al asistente.
   if (!(await desbloquear())) { location.href = "configurar.html"; return; }
   const ini = st.ini = await llamar("inicio");
+  st.paneles = { ...(ini.paneles || {}) };
+  controlesPaneles();
+  pintarPaneles();
   st.lunes = st.hoyLunes = ini.lunes;
   st.mesSel = mesDe(hoyIso());
   st.vista = ini.vista === "mes" ? "mes" : "semana";
@@ -286,6 +357,7 @@ function pintarHabituales(h) {
 // Rellena el formulario con la tarea, su actividad y sus horas habituales; con
 // anadirYa, ademas la anade (pasando por los avisos de siempre).
 async function usarHabitual(f, anadirYa = false) {
+  if (!anadirYa && st.paneles.form !== "abierto") ponerPanel("form", "abierto");
   let texto = textoDeTarea(f.wp_id);
   if (!texto) {                         // no esta en favoritas: a la lista de la sesion
     ponerTareas(await llamar("elegir_tareas", [{ id: f.wp_id, nombre: f.tarea }], false));

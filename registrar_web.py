@@ -460,6 +460,7 @@ class Api:
             "comentario_guardia": core.comentario_guardia(),
             # Ultima vista elegida (semana/mes): se abre como se dejo.
             "vista": self.vista(),
+            "paneles": self.paneles(),
         }
 
     def _novedades_tras_actualizar(self):
@@ -723,6 +724,28 @@ class Api:
     def vista(self):
         v = core.config_valor("vista_inicio", "semana")
         return v if v in ("semana", "mes") else "semana"
+
+    # Cajas que se pueden minimizar o cerrar (y volver a poner desde Ver), y
+    # los estados que admite cada una. Se recuerdan en config.json.
+    PANELES = {"form": ("abierto", "min", "oculto"),
+               "habituales": ("abierto", "min", "oculto"),
+               "apuntes": ("abierto", "min", "oculto"),
+               "franja": ("abierto", "oculto"),
+               "leyenda": ("abierto", "oculto")}
+
+    def paneles(self):
+        guardado = core.config_valor("paneles") or {}
+        return {k: guardado.get(k) if guardado.get(k) in v else "abierto"
+                for k, v in self.PANELES.items()}
+
+    def guardar_paneles(self, estados):
+        limpio = {k: v for k, v in (estados or {}).items()
+                  if k in self.PANELES and v in self.PANELES[k]}
+        try:
+            core.guardar_config_valor("paneles", {**self.paneles(), **limpio})
+        except Exception:
+            pass      # comodidad: nunca debe romper nada
+        return self.paneles()
 
     def guardar_vista(self, vista):
         if vista not in ("semana", "mes"):

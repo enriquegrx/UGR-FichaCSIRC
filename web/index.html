@@ -9,6 +9,7 @@
 <body>
 <nav class="menubar" aria-label="Menú">
   <button data-menu="archivo">Archivo</button>
+  <button data-menu="ver">Ver</button>
   <button data-menu="herramientas">Herramientas</button>
   <button data-menu="ayuda">Ayuda</button>
 </nav>
@@ -53,7 +54,7 @@
       </div>
     </div>
     <div id="dias" class="dias"></div>
-    <div class="leyenda">
+    <div class="leyenda" data-panel="leyenda">
       <span><i class="muestra completo"></i>Completo</span>
       <span><i class="muestra parcial"></i>Parcial</span>
       <span><i class="muestra pasado"></i>Más horas</span>
@@ -71,12 +72,12 @@
        sus filas, no rellena la ventana. -->
   <!-- Franja de resumen: como va el mes (y el anterior si quedo a medias),
        saldo de permisos y vacaciones. Cada dato lleva a su sitio. -->
-  <section id="franja" class="franja" aria-label="Resumen" hidden></section>
+  <section id="franja" class="franja" aria-label="Resumen" data-panel="franja" hidden></section>
 
   <div class="zona-trabajo">
     <div class="col-izq">
-      <section class="panel panel-form">
-        <h2>Añadir apunte</h2>
+      <section class="panel panel-form" data-panel="form">
+        <div class="cabeza-seccion"><h2>Añadir apunte</h2></div>
         <form id="form" class="form" autocomplete="off">
           <label for="tarea">Tarea</label>
           <div class="campo-tarea">
@@ -100,7 +101,7 @@
 
       <!-- Tareas habituales: barras con la parte del tiempo de cada tarea desde
            el 1 del mes pasado. Clic: rellena el formulario; "+": la anade. -->
-      <section id="habituales" class="panel panel-habituales" hidden>
+      <section id="habituales" class="panel panel-habituales" data-panel="habituales" hidden>
         <div class="cabeza-seccion" title="Clic en una tarea: rellena el formulario · «+»: la añade a los días marcados">
           <h2>Tus tareas habituales</h2>
           <span id="habituales-periodo" class="tenue"></span>
@@ -109,7 +110,7 @@
       </section>
     </div>
 
-    <section class="panel apuntes">
+    <section class="panel apuntes" data-panel="apuntes">
       <div class="cabeza-seccion">
         <h2 id="titulo-apuntes">Apuntes</h2>
         <span id="resumen-apuntes" class="tenue"></span>

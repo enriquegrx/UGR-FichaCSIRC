@@ -71,6 +71,19 @@ h2 { margin: 0 0 8px; font-size: 15px; }
 .cabeza-seccion { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cabeza-seccion h2 { margin: 0; }
 
+/* ---------- cajas: minimizar / cerrar (menu Ver) ---------- */
+.controles-panel { display: flex; gap: 2px; margin-left: 4px; }
+#habituales-periodo { margin-left: auto; }
+.b-panel { border: 0; background: none; color: var(--tenue); padding: 0 7px; height: 24px;
+           font-size: 16px; line-height: 1; border-radius: 5px; }
+.b-panel:hover { background: var(--fondo); color: var(--texto); }
+.cerrado { display: none !important; }
+.minimizado > :not(.cabeza-seccion) { display: none !important; }
+.minimizado .cabeza-seccion h2 { cursor: pointer; }
+.minimizado .cabeza-seccion { margin-bottom: 0 !important; }
+.zona-trabajo .apuntes.minimizado { contain: none; min-height: 0; align-self: start; }
+.zona-trabajo.una-columna { grid-template-columns: minmax(0, 1fr); }
+
 button {
   border: 1px solid var(--borde); background: var(--panel);
   border-radius: 6px; padding: 6px 12px; cursor: pointer;
