@@ -132,6 +132,24 @@ def actividades_de_permiso():
             for t in core.permisos_tipos()} - {""}
 
 
+def objetivo_dia(d, apuntes, acts_permiso=None):
+    """Objetivo del dia contando los permisos IMPUTADOS como actividad.
+
+    Un permiso imputado va en jornada OFICIAL, la del portal: con 2 h de
+    asuntos propios se trabajan 5 h, no 4,5 (5 + 2 = 7, la oficial), aunque un
+    dia normal se fichen 6,5 porque el desayuno no se imputa. Asi que, si ese
+    dia hay horas de una actividad de permiso, el objetivo suma el desayuno.
+    (El desayuno es de la jornada de invierno; en verano no se toca.)"""
+    obj = core.objetivo_de(d)
+    if not obj or not apuntes or core.es_verano(d):
+        return obj
+    if acts_permiso is None:
+        acts_permiso = actividades_de_permiso()
+    if any(str(a.get("actividad") or "").strip().lower() in acts_permiso for a in apuntes):
+        return round(obj + core.desayuno(), 2)
+    return obj
+
+
 def estado_dia(d, apuntes, hoy=None, acts_permiso=None):
     """Lo que necesita la tarjeta de un dia. Misma logica que
     registrar_gui._pintar_semana, pero devuelta como datos: el HTML no decide
@@ -142,12 +160,12 @@ def estado_dia(d, apuntes, hoy=None, acts_permiso=None):
     permiso vale la jornada oficial y el objetivo es la fichada."""
     hoy = hoy or dt.date.today()
     iso = d.isoformat()
-    obj = core.objetivo_de(d)
+    if acts_permiso is None:
+        acts_permiso = actividades_de_permiso()
+    obj = objetivo_dia(d, apuntes, acts_permiso)
     nolab = core.es_no_laborable(iso)
     reg = round(sum(a["horas"] for a in apuntes), 2) if apuntes else 0.0
     h_permiso = 0 if nolab else core.horas_permiso(iso)
-    if acts_permiso is None:
-        acts_permiso = actividades_de_permiso()
     h_permiso_pt = sum(a["horas"] for a in (apuntes or [])
                        if str(a.get("actividad") or "").strip().lower() in acts_permiso)
     dia_permiso_pt = bool(h_permiso_pt) and h_permiso_pt >= core.horas_dia_permiso() - 0.01
@@ -507,7 +525,7 @@ class Api:
         tarjetas = [estado_dia(d, self._cache.get(d.isoformat()), acts_permiso=acts)
                     for d in dias]
         reg = sum(t["reg"] for t in tarjetas)
-        obj = sum(core.objetivo_de(d) for d in dias)
+        obj = sum(t["obj"] for t in tarjetas)
         dom = dias[0] + dt.timedelta(days=6)
         cupo_tt = core.teletrabajo_por_semana()
         return {
@@ -593,7 +611,7 @@ class Api:
                 fila.append(t)
                 if d.month == mes:          # los totales, solo los del mes
                     reg += t["reg"]
-                    o = core.objetivo_de(d)
+                    o = t["obj"]
                     obj += o
                     if d <= hoy:
                         obj_hoy += o
@@ -619,13 +637,14 @@ class Api:
         """(registrado, objetivo hasta 'hasta') de un mes con los apuntes ya
         leidos. Teletrabajo con INARI: cuentan sus horas (cubos disjuntos)."""
         inari_cfg = destinos.configurado()
+        acts = actividades_de_permiso()
         reg = obj = 0.0
         for n in range(1, calendar.monthrange(anio, mes)[1] + 1):
             d = dt.date(anio, mes, n)
             if d.weekday() >= 5 or d > hasta:
                 continue
             iso = d.isoformat()
-            obj += core.objetivo_de(d)
+            obj += objetivo_dia(d, por_dia.get(iso), acts)
             if inari_cfg and core.es_teletrabajo(iso):
                 try:
                     reg += destinos.horas_dia(iso)
@@ -769,7 +788,7 @@ class Api:
             if core.es_no_laborable(i):
                 continue
             reg = sum(a["horas"] for a in (self._cache.get(i) or []))
-            obj = core.objetivo_de(dt.date.fromisoformat(i))
+            obj = objetivo_dia(dt.date.fromisoformat(i), self._cache.get(i))
             if reg + horas > obj + 0.001:
                 exceso.append(f"{nombre(i)} ({_horas(reg + horas)} de {_horas(obj)})")
         if exceso:
@@ -1208,11 +1227,12 @@ class Api:
         total = obj_hoy = obj_mes = tt_horas = 0.0
         tt_dias = 0
         incompletos = []
+        acts = actividades_de_permiso()
         for d in dias:
             if d.weekday() >= 5:
                 continue
             iso = d.isoformat()
-            obj = core.objetivo_de(d)
+            obj = objetivo_dia(d, por_dia.get(iso), acts)
             obj_mes += obj
             # En un dia de teletrabajo cuentan las horas de INARI, no las de
             # ProyectosTic: cubos disjuntos, sin doble conteo.

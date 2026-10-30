@@ -45,6 +45,11 @@ instalada aparece en el pie de la ventana.
 - Después de actualizar, la primera vez que abres FichaCSIRC te enseña **qué hay
   de nuevo** en esa versión. Siempre lo tienes en *Ayuda → Novedades*.
 
+**Correcciones**
+- Un día con **parte de permiso imputado como actividad** (p. ej. 2 h de asuntos
+  propios + 5 h de trabajo) salía como «7h / 6,5h · +0,5h». El permiso cuenta en
+  jornada oficial, así que ese día está **completo** (5 + 2 = 7 h).
+
 ---
 
 ## 3.0.0

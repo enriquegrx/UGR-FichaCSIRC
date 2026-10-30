@@ -73,6 +73,20 @@ class TestDiaDePermisoImputado(Base):
                   "concesiones": [{"horas": 70, "fecha_limite": ""}]}]
         return mock.patch.object(core, "permisos_tipos", lambda: tipos)
 
+    def test_permiso_parcial_imputado_cuenta_jornada_oficial(self):
+        """2 h de asuntos propios + 5 h de trabajo = 7 h (la oficial): dia
+        completo, no "7h / 6,5h · +0,5h". Sin permiso, 7 h si es pasarse."""
+        ap = [apunte(1, 2, wp="99", act="Asuntos propios"), apunte(2, 5)]
+        with self._con_enlace(), mock.patch.object(core, "objetivo_de", return_value=6.5), \
+             mock.patch.object(core, "desayuno", return_value=0.5), \
+             mock.patch.object(core, "horas_dia_permiso", return_value=7.0):
+            e = web.estado_dia(L, ap)
+            self.assertEqual((e["estado"], e["obj"], e["exceso"]), ("completo", 7.0, 0.0))
+            self.assertEqual(web.estado_dia(L, [apunte(2, 7)])["estado"], "pasado")
+            # 1 h de permiso + 5 h: faltan 1 h (sobre 7), no 0,5
+            e = web.estado_dia(L, [apunte(1, 1, wp="99", act="Asuntos propios"), apunte(2, 5)])
+            self.assertEqual((e["estado"], e["falta"]), ("parcial", 1.0))
+
     def test_dia_completo_de_asuntos_propios(self):
         ap = [apunte(1, 7, wp="99", act="Asuntos propios")]
         with self._con_enlace(), mock.patch.object(core, "horas_dia_permiso", return_value=7.0):
