@@ -299,6 +299,7 @@ async function arrancarAsistente() {
   // hay que escribirlo (si no, cualquiera cambiaria la config o el PIN).
   await desbloquear();
   const ini = W.ini = await llamar("cfg_cargar");
+  aplicarTema(ini.tema);
   if (ini.logo) { $("logo").src = ini.logo; $("logo").hidden = false; }
   document.querySelector(".etiqueta-prototipo").hidden = !ini.experimento;
   W.d = { url: ini.url, key: "", jornada: ini.jornada, desayuno_si: ini.desayuno_si,

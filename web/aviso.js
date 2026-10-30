@@ -58,6 +58,7 @@ async function arrancarAviso() {
     api().aviso_responder(false);    // sin datos no hay nada que avisar
     return;
   }
+  aplicarTema(d.tema);
   pintar(d);
   $("cierre").textContent = `Esta ventana se cierra sola en ${d.minutos} minutos.`;
   cierreT = setTimeout(() => api().aviso_responder(false), d.minutos * 60 * 1000);

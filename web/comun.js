@@ -82,6 +82,19 @@ function cuandoListo(fn) {
   else iniciar();
 }
 
+// Tema: "sistema" (el del SO), "claro" u "oscuro". El CSS mira data-tema; en
+// "sistema" se añade .sistema-oscuro segun prefers-color-scheme (y se sigue
+// el cambio en caliente).
+let temaMQ = null;
+function aplicarTema(tema) {
+  const raiz = document.documentElement;
+  raiz.dataset.tema = ["claro", "oscuro"].includes(tema) ? tema : "sistema";
+  temaMQ ??= matchMedia("(prefers-color-scheme: dark)");
+  const pintar = () => raiz.classList.toggle("sistema-oscuro", raiz.dataset.tema === "sistema" && temaMQ.matches);
+  temaMQ.onchange = pintar;
+  pintar();
+}
+
 // El logo de la app (reloj con check) dibujado a mano, sin innerHTML.
 function iconoApp() {
   const ns = "http://www.w3.org/2000/svg";

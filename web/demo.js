@@ -86,7 +86,7 @@
       novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
       sugerir_pin: /[?&]sugerirpin\b/.test(location.search),
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
-      zoom: 1, pin: { activo: /[?&]pin\b/.test(location.search), desbloqueada: true, auto_min: 15 },
+      zoom: 1, tema: (location.search.match(/[?&]tema=(\w+)/) || [])[1] || "sistema", pin: { activo: /[?&]pin\b/.test(location.search), desbloqueada: true, auto_min: 15 },
       paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
     }),
     usuario: () => espera("Persona de Prueba"),
@@ -215,6 +215,7 @@
     pin_auto: () => espera({ ok: true }),
     pin_bloquear: () => { if (pinActivo) pinOk = false; return espera({ bloqueada: !pinOk }); },
     guardar_zoom: (z) => espera({ ok: true, zoom: z }),
+    guardar_tema: () => espera({ ok: true }),
     semana_anterior_pendiente: () => espera(/[?&]semana\b/.test(location.search)
       ? { lunes: d(-7), dias: [d(-4), d(-3)], texto: "La semana pasada te faltan 4,5h: jueves (3h de 7h), viernes (5,5h de 7h)." } : null),
     aviso_semana_visto: () => espera({ ok: true }),

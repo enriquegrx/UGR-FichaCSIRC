@@ -203,6 +203,11 @@ const MENUS = {
     { texto: "Aumentar texto\tCtrl +", desactivado: st.zoom >= ZOOMS[ZOOMS.length - 1], accion: () => cambiarZoom(1) },
     { texto: "Reducir texto\tCtrl −", desactivado: st.zoom <= ZOOMS[0], accion: () => cambiarZoom(-1) },
     { texto: "Tamaño normal\tCtrl 0", desactivado: st.zoom === 1, accion: () => aplicarZoom(1) },
+    "-",
+    ...[["sistema", "Tema del sistema"], ["claro", "Tema claro"], ["oscuro", "Tema oscuro"]].map(([t, nombre]) => ({
+      texto: `${(st.ini?.tema || "sistema") === t ? "✓   " : "      "}${nombre}`,
+      accion: () => { st.ini.tema = t; aplicarTema(t); llamar("guardar_tema", t).catch(() => {}); },
+    })),
   ],
   herramientas: () => [
     { texto: "Plantillas…", accion: dlgPlantillas },
@@ -294,6 +299,7 @@ async function arrancar() {
   st.paneles = { ...(ini.paneles || {}) };
   controlesPaneles();
   pintarPaneles();
+  aplicarTema(ini.tema);
   if (ini.zoom && ini.zoom !== 1) aplicarZoom(ini.zoom, false);
   vigilarInactividad();
   st.lunes = st.hoyLunes = ini.lunes;

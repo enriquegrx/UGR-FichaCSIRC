@@ -508,6 +508,7 @@ class Api:
             "sugerir_pin": self._sugerir_pin(),
             "pin": self.pin_estado(),
             "zoom": self.zoom(),
+            "tema": self.tema(),
             "plataforma": "macOS" if sys.platform == "darwin" else
                           ("Windows" if os.name == "nt" else sys.platform),
             "lunes": (hoy - dt.timedelta(days=hoy.weekday())).isoformat(),
@@ -806,6 +807,18 @@ class Api:
         except Exception:
             pass      # comodidad: nunca debe romper nada
         return self.paneles()
+
+    TEMAS = ("sistema", "claro", "oscuro")
+
+    def tema(self):
+        t = (ccore.cargar_previa() or {}).get("tema", "sistema")
+        return t if t in self.TEMAS else "sistema"
+
+    def guardar_tema(self, tema):
+        if tema not in self.TEMAS:
+            return {"error": "Tema desconocido."}
+        _config_cambiar(tema=tema)
+        return {"ok": True}
 
     ZOOMS = (0.8, 0.9, 1.0, 1.1, 1.25, 1.4)
 
@@ -1752,6 +1765,7 @@ class Api:
             pass
         return {
             "primera_vez": core is None or self._de_cero,
+            "tema": self.tema(),
             "hay_pin": "pin" in previa,
             "aviso": ERROR_ARRANQUE if ERROR_ARRANQUE and "No encuentro" not in ERROR_ARRANQUE else "",
             "experimento": EXPERIMENTO,
@@ -1977,7 +1991,8 @@ class Api:
             except Exception:
                 habituales = []
         return {"texto": getattr(self, "_aviso", ""), "minutos": 10, "dias": dias,
-                "habituales": habituales, "pin": _pin_guardado() is not None}
+                "habituales": habituales, "pin": _pin_guardado() is not None,
+                "tema": self.tema()}
 
     def aviso_fichar(self, iso, wp_id, horas, actividad):
         """Desde el aviso: un apunte en ese dia. Devuelve lo que sigue faltando
@@ -2044,6 +2059,12 @@ def _titulo(extra=""):
     return f"FichaCSIRC {v}{' · prototipo web' if EXPERIMENTO else ''}{extra}".strip()
 
 
+def _fondo_ventana(claro):
+    """Color de la ventana hasta que carga el CSS: en tema oscuro, oscuro (si
+    no, un fogonazo blanco al abrir)."""
+    return "#14181d" if (ccore.cargar_previa() or {}).get("tema") == "oscuro" else claro
+
+
 def _main_recordatorio(webview):
     """--recordatorio: lo lanza la tarea programada. Si no falta nada (o no hay
     red), sale en silencio; si falta, una ventanita propia (encima de todo, que
@@ -2059,7 +2080,7 @@ def _main_recordatorio(webview):
     api._pendientes = pendientes
     api._ventana = webview.create_window(
         "FichaCSIRC - Recordatorio", _recurso("web", "aviso.html"), js_api=api,
-        width=600, height=470, resizable=False, on_top=True, background_color="#ffffff")
+        width=600, height=470, resizable=False, on_top=True, background_color=_fondo_ventana("#ffffff"))
     webview.start()
 
 
@@ -2080,7 +2101,7 @@ def main():
     api._ventana = webview.create_window(
         _titulo() if not asistente else "FichaCSIRC · configuración",
         _recurso("web", pagina), js_api=api, width=1180, height=820,
-        min_size=(900, 660), maximized=core is not None, background_color="#e9edf2")
+        min_size=(900, 660), maximized=core is not None, background_color=_fondo_ventana("#e9edf2"))
     webview.start()
 
 

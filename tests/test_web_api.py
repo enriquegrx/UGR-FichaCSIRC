@@ -411,6 +411,14 @@ class TestBorrarYMarcas(Base):
             self.assertIn("error", self.api.guardar_zoom(2))
             self.assertEqual(self.api.guardar_zoom(1.25)["zoom"], 1.25)
 
+    def test_tema(self):
+        with mock.patch.object(web.ccore, "cargar_previa", return_value={"tema": "oscuro"}):
+            self.assertEqual(self.api.tema(), "oscuro")
+            self.assertEqual(web._fondo_ventana("#fff"), "#14181d")
+        with mock.patch.object(web.ccore, "cargar_previa", return_value={"tema": "rosa"}):
+            self.assertEqual(self.api.tema(), "sistema")
+        self.assertIn("error", self.api.guardar_tema("rosa"))
+
     def test_fichar_desde_el_aviso(self):
         hoy = dt.date.today()
         ayer = hoy - dt.timedelta(days=1)
