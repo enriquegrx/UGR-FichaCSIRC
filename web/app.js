@@ -34,7 +34,71 @@ const st = {
   expandidos: new Set(),// dias de la semana con "+N mas" desplegado
   arrastre: null,       // lo que se esta arrastrando (apunte o tarea habitual)
   paneles: {},          // caja -> "abierto" | "min" | "oculto" (menu Ver)
+  zoom: 1,
 };
+
+// ---------------------------------------------------------------- tamaño de letra
+
+// Ctrl + / Ctrl - / Ctrl 0 (y menu Ver). Escalones fijos, se recuerda.
+const ZOOMS = [0.8, 0.9, 1, 1.1, 1.25, 1.4];
+function aplicarZoom(z, guardar = true) {
+  st.zoom = z;
+  document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  if (guardar) {
+    llamar("guardar_zoom", z).catch(() => {});
+    estado(z === 1 ? "Tamaño de letra normal." : `Tamaño de letra: ${Math.round(z * 100)} %.`);
+  }
+}
+function cambiarZoom(delta) {
+  const i = Math.max(0, Math.min(ZOOMS.length - 1, ZOOMS.indexOf(st.zoom) + delta));
+  aplicarZoom(ZOOMS[i]);
+}
+
+// ---------------------------------------------------------------- bloqueo por inactividad
+
+// Con PIN: pasados N minutos sin tocar la app, se vuelve a pedir.
+let inactividadT = null;
+function vigilarInactividad() {
+  const min = st.ini?.pin?.activo ? st.ini.pin.auto_min : 0;
+  clearTimeout(inactividadT);
+  if (!min) return;
+  const reiniciar = () => {
+    clearTimeout(inactividadT);
+    inactividadT = setTimeout(bloquearAhora, min * 60 * 1000);
+  };
+  for (const ev of ["mousemove", "mousedown", "keydown", "wheel", "touchstart"]) {
+    document.addEventListener(ev, reiniciar, { passive: true });
+  }
+  reiniciar();
+}
+async function bloquearAhora() {
+  if (document.querySelector(".bloqueo")) return;
+  const r = await llamar("pin_bloquear").catch(() => ({}));
+  if (!r.bloqueada) return;
+  cerrarMenu();
+  if (await desbloquear()) { await cargarSemana(); vigilarInactividad(); }
+  else location.href = "configurar.html";
+}
+
+// ---------------------------------------------------------------- semana anterior incompleta
+
+async function avisarSemanaAnterior() {
+  let r;
+  try { r = await api().semana_anterior_pendiente(); } catch (_e) { return; }
+  const a = $("aviso-semana");
+  if (!r) { a.hidden = true; return; }
+  a.replaceChildren(
+    el("span", { class: "aviso-semana-texto", text: r.texto }),
+    el("button", { class: "enlace", text: "Ir a esa semana", onclick: () => {
+      a.hidden = true;
+      if (st.vista !== "semana") { st.vista = "semana"; pintarSelectorVista(); llamar("guardar_vista", "semana").catch(() => {}); }
+      st.lunes = r.lunes;
+      cargarSemana({ marcar: r.dias });
+    } }),
+    el("button", { class: "cerrar-aviso", text: "×", title: "No volver a avisar de esa semana",
+                   "aria-label": "Cerrar", onclick: () => { a.hidden = true; llamar("aviso_semana_visto", r.lunes).catch(() => {}); } }));
+  a.hidden = false;
+}
 
 // ---------------------------------------------------------------- utilidades
 
@@ -135,6 +199,10 @@ const MENUS = {
     })),
     "-",
     { texto: "Mostrar todo", accion: () => { for (const [id] of PANELES) ponerPanel(id, "abierto", false); guardarPaneles(); } },
+    "-",
+    { texto: "Aumentar texto\tCtrl +", desactivado: st.zoom >= ZOOMS[ZOOMS.length - 1], accion: () => cambiarZoom(1) },
+    { texto: "Reducir texto\tCtrl −", desactivado: st.zoom <= ZOOMS[0], accion: () => cambiarZoom(-1) },
+    { texto: "Tamaño normal\tCtrl 0", desactivado: st.zoom === 1, accion: () => aplicarZoom(1) },
   ],
   herramientas: () => [
     { texto: "Plantillas…", accion: dlgPlantillas },
@@ -226,6 +294,8 @@ async function arrancar() {
   st.paneles = { ...(ini.paneles || {}) };
   controlesPaneles();
   pintarPaneles();
+  if (ini.zoom && ini.zoom !== 1) aplicarZoom(ini.zoom, false);
+  vigilarInactividad();
   st.lunes = st.hoyLunes = ini.lunes;
   st.mesSel = mesDe(hoyIso());
   st.vista = ini.vista === "mes" ? "mes" : "semana";
@@ -238,6 +308,7 @@ async function arrancar() {
   ponerTareas(ini.tareas);
   ponerActividades(ini.actividades, ini.actividad_preferida);
   await cargarSemana({ marcarHoy: true });
+  avisarSemanaAnterior();
   refrescarFranja();
   if (st.tareas.size) elegirTarea();
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
@@ -1268,6 +1339,12 @@ document.addEventListener("click", (e) => {
 window.addEventListener("blur", cerrarMenu);
 
 document.addEventListener("keydown", (e) => {
+  if (document.querySelector(".bloqueo")) return;        // con el PIN pedido, nada
+  if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "0"].includes(e.key)) {
+    e.preventDefault();
+    if (e.key === "0") aplicarZoom(1); else cambiarZoom(e.key === "-" ? -1 : 1);
+    return;
+  }
   if (!$("modal").hidden) return;
   if (!$("menu").hidden && e.key === "Escape") { cerrarMenu(); return; }
   if (typeof pila !== "undefined" && pila.length) {

@@ -86,6 +86,7 @@
       novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
       sugerir_pin: /[?&]sugerirpin\b/.test(location.search),
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
+      zoom: 1, pin: { activo: /[?&]pin\b/.test(location.search), desbloqueada: true, auto_min: 15 },
       paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
     }),
     usuario: () => espera("Persona de Prueba"),
@@ -203,7 +204,14 @@
   // ?pin: arranca bloqueada (PIN 1234)
   let pinActivo = /[?&]pin\b/.test(location.search), pinOk = !pinActivo;
   Object.assign(window.pywebview.api, {
-    pin_estado: () => espera({ activo: pinActivo, desbloqueada: pinOk }),
+    pin_estado: () => espera({ activo: pinActivo, desbloqueada: pinOk, auto_min: 15, logo: "../logo_ugr.png", version: "3.1.0" }),
+    pin_auto: () => espera({ ok: true }),
+    pin_bloquear: () => { if (pinActivo) pinOk = false; return espera({ bloqueada: !pinOk }); },
+    guardar_zoom: (z) => espera({ ok: true, zoom: z }),
+    semana_anterior_pendiente: () => espera(/[?&]semana\b/.test(location.search)
+      ? { lunes: d(-7), dias: [d(-4), d(-3)], texto: "La semana pasada te faltan 4,5h: jueves (3h de 7h), viernes (5,5h de 7h)." } : null),
+    aviso_semana_visto: () => espera({ ok: true }),
+    anadir_dia_ugr: () => espera({ ok: true }),
     pin_comprobar: (p) => { pinOk = pinOk || p === "1234"; return espera(pinOk ? { ok: true } : { error: "PIN incorrecto." }); },
     pin_fijar: (n, r) => espera(!/^\d{4,8}$/.test(n) ? { error: "El PIN debe tener entre 4 y 8 cifras." }
       : n !== r ? { error: "Los dos PIN no coinciden." } : (pinActivo = true, { ok: true })),
@@ -290,7 +298,9 @@
       teletrabajo: "", incompletos: [{ iso: d(2), dia: `Miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)}`, horas: "1h / 7h" }] }),
     exportar_csv: () => espera({ ruta: "C:\\Users\\demo\\horas.csv", n: 4, total: "11,5h" }),
     abrir_exportacion: () => espera({ ok: true }),
-    festivos: (n, a, l) => espera([n && { fecha: "08/12/2026", nombre: "La Inmaculada" },
+    festivos: (n, a, l, u) => espera([n && { iso: "2026-12-08", fecha: "08/12/2026", nombre: "La Inmaculada" },
+      u && { iso: "2026-12-24", fecha: "24/12/2026", nombre: "Cierre de Navidad (UGR)", ugr: true },
+      u && { iso: "2026-12-28", fecha: "28/12/2026", nombre: "Cierre de Navidad (UGR)", ugr: true },
       n && { fecha: "25/12/2026", nombre: "Navidad" }, l && { fecha: "02/01/2027", nombre: "Toma de Granada" }].filter(Boolean)),
     importar_festivos: () => espera({ n: 3 }),
     ajustes_dias: () => espera({ anio: 2026, cupo: 22, usadas: 9, tt: 1 }),

@@ -82,6 +82,25 @@ function cuandoListo(fn) {
   else iniciar();
 }
 
+// El logo de la app (reloj con check) dibujado a mano, sin innerHTML.
+function iconoApp() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 64 64");
+  svg.setAttribute("class", "icono-app");
+  svg.setAttribute("aria-hidden", "true");
+  const pieza = (tag, attrs) => {
+    const n = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    svg.append(n);
+  };
+  pieza("rect", { width: "64", height: "64", rx: "14", fill: "#0b66c3" });
+  pieza("circle", { cx: "32", cy: "32", r: "20", fill: "#fff" });
+  pieza("path", { d: "M23 33l7 7 13-15", fill: "none", stroke: "#248a46", "stroke-width": "5",
+                  "stroke-linecap": "round", "stroke-linejoin": "round" });
+  return svg;
+}
+
 // PIN de acceso: si esta activo y la app sigue bloqueada, una pantalla que
 // lo tapa todo hasta acertarlo. Devuelve true al desbloquear y false si se
 // borro la configuracion por haberlo olvidado (hay que ir al asistente).
@@ -95,11 +114,15 @@ async function desbloquear() {
     const msg = el("p", { class: "pin-msg", role: "alert" });
     const entrar = el("button", { class: "primario", type: "submit", text: "Entrar" });
     const olvido = el("button", { type: "button", class: "enlace", text: "He olvidado el PIN" });
+    const icono = iconoApp();
     const capa = el("div", { class: "bloqueo" },
       el("form", { class: "bloqueo-caja" },
-        el("h1", { text: "FichaCSIRC" }),
+        e.logo ? el("img", { class: "bloqueo-ugr", src: e.logo, alt: "Universidad de Granada" }) : null,
+        el("div", { class: "marca" }, icono,
+          el("h1", {}, "Ficha", el("b", { text: "CSIRC" }))),
         el("p", { class: "tenue", text: "Escribe tu PIN para entrar." }),
-        pin, msg, entrar, olvido));
+        pin, msg, entrar, olvido,
+        e.version ? el("p", { class: "tenue pequeno bloqueo-version", text: `Versión ${e.version}` }) : null));
     const form = capa.firstChild;
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();

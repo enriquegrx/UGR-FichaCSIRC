@@ -820,11 +820,46 @@ def festivos_del_anio(anio, ambitos=AMBITOS):
 
 
 def dias_ugr():
-    """Dias propios de la UGR (cierres de Navidad/Semana Santa, San Pascual
-    Bailon patron del PTGAS, Feria del Corpus): {"AAAA-MM-DD": "nombre"} en la
-    clave de config `dias_ugr`. Se fijan cada año en el calendario laboral del
-    PTGAS y se trasladan, asi que no se calculan ni se hardcodean."""
+    """Dias propios de la UGR añadidos a mano: {"AAAA-MM-DD": "nombre"} en la
+    clave de config `dias_ugr` (ver anadir_dia_ugr)."""
     return dict(config_valor("dias_ugr", {}) or {})
+
+
+def propuesta_dias_ugr(anio):
+    """Dias propios de la UGR que suelen repetirse cada curso, calculados para
+    el año: cierre de Navidad (laborables del 24/12 al 6/1), Semana Santa (lunes
+    a miercoles santo), San Pascual Bailon (17/5, patron del PTGAS) y el viernes
+    de la Feria del Corpus. Es una PROPUESTA: las fechas exactas las fija cada
+    año el calendario laboral del PTGAS (que solo se publica en PDF), asi que el
+    usuario las revisa y confirma en "Importar festivos". No incluye lo que ya
+    es festivo nacional, andaluz o local."""
+    pascua = _pascua(anio)
+    otros = set(festivos_del_anio(anio, AMBITOS)) | set(festivos_del_anio(anio + 1, AMBITOS))
+    out = {}
+
+    def _add(fecha, nombre):
+        iso = fecha.isoformat()
+        if fecha.weekday() < 5 and iso not in otros:
+            out[iso] = nombre
+    d = dt.date(anio, 12, 24)
+    while d <= dt.date(anio + 1, 1, 6):
+        _add(d, "Cierre de Navidad (UGR)")
+        d += dt.timedelta(days=1)
+    for i in (6, 5, 4):
+        _add(pascua - dt.timedelta(days=i), "Semana Santa (UGR)")
+    _add(dt.date(anio, 5, 17), "San Pascual Bailón (UGR)")
+    _add(pascua + dt.timedelta(days=61), "Feria del Corpus (UGR)")
+    return out
+
+
+def anadir_dia_ugr(fecha_iso, nombre):
+    """Un dia propio de la UGR que la propuesta no trae: queda en la config y
+    se ofrece en "Importar festivos" como los demas."""
+    dt.date.fromisoformat(fecha_iso)          # ValueError si no es una fecha
+    nombre = (nombre or "").strip() or "Día propio UGR"
+    dias = dias_ugr()
+    dias[fecha_iso] = nombre
+    guardar_config_valor("dias_ugr", dias)
 
 
 def festivos_pendientes(ambitos=AMBITOS, incluir_ugr=True):
@@ -839,6 +874,8 @@ def festivos_pendientes(ambitos=AMBITOS, incluir_ugr=True):
         for fecha, (nombre, _amb) in festivos_del_anio(anio, ambitos).items():
             catalogo[fecha] = nombre
     if incluir_ugr:
+        for anio in anios:
+            catalogo.update(propuesta_dias_ugr(anio))
         catalogo.update(dias_ugr())
     out = {}
     for fecha, nombre in catalogo.items():
@@ -850,9 +887,11 @@ def festivos_pendientes(ambitos=AMBITOS, incluir_ugr=True):
     return out
 
 
-def importar_festivos(ambitos=AMBITOS, incluir_ugr=True):
-    """Marca como no laborables (motivo = nombre del festivo) los pendientes."""
-    pendientes = festivos_pendientes(ambitos, incluir_ugr)
+def importar_festivos(ambitos=AMBITOS, incluir_ugr=True, excluir=()):
+    """Marca como no laborables (motivo = nombre del festivo) los pendientes,
+    menos los que el usuario desmarco (excluir: fechas iso)."""
+    pendientes = {f: n for f, n in festivos_pendientes(ambitos, incluir_ugr).items()
+                  if f not in set(excluir or ())}
     NO_LABORABLES.update(pendientes)
     if pendientes:
         guardar_config_valor("no_laborables", NO_LABORABLES)

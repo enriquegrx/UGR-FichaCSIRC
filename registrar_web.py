@@ -273,6 +273,15 @@ def _motivo_conexion(e):
 
 # ---------------- API expuesta al JavaScript ----------------
 
+def _logo_b64():
+    """El logo de la UGR como data URL (cabecera, asistente, pantalla del PIN)."""
+    try:
+        with open(_recurso("logo_ugr.png"), "rb") as f:
+            return "data:image/png;base64," + base64.b64encode(f.read()).decode()
+    except OSError:
+        return ""
+
+
 # ---------------------------------------------------------------- PIN de acceso
 # Bloqueo de pantalla, NO cifrado: la API key sigue en config.json (asi el aviso
 # diario puede mirar las horas sin pedir nada). Del PIN solo se guarda un hash
@@ -345,7 +354,34 @@ class Api:
 
     # ---- PIN de acceso ----
     def pin_estado(self):
-        return {"activo": _pin_guardado() is not None, "desbloqueada": self._desbloqueada}
+        return {"activo": _pin_guardado() is not None, "desbloqueada": self._desbloqueada,
+                "auto_min": self._pin_auto_min(), "logo": _logo_b64(), "version": getattr(core, "VERSION", "")}
+
+    PIN_AUTO_DEFECTO = 15      # minutos sin usar la app hasta volver a pedir el PIN
+
+    def _pin_auto_min(self):
+        v = (ccore.cargar_previa() or {}).get("pin_auto_min", self.PIN_AUTO_DEFECTO)
+        try:
+            return int(v) if int(v) in (0, 5, 15, 30, 60) else self.PIN_AUTO_DEFECTO
+        except (TypeError, ValueError):
+            return self.PIN_AUTO_DEFECTO
+
+    def pin_auto(self, minutos):
+        """Cada cuanto tiempo sin usar la app se vuelve a pedir el PIN (0 = nunca)."""
+        try:
+            m = int(minutos)
+        except (TypeError, ValueError):
+            return {"error": "Minutos no válidos."}
+        if m not in (0, 5, 15, 30, 60):
+            return {"error": "Elige 0, 5, 15, 30 o 60 minutos."}
+        _config_cambiar(pin_auto_min=m)
+        return {"ok": True}
+
+    def pin_bloquear(self):
+        """Pasado el tiempo sin usar la app (JS): vuelve a pedir el PIN."""
+        if _pin_guardado() is not None:
+            self._desbloqueada = False
+        return {"bloqueada": not self._desbloqueada}
 
     def pin_comprobar(self, pin):
         guardado = _pin_guardado()
@@ -470,6 +506,8 @@ class Api:
             "toca_permisos_anio": core.toca_anadir_permisos_del_anio(),
             "novedades_tras_actualizar": self._novedades_tras_actualizar(),
             "sugerir_pin": self._sugerir_pin(),
+            "pin": self.pin_estado(),
+            "zoom": self.zoom(),
             "plataforma": "macOS" if sys.platform == "darwin" else
                           ("Windows" if os.name == "nt" else sys.platform),
             "lunes": (hoy - dt.timedelta(days=hoy.weekday())).isoformat(),
@@ -768,6 +806,68 @@ class Api:
         except Exception:
             pass      # comodidad: nunca debe romper nada
         return self.paneles()
+
+    ZOOMS = (0.8, 0.9, 1.0, 1.1, 1.25, 1.4)
+
+    def zoom(self):
+        try:
+            z = float(core.config_valor("zoom", 1.0))
+        except (TypeError, ValueError):
+            z = 1.0
+        return z if z in self.ZOOMS else 1.0
+
+    def guardar_zoom(self, zoom):
+        try:
+            z = float(zoom)
+        except (TypeError, ValueError):
+            return {"error": "Zoom no válido."}
+        if z not in self.ZOOMS:
+            return {"error": "Zoom no válido."}
+        try:
+            core.guardar_config_valor("zoom", z)
+        except Exception:
+            pass
+        return {"ok": True, "zoom": z}
+
+    def semana_anterior_pendiente(self):
+        """Si la semana pasada quedo con huecos (y no se ha cerrado el aviso
+        para esa semana): {lunes, texto, dias:[iso]}; si no, None. Una
+        consulta por rango, sin tocar la cache de la semana visible."""
+        hoy = dt.date.today()
+        lunes = hoy - dt.timedelta(days=hoy.weekday() + 7)
+        if core.config_valor("aviso_semana_vista") == lunes.isoformat():
+            return None
+        try:
+            apuntes = core.entradas_rango(lunes.isoformat(),
+                                          (lunes + dt.timedelta(days=4)).isoformat())
+        except Exception:
+            return None                    # sin red no se avisa de nada
+        por_dia = {}
+        for a in apuntes:
+            por_dia.setdefault(a["fecha"], []).append(a)
+        acts = actividades_de_permiso()
+        faltan, dias, total = [], [], 0.0
+        for i in range(5):
+            d = lunes + dt.timedelta(days=i)
+            ap = por_dia.get(d.isoformat(), [])
+            obj = objetivo_dia(d, ap, acts)
+            reg = sum(a["horas"] for a in ap)
+            if obj and reg < obj - 0.001:
+                total += obj - reg
+                dias.append(d.isoformat())
+                faltan.append(f"{core.DIAS_ES[d.weekday()].lower()} {d.strftime('%d/%m')} "
+                              f"({_horas(reg)} de {_horas(obj)})")
+        if not dias:
+            return None
+        return {"lunes": lunes.isoformat(), "dias": dias,
+                "texto": f"La semana pasada te faltan {_horas(total)}: " + ", ".join(faltan) + "."}
+
+    def aviso_semana_visto(self, lunes_iso):
+        try:
+            core.guardar_config_valor("aviso_semana_vista", lunes_iso)
+        except Exception:
+            pass
+        return {"ok": True}
 
     def guardar_vista(self, vista):
         if vista not in ("semana", "mes"):
@@ -1363,13 +1463,21 @@ class Api:
         amb = tuple(a for a, si in (("nacional", nacional), ("andalucia", andalucia),
                                     ("local", local)) if si)
         pend = core.festivos_pendientes(amb, incluir_ugr=bool(ugr))
-        return [{"fecha": dt.date.fromisoformat(f).strftime("%d/%m/%Y"), "nombre": m}
+        return [{"iso": f, "fecha": dt.date.fromisoformat(f).strftime("%d/%m/%Y"), "nombre": m,
+                 "ugr": m.endswith("(UGR)") or f in core.dias_ugr()}
                 for f, m in sorted(pend.items())]
 
-    def importar_festivos(self, nacional, andalucia, local, ugr):
+    def importar_festivos(self, nacional, andalucia, local, ugr, excluir=None):
         amb = tuple(a for a, si in (("nacional", nacional), ("andalucia", andalucia),
                                     ("local", local)) if si)
-        return {"n": core.importar_festivos(amb, incluir_ugr=bool(ugr))}
+        return {"n": core.importar_festivos(amb, incluir_ugr=bool(ugr), excluir=excluir or ())}
+
+    def anadir_dia_ugr(self, fecha_iso, nombre):
+        try:
+            core.anadir_dia_ugr(fecha_iso, nombre)
+        except ValueError:
+            return {"error": "Elige una fecha."}
+        return {"ok": True}
 
     # ---- vacaciones y teletrabajo ----
     def ajustes_dias(self):

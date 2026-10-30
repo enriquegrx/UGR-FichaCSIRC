@@ -284,15 +284,26 @@ function dlgSugerirPin() {
     const r = await llamar("pin_fijar", nuevo.value, repetido.value, "");
     if (r.error) { await avisar("PIN de acceso", r.error); nuevo.focus(); return; }
     dd.cerrar();
+    if (st.ini) { st.ini.pin = { activo: true, desbloqueada: true, auto_min: 15 }; vigilarInactividad(); }
     estado("PIN activado: se pedirá al abrir FichaCSIRC.");
   }
 }
 
 async function dlgPin() {
-  const { activo } = await llamar("pin_estado");
+  const { activo, auto_min } = await llamar("pin_estado");
   const campo = (etiqueta) => entrada("", { type: "password", inputmode: "numeric", maxlength: "8",
                                             autocomplete: "off", class: "horas", "aria-label": etiqueta });
   const actual = campo("PIN actual"), nuevo = campo("PIN nuevo"), repetido = campo("Repite el PIN nuevo");
+  const auto = selector([{ valor: 0, texto: "Nunca (solo al abrir)" }, { valor: 5, texto: "5 minutos" },
+                         { valor: 15, texto: "15 minutos" }, { valor: 30, texto: "30 minutos" },
+                         { valor: 60, texto: "1 hora" }], auto_min);
+  auto.onchange = async () => {
+    const r = await llamar("pin_auto", auto.value);
+    if (r.error) { await avisar("PIN de acceso", r.error); return; }
+    if (st.ini?.pin) { st.ini.pin.auto_min = Number(auto.value); vigilarInactividad(); }
+    estado(Number(auto.value) ? `Se pedirá el PIN tras ${auto.options[auto.selectedIndex].text} sin usar la app.`
+                              : "El PIN solo se pedirá al abrir la app.");
+  };
   const botones = [cancelarBoton,
     { texto: activo ? "Cambiar PIN" : "Activar PIN", clase: "primario", accion: fijar }];
   if (activo) botones.unshift({ texto: "Quitar PIN", clase: "peligro", izquierda: true, accion: quitar });
@@ -301,7 +312,8 @@ async function dlgPin() {
     nota(activo ? "FichaCSIRC pide el PIN al abrirse. Para cambiarlo o quitarlo, escribe antes el actual."
                 : "Con un PIN, FichaCSIRC lo pedirá cada vez que se abra (también el asistente de configuración)."),
     rejilla(...(activo ? [["PIN actual", actual]] : []),
-            ["PIN nuevo", nuevo], ["Repítelo", repetido]),
+            ["PIN nuevo", nuevo], ["Repítelo", repetido],
+            ["Pedirlo de nuevo tras", auto]),
     nota("De 4 a 8 cifras. Si lo olvidas, la única salida es borrar la configuración de este equipo "
          + "y volver a configurar FichaCSIRC (tus horas en ProyectosTIC no se pierden)."));
   (activo ? actual : nuevo).focus();
@@ -311,12 +323,14 @@ async function dlgPin() {
     const r = await llamar("pin_fijar", nuevo.value, repetido.value, actual.value);
     if (r.error) { await avisar("PIN de acceso", r.error); return; }
     dd.cerrar();
+    if (st.ini) { st.ini.pin = { activo: true, desbloqueada: true, auto_min: Number(auto.value) }; vigilarInactividad(); }
     estado(activo ? "PIN cambiado." : "PIN activado: se pedirá al abrir FichaCSIRC.");
   }
   async function quitar(dd) {
     const r = await llamar("pin_quitar", actual.value);
     if (r.error) { await avisar("PIN de acceso", r.error); actual.focus(); return; }
     dd.cerrar();
+    if (st.ini) { st.ini.pin = { activo: false, desbloqueada: true, auto_min: 0 }; vigilarInactividad(); }
     estado("PIN quitado: FichaCSIRC ya no lo pedirá.");
   }
 }
@@ -621,10 +635,11 @@ function dlgFestivos() {
   const etiquetas = { nacional: "Nacionales", andalucia: "Andalucía", local: "Locales (Granada capital)",
                       ugr: "Días propios UGR (Navidad, Semana Santa, San Pascual…)" };
   const marcas = {};
+  const excluidos = new Set();          // dias UGR propuestos que el usuario desmarca
   const lista = el("div", { class: "lista-festivos" });
-  const d = dialogo({ titulo: "Importar festivos", ancho: 520, botones: [cerrarBoton,
+  const d = dialogo({ titulo: "Importar festivos", ancho: 560, botones: [cerrarBoton,
     { texto: "Importar", clase: "primario", id: "importar", accion: async (dd) => {
-      const r = await llamar("importar_festivos", ...Object.keys(cajas).map((k) => marcas[k].checked));
+      const r = await llamar("importar_festivos", ...Object.keys(cajas).map((k) => marcas[k].checked), [...excluidos]);
       dd.cerrar();
       await repintarLocal();
       if (r.n) estado(`${r.n} festivos marcados.`);
@@ -634,16 +649,35 @@ function dlgFestivos() {
     marcas[k] = el("input", { type: "checkbox", checked: true, onchange: recalc });
     d.cuerpo.append(el("label", { class: "check bloque" }, marcas[k], ` ${etiquetas[k]}`));
   }
-  d.cuerpo.append(lista, nota("Los festivos en domingo se estiman trasladados al lunes; revísalos: el "
+  // Dia propio de la UGR que la propuesta no trae: fecha + nombre, a mano.
+  const fecha = el("input", { type: "date", "aria-label": "Fecha" });
+  const nombre = entrada("", { placeholder: "Nombre (p. ej. Cierre por obras)", class: "crece" });
+  const anadir = el("button", { text: "Añadir", onclick: async () => {
+    const r = await llamar("anadir_dia_ugr", fecha.value, nombre.value);
+    if (r.error) { await avisar("Día propio UGR", r.error); return; }
+    fecha.value = ""; nombre.value = "";
+    recalc();
+  } });
+  d.cuerpo.append(lista,
+    nota("Los días propios de la UGR son una PROPUESTA calculada (cierre de Navidad, lunes a miércoles "
+         + "santo, San Pascual Bailón, viernes de la Feria del Corpus): compáralos con el calendario laboral "
+         + "del PTGAS y desmarca los que no coincidan.", "ambar"),
+    el("div", { class: "fila" }, el("span", { class: "tenue", text: "Otro día UGR:" }), fecha, nombre, anadir),
+    nota("Los festivos en domingo se estiman trasladados al lunes; revísalos: el "
     + "traslado real lo decide la Junta cada año. Cualquiera se quita con botón derecho sobre su día."));
   async function recalc() {
     const pend = await llamar("festivos", ...Object.keys(cajas).map((k) => marcas[k].checked));
+    const activos = pend.filter((f) => !excluidos.has(f.iso));
     lista.replaceChildren(pend.length
-      ? el("p", { text: `Se marcarán ${pend.length} días:` })
+      ? el("p", { text: `Se marcarán ${activos.length} días:` })
       : el("p", { class: "tenue", text: "No hay festivos nuevos que marcar con esta selección." }),
-      ...pend.map((f) => el("div", { class: "festivo" }, el("span", { class: "num", text: f.fecha }),
-                                                         el("span", { text: f.nombre }))));
-    d.botones.importar.disabled = !pend.length;
+      ...pend.map((f) => {
+        const c = f.ugr ? el("input", { type: "checkbox", title: "Desmarca si no está en el calendario laboral" }) : null;
+        if (c) { c.checked = !excluidos.has(f.iso); c.onchange = () => { if (c.checked) excluidos.delete(f.iso); else excluidos.add(f.iso); recalc(); }; }
+        return el("label", { class: `festivo${f.ugr ? " ugr" : ""}${excluidos.has(f.iso) ? " excluido" : ""}` },
+          c || el("span", { class: "hueco" }), el("span", { class: "num", text: f.fecha }), el("span", { text: f.nombre }));
+      }));
+    d.botones.importar.disabled = !activos.length;
   }
   recalc();
 }

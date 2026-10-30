@@ -378,6 +378,39 @@ class TestBorrarYMarcas(Base):
         m_cr.assert_called_once_with(M.isoformat(), "10", 2, "c", "soporte")
         self.assertTrue(r["puede_deshacer"])
 
+    def test_dias_ugr_propuestos_y_a_mano(self):
+        p = core.propuesta_dias_ugr(2026)
+        self.assertEqual(p.get("2026-12-24"), "Cierre de Navidad (UGR)")
+        self.assertNotIn("2026-12-25", p)                   # ya es festivo nacional
+        self.assertNotIn("2027-01-02", p)                   # Toma de Granada (local)
+        self.assertEqual(p.get("2026-05-17"), None)         # 17/5/2026 cae en domingo
+        self.assertEqual(p.get("2026-03-30"), "Semana Santa (UGR)")   # lunes santo 2026
+        self.assertTrue(all(dt.date.fromisoformat(f).weekday() < 5 for f in p))
+        guardado = {}
+        with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)),              mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.__setitem__(k, v)):
+            self.assertIn("error", self.api.anadir_dia_ugr("", "x"))
+            self.assertEqual(self.api.anadir_dia_ugr("2026-11-02", "Cierre por obras"), {"ok": True})
+            self.assertEqual(core.dias_ugr(), {"2026-11-02": "Cierre por obras"})
+
+    def test_semana_anterior_pendiente(self):
+        hoy = dt.date.today()
+        lunes = hoy - dt.timedelta(days=hoy.weekday() + 7)
+        jueves = (lunes + dt.timedelta(days=3)).isoformat()
+        guardado = {}
+        with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)),              mock.patch.object(core, "guardar_config_valor",
+                               lambda k, v: guardado.__setitem__(k, v)),              mock.patch.object(core, "objetivo_de", return_value=7),              mock.patch.object(core, "entradas_rango", return_value=[
+                 {"fecha": (lunes + dt.timedelta(days=i)).isoformat(), "horas": 7 if i != 3 else 3,
+                  "wp_id": "10", "wp_titulo": "T", "actividad": "", "comentario": "", "id": i}
+                 for i in range(5)]):
+            r = self.api.semana_anterior_pendiente()
+            self.assertEqual(r["dias"], [jueves])
+            self.assertIn("4h", r["texto"])
+            self.api.aviso_semana_visto(r["lunes"])
+            self.assertIsNone(self.api.semana_anterior_pendiente())
+            self.assertIn("error", self.api.guardar_zoom(2))
+            self.assertEqual(self.api.guardar_zoom(1.25)["zoom"], 1.25)
+
     def test_paneles_se_recuerdan_y_se_validan(self):
         guardado = {}
         with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)),              mock.patch.object(core, "guardar_config_valor",
@@ -683,13 +716,22 @@ class TestPin(unittest.TestCase):
             return json.load(f)
 
     def test_activar_guarda_solo_el_hash_y_bloquea_al_abrir(self):
-        self.assertEqual(self.api.pin_estado(), {"activo": False, "desbloqueada": True})
+        e = self.api.pin_estado()
+        self.assertEqual((e["activo"], e["desbloqueada"], e["auto_min"]), (False, True, 15))
         self.assertIn("error", self.api.pin_fijar("12a4", "12a4"))
         self.assertIn("error", self.api.pin_fijar("1234", "1235"))
         self.assertEqual(self.api.pin_fijar("1234", "1234"), {"ok": True})
         self.assertNotIn("1234", str(self._cfg()))
         nueva = web.Api()                      # proximo arranque
-        self.assertEqual(nueva.pin_estado(), {"activo": True, "desbloqueada": False})
+        e = nueva.pin_estado()
+        self.assertEqual((e["activo"], e["desbloqueada"]), (True, False))
+        # bloqueo por inactividad: configurable y vuelve a pedirlo
+        self.assertIn("error", self.api.pin_auto(7))
+        self.assertEqual(self.api.pin_auto(30), {"ok": True})
+        self.assertEqual(self.api.pin_estado()["auto_min"], 30)
+        self.assertEqual(self.api.pin_bloquear(), {"bloqueada": True})
+        with self.assertRaises(PermissionError):
+            self.api.inicio()
         with self.assertRaises(PermissionError):
             nueva.inicio()
         with self.assertRaises(PermissionError):
