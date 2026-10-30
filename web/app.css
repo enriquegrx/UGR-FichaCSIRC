@@ -43,9 +43,16 @@ button, input, select { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--borde);
 }
 .cabecera img { height: 40px; }
-.marca { display: flex; align-items: baseline; gap: 16px; }
-.marca h1 { margin: 0; font-size: 22px; color: var(--primario); letter-spacing: -.2px; }
-#subtitulo { color: var(--tenue); }
+/* Logo de la app: icono (reloj con check) + "Ficha" regular y "CSIRC" en
+   negrita azul, con el subtitulo debajo: dos lineas, como el de la UGR. */
+.sep-logo { width: 1px; height: 34px; background: var(--borde); margin: 0 -2px; }
+#logo[hidden] + .sep-logo { display: none; }
+.marca { display: flex; align-items: center; gap: 10px; }
+.icono-app { width: 36px; height: 36px; flex: none; }
+.marca-texto { display: flex; flex-direction: column; gap: 3px; }
+.marca h1 { margin: 0; font-size: 22px; line-height: 1; font-weight: 400; color: var(--texto); letter-spacing: -.2px; }
+.marca h1 b { font-weight: 700; color: var(--primario); }
+#subtitulo, .marca .subtitulo { color: var(--tenue); font-size: 12.5px; line-height: 1.2; }
 .etiqueta-prototipo {
   font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
   padding: 2px 8px; border-radius: 999px;
@@ -499,7 +506,10 @@ body.arrastrando .dia, body.arrastrando .celda { transition: none; }
 @media (max-height: 820px) {
   .cabecera { padding: 6px 16px; }
   .cabecera img { height: 30px; }
+  .sep-logo { height: 26px; }
+  .icono-app { width: 28px; height: 28px; }
   .marca h1 { font-size: 18px; }
+  #subtitulo, .marca .subtitulo { font-size: 11.5px; }
   main { padding: 8px; gap: 8px; }
   .panel { padding: 8px 12px; }
   .barra-semana { padding: 6px 12px; }

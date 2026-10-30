@@ -50,6 +50,8 @@ instalada aparece en el pie de la ventana.
   recuerda cómo lo dejaste.
 
 **Mejoras**
+- **Logo nuevo** de FichaCSIRC en la cabecera: un reloj con check («hora
+  fichada») junto al logo de la UGR.
 - Nuevo **Ayuda → Tecnología utilizada**: con qué está hecha FichaCSIRC, por
   qué, y el plan de pasarla en el futuro a **Rust y Tauri**.
 - Después de actualizar, la primera vez que abres FichaCSIRC te enseña **qué hay
