@@ -1960,8 +1960,54 @@ class Api:
         return {"ok": True}
 
     def aviso_datos(self):
-        """Para la ventanita del aviso (aviso.html)."""
-        return {"texto": getattr(self, "_aviso", ""), "minutos": 10}
+        """Para la ventanita del aviso (aviso.html): el texto, los dias con
+        huecos y las tareas habituales, para fichar desde ahi mismo sin abrir
+        la app. Las habituales se leen una vez (una consulta por rango)."""
+        dias = [{"iso": d.isoformat(), "nombre": core.DIAS_ES[d.weekday()],
+                 "fecha": d.strftime("%d/%m"), "falta": round(obj - reg, 2),
+                 "falta_txt": _horas(obj - reg)}
+                for d, reg, obj in getattr(self, "_pendientes", None) or []]
+        habituales = []
+        if dias:
+            try:
+                hoy = dt.date.today()
+                desde = (hoy.replace(day=1) - dt.timedelta(days=1)).replace(day=1)
+                h = self._habituales(core.entradas_rango(desde.isoformat(), hoy.isoformat()), desde)
+                habituales = h["filas"][:3]
+            except Exception:
+                habituales = []
+        return {"texto": getattr(self, "_aviso", ""), "minutos": 10, "dias": dias,
+                "habituales": habituales, "pin": _pin_guardado() is not None}
+
+    def aviso_fichar(self, iso, wp_id, horas, actividad):
+        """Desde el aviso: un apunte en ese dia. Devuelve lo que sigue faltando
+        (para que la ventanita se vaya quedando vacia y se cierre sola)."""
+        self._exigir_desbloqueo()
+        try:
+            h = float(str(horas).replace(",", "."))
+            if not 0 < h <= 24:
+                raise ValueError
+        except (TypeError, ValueError):
+            return {"error": "Horas no válidas."}
+        try:
+            core.crear_entrada(iso, int(wp_id), h, "", actividad or None)
+        except Exception as e:
+            return {"error": f"No se pudo fichar: {e}"}
+        pend = [(d, reg, obj) for d, reg, obj in (getattr(self, "_pendientes", None) or [])
+                if d.isoformat() != iso]
+        d = dt.date.fromisoformat(iso)
+        try:
+            reg = sum(a["horas"] for a in core.entradas_dia(iso))
+            obj = core.objetivo_de(d)
+            if reg < obj - 0.001:
+                pend.append((d, reg, obj))
+                pend.sort()
+        except Exception:
+            pass
+        self._pendientes = pend
+        import recordatorio
+        self._aviso = recordatorio.mensaje_pendientes(pend) if pend else ""
+        return {"ok": True, **self.aviso_datos()}
 
     def aviso_responder(self, abrir):
         if abrir:
@@ -2010,9 +2056,10 @@ def _main_recordatorio(webview):
         return
     api = Api()
     api._aviso = recordatorio.mensaje_pendientes(pendientes)
+    api._pendientes = pendientes
     api._ventana = webview.create_window(
         "FichaCSIRC - Recordatorio", _recurso("web", "aviso.html"), js_api=api,
-        width=520, height=340, resizable=False, on_top=True, background_color="#ffffff")
+        width=600, height=470, resizable=False, on_top=True, background_color="#ffffff")
     webview.start()
 
 

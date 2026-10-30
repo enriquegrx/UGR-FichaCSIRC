@@ -201,6 +201,13 @@
         concesiones: p.concesiones.map((c) => ({ horas: hhmm(c.horas), fecha_limite: c.fecha_limite,
           estado: c.fecha_limite === "2026-11-10" ? "por_caducar" : "" })) };
     }) });
+  let avisoPend = [{ iso: d(2), nombre: "Miércoles", fecha: "28/10", falta: 6.5, falta_txt: "6,5h" },
+                   { iso: d(3), nombre: "Jueves", fecha: "29/10", falta: 0.5, falta_txt: "0,5h" }];
+  const avisoDemo = () => ({
+    texto: avisoPend.length ? `Te faltan horas por fichar esta semana (${fmt(avisoPend.reduce((s, x) => s + x.falta, 0))} en total):` : "",
+    minutos: 10, dias: avisoPend, pin: /[?&]pin\b/.test(location.search),
+    habituales: [{ wp_id: 11765, tarea: "[2026_ASG] Mantenimientos", actividad: "Actuaciones técnicas", tipico: 6.5, tipico_txt: "6,5h" },
+                 { wp_id: 12065, tarea: "[ASG] Proxmox + dockers en SisGes", actividad: "Formación", tipico: 2, tipico_txt: "2h" }] });
   // ?pin: arranca bloqueada (PIN 1234)
   let pinActivo = /[?&]pin\b/.test(location.search), pinOk = !pinActivo;
   Object.assign(window.pywebview.api, {
@@ -373,7 +380,8 @@
     recordatorio_estado: () => espera({ soportado: true, activo: false, experimento: true }),
     recordatorio_activar: () => espera({ error: "En el prototipo no se programa el aviso." }),
     recordatorio_desactivar: () => espera({ error: "En el prototipo no se toca el aviso." }),
-    aviso_datos: () => espera({ texto: "Te faltan horas por fichar esta semana (7h en total):\n\n  Miércoles 28/10: 0h de 6.5h\n  Jueves 29/10: 6h de 6.5h", minutos: 10 }),
+    aviso_datos: () => espera(avisoDemo()),
+    aviso_fichar: (iso) => { avisoPend = avisoPend.filter((x) => x.iso !== iso); return espera({ ok: true, ...avisoDemo() }); },
     aviso_responder: () => espera({ ok: true }),
     mes: (a, m) => espera(mesDemo(a, m)),
     repintar_mes: (a, m) => espera(mesDemo(a, m)),

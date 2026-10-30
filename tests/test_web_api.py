@@ -411,6 +411,25 @@ class TestBorrarYMarcas(Base):
             self.assertIn("error", self.api.guardar_zoom(2))
             self.assertEqual(self.api.guardar_zoom(1.25)["zoom"], 1.25)
 
+    def test_fichar_desde_el_aviso(self):
+        hoy = dt.date.today()
+        ayer = hoy - dt.timedelta(days=1)
+        self.api._pendientes = [(ayer, 5.0, 7.0), (hoy, 0.0, 7.0)]
+        with mock.patch.object(core, "entradas_rango", return_value=[
+                 {"fecha": ayer.isoformat(), "horas": 5, "wp_id": "10", "wp_titulo": "T",
+                  "actividad": "soporte", "comentario": "", "id": 1}]):
+            d = self.api.aviso_datos()
+        self.assertEqual([x["falta_txt"] for x in d["dias"]], ["2h", "7h"])
+        self.assertEqual(d["habituales"][0]["wp_id"], 10)
+        with mock.patch.object(core, "crear_entrada") as m_cr, \
+             mock.patch.object(core, "entradas_dia", return_value=[{"horas": 7}]), \
+             mock.patch.object(core, "entradas_rango", return_value=[]), \
+             mock.patch.object(core, "objetivo_de", return_value=7):
+            r = self.api.aviso_fichar(ayer.isoformat(), "10", "2", "soporte")
+        m_cr.assert_called_once_with(ayer.isoformat(), 10, 2.0, "", "soporte")
+        self.assertEqual([x["iso"] for x in r["dias"]], [hoy.isoformat()])   # ayer ya no falta
+        self.assertIn("error", self.api.aviso_fichar(hoy.isoformat(), "10", "x", ""))
+
     def test_paneles_se_recuerdan_y_se_validan(self):
         guardado = {}
         with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)),              mock.patch.object(core, "guardar_config_valor",

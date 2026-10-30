@@ -10,13 +10,27 @@
 <main>
   <h2>⏰ Te faltan horas por fichar</h2>
   <p id="texto" class="texto-aviso">Comprobando…</p>
-  <p class="tenue">¿Abrir FichaCSIRC para fichar ahora?</p>
+  <!-- Un renglon por dia con huecos: tarea habitual + "Fichar 2h". Fichas
+       desde aqui, sin abrir la app; cuando no queda nada, se cierra sola. -->
+  <div id="dias-aviso" class="dias-aviso"></div>
+  <p id="hecho" class="hecho-aviso" hidden>✔ Todo fichado. ¡Hasta mañana!</p>
+  <p class="tenue pequeno">Para otra tarea u otras horas, abre FichaCSIRC.</p>
   <p id="cierre" class="tenue pequeno"></p>
 </main>
 <footer class="pie-aviso">
   <button id="b-no">Ahora no</button>
-  <button id="b-si" class="primario">Abrir FichaCSIRC</button>
+  <button id="b-si">Abrir FichaCSIRC</button>
 </footer>
+<div id="modal" class="modal" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <h3 id="modal-titulo"></h3>
+    <p id="modal-texto"></p>
+    <div class="modal-botones">
+      <button id="modal-no">No</button>
+      <button id="modal-si" class="primario">Sí</button>
+    </div>
+  </div>
+</div>
 <script src="demo.js"></script>
 <script src="comun.js"></script>
 <script src="aviso.js"></script>

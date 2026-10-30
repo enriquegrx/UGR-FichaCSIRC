@@ -376,6 +376,13 @@ body.aviso h2 { font-size: 16px; }
 .texto-aviso { white-space: pre-line; font-variant-numeric: tabular-nums; }
 .pequeno { font-size: 12px; }
 .pie-aviso { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--borde); }
+.dias-aviso { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 12px; }
+.aviso-dia { display: grid; grid-template-columns: 96px 70px minmax(0, 1fr) auto auto; gap: 8px; align-items: center;
+             padding: 7px 10px; background: var(--fondo); border-radius: 6px; font-size: 13px; }
+.aviso-dia-nombre { font-weight: 600; }
+.aviso-dia select { min-width: 0; }
+.aviso-dia .horas { width: 52px; }
+.hecho-aviso { color: var(--exito); font-weight: 600; font-size: 15px; }
 
 /* ---------- selector Semana | Mes y vista mensual ---------- */
 .selector-vista { display: inline-flex; border: 1px solid var(--borde); border-radius: 6px; overflow: hidden; }
