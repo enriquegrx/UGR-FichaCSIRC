@@ -77,12 +77,12 @@
 
   window.pywebview = { api: {
     inicio: () => espera({
-      version: "2.9.2", plataforma: "Demo", lunes: iso(l), inari: false, logo: "",
+      version: "3.1.0", plataforma: "Demo", lunes: iso(l), inari: false, logo: "../logo_ugr.png",
       tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })),
       actividades: ["Actuaciones técnicas", "Asuntos propios", "Formación", "Soporte"],
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
-      asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: true,
+      asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: false,
       novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
       paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
