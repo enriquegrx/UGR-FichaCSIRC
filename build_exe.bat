@@ -17,7 +17,7 @@ echo Instalando PyInstaller, requests y pywebview (puede tardar la primera vez).
 
 echo.
 echo Construyendo FichaCSIRC (interfaz web, con el asistente dentro)...
-"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." --add-data "TECNOLOGIA.md;." registrar_web.py
+"!PYEXE!" -m PyInstaller --noconfirm --clean --onedir --windowed --noupx --name "FichaCSIRC" --icon "fichacsirc.ico" --version-file "version_info.txt" --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;." --add-data "NOVEDADES.md;." --add-data "TECNOLOGIA.md;." --hidden-import pystray._win32 registrar_web.py
 
 echo.
 echo ============================================================

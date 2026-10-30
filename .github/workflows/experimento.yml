@@ -45,6 +45,7 @@ jobs:
           --version-file "version_info.txt"
           --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
           --add-data "NOVEDADES.md;." --add-data "TECNOLOGIA.md;."
+          --hidden-import pystray._win32
           registrar_web.py
 
       - name: Instalar Inno Setup

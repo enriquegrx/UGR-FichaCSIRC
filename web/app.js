@@ -217,6 +217,7 @@ const MENUS = {
     { texto: "Integraciones (INARI)…", accion: dlgInari },
     { texto: "Aviso diario de fichaje…", accion: dlgRecordatorio },
     { texto: "PIN de acceso…", accion: dlgPin },
+    { texto: "Bandeja e inicio con Windows…", accion: dlgBandeja },
     "-",
     { texto: "Configuración (asistente)…", accion: () => { location.href = "configurar.html"; } },
   ],

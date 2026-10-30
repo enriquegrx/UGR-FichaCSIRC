@@ -254,6 +254,36 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
   recalcular();
 }
 
+// ================================================================ bandeja del sistema
+
+// Icono junto al reloj (cerrar = esconder) e iniciar con Windows escondida.
+async function dlgBandeja() {
+  const e = await llamar("bandeja_estado");
+  if (!e.soportada) {
+    return avisar("Bandeja del sistema", e.mac
+      ? "En Mac no hace falta: FichaCSIRC se queda en el Dock. Para abrirla al iniciar sesión, "
+        + "botón derecho sobre su icono del Dock → Opciones → Abrir al iniciar sesión."
+      : "La bandeja del sistema solo está disponible en Windows.");
+  }
+  const activa = el("input", { type: "checkbox" }), inicio = el("input", { type: "checkbox" });
+  activa.checked = e.activa; inicio.checked = e.inicio;
+  inicio.onchange = () => { if (inicio.checked) activa.checked = true; };
+  activa.onchange = () => { if (!activa.checked) inicio.checked = false; };
+  const d = dialogo({ titulo: "Bandeja e inicio con Windows", ancho: 520, botones: [cancelarBoton,
+    { texto: "Guardar", clase: "primario", accion: async (dd) => {
+      const r = await llamar("bandeja_guardar", activa.checked, inicio.checked);
+      if (r.error) { await avisar("Bandeja del sistema", r.error); return; }
+      dd.cerrar();
+      estado(r.activa ? "Icono en la bandeja: cerrar la ventana la esconde junto al reloj." : "Sin icono en la bandeja.");
+    } }] });
+  d.cuerpo.append(
+    el("label", { class: "check bloque" }, activa, " Icono en la bandeja del sistema (junto al reloj)"),
+    nota("Cerrar la ventana la esconde en vez de salir; desde el icono la abres, vas a «hoy» o sales del todo."),
+    el("label", { class: "check bloque" }, inicio, " Iniciar FichaCSIRC con Windows, escondida en la bandeja"),
+    nota("Así el aviso de la semana anterior y el recordatorio te pillan con la app ya abierta. "
+         + "Requiere el icono en la bandeja."));
+}
+
 // ================================================================ PIN de acceso
 
 // Al abrir, si no hay PIN: se puede poner AHI MISMO (sin otra ventana).

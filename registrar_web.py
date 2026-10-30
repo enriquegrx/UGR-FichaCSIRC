@@ -355,7 +355,8 @@ class Api:
     # ---- PIN de acceso ----
     def pin_estado(self):
         return {"activo": _pin_guardado() is not None, "desbloqueada": self._desbloqueada,
-                "auto_min": self._pin_auto_min(), "logo": _logo_b64(), "version": getattr(core, "VERSION", "")}
+                "auto_min": self._pin_auto_min(), "logo": _logo_b64(), "version": getattr(core, "VERSION", ""),
+                "tema": self.tema()}
 
     PIN_AUTO_DEFECTO = 15      # minutos sin usar la app hasta volver a pedir el PIN
 
@@ -1898,9 +1899,43 @@ class Api:
         return {"ok": True}
 
     def cerrar(self):
-        if self._ventana is not None:
+        if getattr(self, "_bandeja", None):
+            self._bandeja.salir()          # con bandeja, cerrar la ventana solo la esconde
+        elif self._ventana is not None:
             threading.Timer(0.1, self._ventana.destroy).start()
         return {"ok": True}
+
+    # ---- bandeja del sistema e inicio con Windows ----
+    def bandeja_estado(self):
+        import bandeja
+        return {"soportada": bandeja.soportada(), "activa": bandeja.activa(),
+                "inicio": bandeja.inicio_activo(), "mac": sys.platform == "darwin"}
+
+    def bandeja_guardar(self, activa, inicio):
+        import bandeja
+        if not bandeja.soportada():
+            return {"error": "La bandeja del sistema solo está disponible en Windows."}
+        activa = bool(activa) or bool(inicio)      # arrancar con Windows exige bandeja
+        core.guardar_config_valor("bandeja", activa)
+        try:
+            bandeja.activar_inicio(bool(inicio))
+        except OSError as e:
+            return {"error": f"No se pudo cambiar el inicio con Windows: {e}"}
+        if activa and not getattr(self, "_bandeja", None):
+            self._arrancar_bandeja()
+        elif not activa and getattr(self, "_bandeja", None):
+            self._bandeja.parar()
+            self._bandeja = None
+        return {"ok": True, **self.bandeja_estado()}
+
+    def _arrancar_bandeja(self):
+        import bandeja
+        if self._ventana is None or not bandeja.soportada():
+            return
+        def fichar_hoy():
+            self._ventana.evaluate_js("navegar(0)")
+        self._bandeja = bandeja.Bandeja(self._ventana, al_fichar_hoy=fichar_hoy)
+        self._bandeja.arrancar()
 
     # =============================================================== actualizaciones
 
@@ -2098,10 +2133,22 @@ def main():
     # --configurar: el acceso "FichaCSIRC - Configurar" del menu Inicio.
     asistente = core is None or "--configurar" in sys.argv[1:]
     pagina = "configurar.html" if asistente else "index.html"
+    import bandeja
+    con_bandeja = not asistente and not EXPERIMENTO and bandeja.activa()
+    # --minimizado (inicio con Windows): nace escondida en la bandeja.
+    escondida = con_bandeja and "--minimizado" in sys.argv[1:]
     api._ventana = webview.create_window(
         _titulo() if not asistente else "FichaCSIRC · configuración",
         _recurso("web", pagina), js_api=api, width=1180, height=820,
-        min_size=(900, 660), maximized=core is not None, background_color=_fondo_ventana("#e9edf2"))
+        min_size=(900, 660), maximized=core is not None, hidden=escondida,
+        background_color=_fondo_ventana("#e9edf2"))
+    if con_bandeja:
+        try:
+            api._arrancar_bandeja()
+        except Exception as e:            # sin bandeja se sigue funcionando igual
+            core.LOG.warning("No se pudo poner el icono en la bandeja: %s", e)
+            if escondida:
+                api._ventana.show()
     webview.start()
 
 

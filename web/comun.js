@@ -121,6 +121,7 @@ function iconoApp() {
 async function desbloquear() {
   const e = await llamar("pin_estado");
   if (!e.activo || e.desbloqueada) return true;
+  aplicarTema(e.tema);                 // la pantalla del PIN sale antes que todo lo demas
   return new Promise((resolver) => {
     const pin = el("input", { type: "password", inputmode: "numeric", autocomplete: "off",
                               maxlength: "8", "aria-label": "PIN", class: "pin-campo" });

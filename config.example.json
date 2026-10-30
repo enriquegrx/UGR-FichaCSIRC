@@ -68,6 +68,11 @@
       ]
     }
   ],
+  "tema": "sistema",
+  "zoom": 1.0,
+  "paneles": {},
+  "pin_auto_min": 15,
+  "bandeja": false,
   "inari_activo": false,
   "inari_url": "https://inari.ugr.es/kanboard/jsonrpc.php",
   "inari_usuario": "",

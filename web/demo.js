@@ -211,11 +211,14 @@
   // ?pin: arranca bloqueada (PIN 1234)
   let pinActivo = /[?&]pin\b/.test(location.search), pinOk = !pinActivo;
   Object.assign(window.pywebview.api, {
-    pin_estado: () => espera({ activo: pinActivo, desbloqueada: pinOk, auto_min: 15, logo: "../logo_ugr.png", version: "3.1.0" }),
+    pin_estado: () => espera({ activo: pinActivo, desbloqueada: pinOk, auto_min: 15, logo: "../logo_ugr.png", version: "3.1.0",
+                               tema: (location.search.match(/[?&]tema=(\w+)/) || [])[1] || "sistema" }),
     pin_auto: () => espera({ ok: true }),
     pin_bloquear: () => { if (pinActivo) pinOk = false; return espera({ bloqueada: !pinOk }); },
     guardar_zoom: (z) => espera({ ok: true, zoom: z }),
     guardar_tema: () => espera({ ok: true }),
+    bandeja_estado: () => espera({ soportada: true, activa: false, inicio: false, mac: false }),
+    bandeja_guardar: (a, i) => espera({ ok: true, soportada: true, activa: a || i, inicio: i, mac: false }),
     semana_anterior_pendiente: () => espera(/[?&]semana\b/.test(location.search)
       ? { lunes: d(-7), dias: [d(-4), d(-3)], texto: "La semana pasada te faltan 4,5h: jueves (3h de 7h), viernes (5,5h de 7h)." } : null),
     aviso_semana_visto: () => espera({ ok: true }),
