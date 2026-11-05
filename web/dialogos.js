@@ -1159,7 +1159,7 @@ async function dlgActualizacion({ forzar }) {
     return;
   }
   const como = r.mac ? "Se abrirá el instalador y FichaCSIRC se cerrará para que puedas sustituirla."
-                     : "FichaCSIRC se cerrará al iniciar el instalador.";
+                     : "El instalador se abrirá en unos segundos; FichaCSIRC se cerrará sola al pulsar «Instalar».";
   if (!(await preguntar("Actualización disponible",
       `Hay una versión nueva de FichaCSIRC (${r.version}). Tú tienes la ${r.actual}.\n\n¿Descargar e instalar ahora?\n${como}`))) return;
   estado(`Descargando actualización ${r.version}…`);
@@ -1174,8 +1174,14 @@ async function dlgActualizacion({ forzar }) {
     await avisar("Instalar la actualización", "Se ha abierto el instalador.\n\nArrastra FichaCSIRC a la "
       + "carpeta Aplicaciones y, cuando lo pregunte, elige «Reemplazar».\n\n"
       + "FichaCSIRC se cerrará ahora para poder sustituirla.");
+    estado("Instalador descargado. FichaCSIRC se cerrará…");
+    return;
   }
-  estado("Instalador descargado. FichaCSIRC se cerrará…");
+  estado(`Abriendo el instalador de la ${r.version}…`);
+  await avisar("Abriendo el instalador",
+    `El instalador de la versión ${r.version} se está abriendo (puede tardar unos segundos: `
+    + "Windows lo revisa antes de arrancarlo).\n\nCuando pulses «Instalar», FichaCSIRC se cerrará sola "
+    + "y se actualizará. Si cancelas el instalador, sigues con esta versión.");
 }
 
 // Mac: la app abierta desde Descargas o desde el .dmg deja una copia por

@@ -474,6 +474,15 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.1.3 (nov 2026): **actualizar sin pantalla vacía.** Medido: el instalador
+  tardaba 4,7 s en enseñar su ventana con la app ya cerrada (Sleep 1,5 s +
+  bucle de taskkill + Defender revisando el .exe sin firmar), más 1,5 s de la
+  app cerrándose: 5-8 s sin nada en pantalla. Ahora `InitializeSetup` no
+  espera ni mata nada (lo hace `PrepareToInstall`, al pulsar Instalar) y en
+  Windows `instalar_actualizacion` NO cierra la app. Mac igual que antes. El
+  lado app solo se nota desde la siguiente actualización (actualiza la versión
+  instalada); el del instalador, ya. Lo de Defender no se quita sin firmar.
+
 - v3.1.2 (nov 2026): **"Actualizar" cerraba la app y no aparecía el instalador**
   (desde la 3.0). `instalador.iss` cerraba la app con `taskkill /IM ... /T /F`;
   el `/T` mata el ÁRBOL de procesos, y cuando la app lanza el instalador, el

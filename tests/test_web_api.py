@@ -5,6 +5,7 @@ pasa al pulsar. Sin pywebview ni red: el motor va mockeado."""
 
 import datetime as dt
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -881,6 +882,33 @@ class TestArranque(unittest.TestCase):
 
 
 class TestInstalador(unittest.TestCase):
+    def test_instalador_sale_enseguida(self):
+        """InitializeSetup no espera ni cierra la app antes de ensenar su
+        ventana (5-8 s de pantalla vacia al actualizar hasta la 3.1.2); la app
+        se cierra en PrepareToInstall, al pulsar Instalar."""
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(raiz, "instalador.iss"), encoding="utf-8") as f:
+            iss = f.read()
+        ini = iss.split("function InitializeSetup", 1)[1].split("\nend;", 1)[0]
+        sin_comentarios = re.sub(r"\{[^}]*\}", "", ini)
+        self.assertNotIn("Sleep", sin_comentarios)
+        self.assertNotIn("CerrarProcesos", sin_comentarios)
+        prep = iss.split("function PrepareToInstall", 1)[1].split("\nend;", 1)[0]
+        self.assertIn("CerrarProcesos", prep)
+
+    def test_windows_la_app_no_se_cierra_sola_al_actualizar(self):
+        api = web.Api()
+        api._actualizacion = ("9.9.9", "https://github.com/x/y/releases", "https://x/inst.exe")
+        with mock.patch.object(core, "descargar_archivo", side_effect=lambda u, r: r), \
+             mock.patch.object(web.subprocess, "Popen") as m_popen, \
+             mock.patch.object(web.threading, "Timer") as m_timer, \
+             mock.patch.object(web.sys, "platform", "win32"), \
+             mock.patch.object(web, "EXPERIMENTO", False):
+            r = api.instalar_actualizacion()
+        self.assertEqual(r, {"ok": True, "mac": False})
+        m_popen.assert_called_once()
+        m_timer.assert_not_called()                  # la cierra el instalador, no ella
+
     def test_instalador_no_mata_su_arbol(self):
         """Cuando la app lanza el instalador (Actualizar), el instalador es su
         hijo: un taskkill /T sobre FichaCSIRC.exe lo mataba a el tambien y la

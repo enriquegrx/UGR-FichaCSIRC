@@ -5,6 +5,17 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.1.3
+
+**Mejoras**
+- **Actualizar es más rápido y nunca deja la pantalla vacía.** La ventana del
+  instalador aparece enseguida y FichaCSIRC se queda abierta mientras tanto;
+  se cierra sola cuando pulsas «Instalar». Si cancelas el instalador, sigues
+  con tu versión como si nada. (Se nota a partir de la siguiente
+  actualización: quien actualiza es la versión que ya tienes.)
+
+---
+
 ## 3.1.2
 
 **Correcciones**

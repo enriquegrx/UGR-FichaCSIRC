@@ -159,9 +159,11 @@ end;
 
 function InitializeSetup(): Boolean;
 begin
-  { Si lo lanza el actualizador, espera a que la app termine de cerrarse. }
-  Sleep(1500);
-  CerrarProcesos;
+  { Sin esperas ni cierres aqui: la ventana del instalador sale enseguida. La
+    app se cierra en PrepareToInstall, al pulsar "Instalar" (hasta la 3.1.2 se
+    esperaba 1,5 s y se cerraba la app ANTES de ensenar nada: 5-8 s con la
+    pantalla vacia al actualizar). Desde la 3.1.3 la app se queda abierta
+    mientras sale el instalador, y si se cancela sigue ahi. }
   if not WebView2Instalado() then
     MsgBox('FichaCSIRC necesita "Microsoft Edge WebView2 Runtime", que no está ' +
            'instalado en este equipo (viene con Windows 11 y con Windows 10 ' +

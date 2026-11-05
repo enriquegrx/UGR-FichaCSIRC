@@ -1971,10 +1971,15 @@ class Api:
         except Exception as e:
             return {"error": f"No se pudo descargar el instalador: {e}", "pagina": True}
         # Mac: se abre el dmg y la app se cierra (el Finder no deja reemplazar
-        # una app abierta). Windows: el instalador cierra la app el mismo.
-        subprocess.Popen(["open", ruta] if sys.platform == "darwin" else [ruta], close_fds=True)
-        threading.Timer(1.5, self.cerrar).start()
-        return {"ok": True, "mac": sys.platform == "darwin"}
+        # una app abierta). Windows: la app se queda ABIERTA hasta que el
+        # instalador la cierra al pulsar "Instalar": asi nunca hay un rato con
+        # la pantalla vacia, y si se cancela el instalador, la app sigue ahi.
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", ruta], close_fds=True)
+            threading.Timer(1.5, self.cerrar).start()
+            return {"ok": True, "mac": True}
+        subprocess.Popen([ruta], close_fds=True)
+        return {"ok": True, "mac": False}
 
     def abrir_pagina_actualizacion(self):
         _v, pagina, _u = getattr(self, "_actualizacion", (None, "", ""))
