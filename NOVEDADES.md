@@ -5,6 +5,16 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.1.2
+
+**Correcciones**
+- Al pulsar **Actualizar** dentro de la app, FichaCSIRC se cerraba pero el
+  instalador **no llegaba a aparecer** y la versión no cambiaba (pasaba desde
+  la 3.0). El instalador se cerraba a sí mismo junto con la app. Ya se
+  instala normalmente.
+
+---
+
 ## 3.1.1
 
 **Correcciones**

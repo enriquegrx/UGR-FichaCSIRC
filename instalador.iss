@@ -106,8 +106,15 @@ function MatarProceso(const Nombre: String): Integer;
 var
   ResultCode: Integer;
 begin
-  { taskkill devuelve 0 si mato algo y 128 si no habia ningun proceso. }
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "' + Nombre + '" /T /F',
+  { taskkill devuelve 0 si mato algo y 128 si no habia ningun proceso.
+    SIN /T (arbol de procesos): cuando la propia app lanza este instalador
+    ("Actualizar"), el instalador es HIJO de FichaCSIRC.exe, y con /T se mataba
+    a si mismo si la app aun no habia terminado de cerrarse. Pasaba siempre en
+    la 3.x (la ventana WebView2 tarda mas en cerrarse que la de Tkinter): la
+    app se cerraba y no aparecia ningun instalador. Los hijos de la app
+    (procesos de WebView2) no bloquean ningun archivo de la instalacion y se
+    cierran solos al morir ella. }
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM "' + Nombre + '" /F',
        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Result := ResultCode;
 end;

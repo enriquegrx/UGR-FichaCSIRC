@@ -880,6 +880,19 @@ class TestArranque(unittest.TestCase):
         webview.start.assert_called_once()
 
 
+class TestInstalador(unittest.TestCase):
+    def test_instalador_no_mata_su_arbol(self):
+        """Cuando la app lanza el instalador (Actualizar), el instalador es su
+        hijo: un taskkill /T sobre FichaCSIRC.exe lo mataba a el tambien y la
+        actualizacion no aparecia nunca (3.0.0 a 3.1.1)."""
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(raiz, "instalador.iss"), encoding="utf-8") as f:
+            codigo = [ln for ln in f if "taskkill" in ln.lower() and not ln.strip().startswith("{")]
+        self.assertTrue(codigo, "el instalador ya no cierra la app con taskkill?")
+        for ln in codigo:
+            self.assertNotRegex(ln, r"/T\b", ln)
+
+
 class TestExperimento(unittest.TestCase):
     """Con EXPERIMENTO = True no se toca nada de la app de produccion."""
 

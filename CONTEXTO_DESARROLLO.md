@@ -474,6 +474,16 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.1.2 (nov 2026): **"Actualizar" cerraba la app y no aparecía el instalador**
+  (desde la 3.0). `instalador.iss` cerraba la app con `taskkill /IM ... /T /F`;
+  el `/T` mata el ÁRBOL de procesos, y cuando la app lanza el instalador, el
+  instalador es su hijo: si la app no había terminado de cerrarse (la ventana
+  WebView2 tarda más que Tkinter), el instalador se mataba a sí mismo. Se
+  reprodujo con un FichaCSIRC.exe falso que lanza el instalador 3.1.1 real:
+  muere a los 2 s con él. Arreglo: taskkill sin `/T`. Como el código que mata
+  vive en el instalador NUEVO, basta con publicar: los que tienen 3.0.x/3.1.x
+  se actualizan con el botón de siempre. Test: `test_instalador_no_mata_su_arbol`.
+
 - v3.1.1 (nov 2026): **la 3.1.0 no arrancaba en una instalación nueva.**
   `main()` importaba `bandeja` antes de abrir la ventana; `bandeja` importa el
   motor, y el motor sin config.json hace `sys.exit`: la app se cerraba en
