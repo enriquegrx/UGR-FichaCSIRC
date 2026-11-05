@@ -820,6 +820,66 @@ class TestPin(unittest.TestCase):
         self.assertEqual(web.Api().pin_comprobar("2468"), {"ok": True})
 
 
+class TestArranque(unittest.TestCase):
+    """main() de verdad, con pywebview simulado: lo que pasa al abrir la app.
+    La 3.1.0 se cerraba en una instalacion nueva (sin config.json) antes de
+    abrir el asistente porque importaba la bandeja, que importa el motor."""
+
+    def _main(self, argv, con_motor):
+        webview = mock.MagicMock()
+        argv_antes = sys.argv
+        sys.argv = ["FichaCSIRC.exe"] + argv
+        try:
+            with mock.patch.dict(sys.modules, {"webview": webview}), \
+                 mock.patch.object(web, "core", core if con_motor else None), \
+                 mock.patch.object(web, "EXPERIMENTO", False), \
+                 mock.patch("recordatorio.reparar_recordatorio"):
+                web.main()
+        finally:
+            sys.argv = argv_antes
+        return webview
+
+    def test_instalacion_nueva_abre_el_asistente(self):
+        # Como en un equipo recien instalado: importar bandeja (que importa el
+        # motor) acaba en sys.exit porque no hay config.json.
+        class SinConfig:
+            intentos = 0
+
+            def find_spec(self, nombre, *_a, **_k):
+                if nombre == "bandeja":
+                    SinConfig.intentos += 1
+                    raise SystemExit("No encuentro 'config.json'")
+                return None
+        trampa = SinConfig()
+        guardado = sys.modules.pop("bandeja", None)
+        sys.meta_path.insert(0, trampa)
+        try:
+            webview = self._main([], con_motor=False)
+        finally:
+            sys.meta_path.remove(trampa)
+            if guardado is not None:
+                sys.modules["bandeja"] = guardado
+        args, kwargs = webview.create_window.call_args
+        self.assertTrue(args[1].endswith("configurar.html"), args)
+        self.assertFalse(kwargs["hidden"])
+        webview.start.assert_called_once()
+        self.assertEqual(SinConfig.intentos, 0)   # ni siquiera intenta la bandeja
+
+    def test_con_configuracion_abre_la_app(self):
+        with mock.patch("bandeja.activa", return_value=False):
+            webview = self._main([], con_motor=True)
+        args, _kwargs = webview.create_window.call_args
+        self.assertTrue(args[1].endswith("index.html"), args)
+        webview.start.assert_called_once()
+
+    def test_bandeja_rota_no_tumba_la_app(self):
+        with mock.patch("bandeja.activa", side_effect=SystemExit("pystray")):
+            webview = self._main(["--minimizado"], con_motor=True)
+        _args, kwargs = webview.create_window.call_args
+        self.assertFalse(kwargs["hidden"])     # sin bandeja, nunca escondida
+        webview.start.assert_called_once()
+
+
 class TestExperimento(unittest.TestCase):
     """Con EXPERIMENTO = True no se toca nada de la app de produccion."""
 

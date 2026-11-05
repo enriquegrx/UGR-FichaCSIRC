@@ -2119,6 +2119,24 @@ def _main_recordatorio(webview):
     webview.start()
 
 
+def _usar_bandeja(asistente):
+    """Si hay que poner el icono en la bandeja al arrancar.
+
+    bandeja.py importa el motor, y el motor SIN config.json hace sys.exit: en
+    una instalacion nueva (3.1.0) importarlo aqui cerraba la app antes de
+    abrir el asistente, sin decir nada. Por eso solo se importa con motor, y
+    cualquier fallo de la bandeja (incluido un SystemExit) deja la app sin
+    bandeja en vez de sin app."""
+    if asistente or core is None or EXPERIMENTO:
+        return False
+    try:
+        import bandeja
+        return bandeja.activa()
+    except (Exception, SystemExit) as e:
+        core.LOG.warning("Sin bandeja del sistema: %s", e)
+        return False
+
+
 def main():
     import webview
     if "--recordatorio" in sys.argv[1:]:
@@ -2133,8 +2151,7 @@ def main():
     # --configurar: el acceso "FichaCSIRC - Configurar" del menu Inicio.
     asistente = core is None or "--configurar" in sys.argv[1:]
     pagina = "configurar.html" if asistente else "index.html"
-    import bandeja
-    con_bandeja = not asistente and not EXPERIMENTO and bandeja.activa()
+    con_bandeja = _usar_bandeja(asistente)
     # --minimizado (inicio con Windows): nace escondida en la bandeja.
     escondida = con_bandeja and "--minimizado" in sys.argv[1:]
     api._ventana = webview.create_window(

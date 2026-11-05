@@ -5,6 +5,15 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.1.1
+
+**Correcciones**
+- En una **instalación nueva**, la 3.1.0 se cerraba nada más abrirla, sin
+  mostrar el asistente ni ningún mensaje (Windows 10, Windows 11 y Mac). Quien
+  actualizaba desde una versión anterior no lo notaba. Ya arranca bien.
+
+---
+
 ## 3.1.0
 
 **Editar un día entero**

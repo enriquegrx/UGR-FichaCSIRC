@@ -65,6 +65,8 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
 4. **`INSTRUCCIONES.md`**: si cambia el uso diario (menus, botones, flujos).
 5. **`config.example.json`**: claves nuevas que lea el codigo.
 6. Entrada en "Hecho recientemente" de este fichero, con el **porque**, no solo el que.
+6b. Que la app ARRANCA sin config.json (instalación nueva): lo cubre
+   `TestArranque` en `tests/test_web_api.py`; si se toca `main()`, mirarlo.
 7. `python -m unittest discover -s tests -t .` en verde. Desde **PowerShell o
    cmd** (`run_tests.bat`): lanzado desde Git Bash/MSYS, Edge sin ventana sale
    sin pintar nada y `test_js_humo` falla aunque todo esté bien.
@@ -472,7 +474,17 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
-- v3.1.0 (oct 2026, rama `mejoras/3.1`, sin publicar):
+- v3.1.1 (nov 2026): **la 3.1.0 no arrancaba en una instalación nueva.**
+  `main()` importaba `bandeja` antes de abrir la ventana; `bandeja` importa el
+  motor, y el motor sin config.json hace `sys.exit`: la app se cerraba en
+  silencio (ventana sin consola) antes del asistente. Solo afectaba a quien no
+  tenía configuración, por eso no salió probando con la mía ni actualizando.
+  Arreglo: `_usar_bandeja()` no importa nada sin motor y traga cualquier fallo
+  de la bandeja (también `SystemExit`). Pruebas nuevas en `TestArranque`:
+  `main()` con webview simulado, sin configuración (asistente) y con ella.
+  Lección: probar SIEMPRE el arranque sin config.json antes de etiquetar.
+
+- v3.1.0 (oct 2026, publicada el 30-oct):
   - **Pruebas de humo del JS** (`web/humo.js` + `tests/test_js_humo.py`): copia
     de `web/` en un temporal con `humo.html` = index + humo.js, abierta con
     `--headless=new --dump-dom --virtual-time-budget` y `?demo&humo`; el script
