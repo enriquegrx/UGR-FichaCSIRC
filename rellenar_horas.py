@@ -50,7 +50,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "3.2.1"
+VERSION = "3.2.2"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -350,15 +350,13 @@ def guardar_config_valores(valores):
     """Actualiza varias claves de config.json en una sola lectura/escritura.
     Con el turno de config.json: leer, cambiar y escribir sin que otro hilo
     escriba en medio (si no, uno pisaba al otro y se perdia un cambio)."""
-    from configurar import CANDADO_CONFIG
-    with CANDADO_CONFIG:
-        try:
-            with open(CONFIG_PATH, encoding="utf-8-sig") as f:
-                cfg = json.load(f)
-        except Exception:
-            cfg = {}
+    # 3.2.2: si no se puede leer, NO se parte de vacio (asi se perdio una
+    # config entera en la 3.2.0): leer_para_cambiar lanza y no se escribe.
+    import configurar
+    with configurar.CANDADO_CONFIG:
+        cfg = configurar.leer_para_cambiar()
         cfg.update(valores)
-        escribir_json_atomico(CONFIG_PATH, cfg)
+        configurar.escribir_config(cfg)
         _cfg.update(valores)
 
 

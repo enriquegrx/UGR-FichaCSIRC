@@ -14,6 +14,12 @@ y festivos cuestan mucho de rehacer.
 - Restaurar una copia nunca toca lo de ESTE equipo ni las credenciales: API
   key, token de INARI, PIN (decision del usuario: "He olvidado el PIN" conserva
   las copias para recuperar favoritas y plantillas, pero el PIN no vuelve).
+  Excepcion (3.2.2): si la config actual NO tiene conexion (URL o API key) y
+  la copia si, vuelven la conexion y el PIN de la copia, juntos. Es el caso de
+  una config que se rompio; tras "He olvidado el PIN" el asistente pide la API
+  key, asi que la actual la tiene y el PIN viejo no vuelve.
+- La copia completa (con conexion) mas reciente nunca se purga, aunque
+  despues haya muchas copias de una config rota.
 - Exportar (para cambiar de equipo) quita credenciales y PIN; importar hace lo
   mismo que restaurar.
 
@@ -44,6 +50,13 @@ SECRETOS = ("api_key", "inari_token")
 PIN = ("pin", "pin_intentos", "pin_auto_min", "pin_sugerencia_hasta")
 # De este equipo (no viajan a otro): bandeja e inicio con Windows.
 DE_ESTE_EQUIPO = ("bandeja",)
+# Sin esto la app no puede conectar con ProyectosTIC.
+CONEXION = ("base_url", "api_key")
+
+
+def completa(cfg):
+    """La config tiene con que conectarse (URL y API key)."""
+    return isinstance(cfg, dict) and all(cfg.get(k) for k in CONEXION)
 
 
 def carpeta(ruta_config):
@@ -90,7 +103,8 @@ def quizas_copiar(ruta_config, cfg, ahora=None):
         nombre = f"config-{ahora:%Y%m%d-%H%M%S}-{n}.json"
         n += 1
     _escribir(os.path.join(dirc, nombre), cfg)
-    _escribir(os.path.join(dirc, "indice.json"), {"ultima_huella": huella, "ultima": nombre})
+    _escribir(os.path.join(dirc, "indice.json"),
+              {**indice, "ultima_huella": huella, "ultima": nombre})
     purgar(ruta_config, ahora)
     return nombre
 
@@ -110,6 +124,15 @@ def purgar(ruta_config, ahora=None):
     except OSError:
         return
     quedan = set(nombres[:MAX_RECIENTES])
+    # la completa mas reciente se queda siempre: si la config se rompe y se
+    # sigue usando, las copias de la rota no deben llevarse la ultima buena
+    for n in nombres:
+        try:
+            if completa(leer(ruta_config, n)):
+                quedan.add(n)
+                break
+        except (OSError, ValueError):
+            continue
     dias = set()
     for n in nombres:
         f = _fecha(n)
@@ -160,11 +183,47 @@ def leer(ruta_config, nombre):
     return datos
 
 
+def marcar_de_cero(ruta_config, ahora=None):
+    """"He olvidado el PIN": las copias de antes ya no sirven para recuperar
+    sola la config al arrancar (traerian el PIN olvidado). Siguen en la lista
+    para restaurar a mano favoritas y plantillas."""
+    dirc = carpeta(ruta_config)
+    os.makedirs(dirc, exist_ok=True)
+    ahora = ahora or dt.datetime.now()
+    _escribir(os.path.join(dirc, "indice.json"),
+              {**_indice(dirc), "de_cero_desde": ahora.strftime("%Y%m%d%H%M%S")})
+
+
+def ultima_completa(ruta_config):
+    """(nombre, datos) de la copia mas reciente con conexion, posterior a un
+    "He olvidado el PIN"; o None."""
+    dirc = carpeta(ruta_config)
+    desde = _indice(dirc).get("de_cero_desde") or ""
+    try:
+        nombres = sorted((n for n in os.listdir(dirc) if NOMBRE.match(n)), reverse=True)
+    except OSError:
+        return None
+    for n in nombres:
+        if desde and _fecha(n).strftime("%Y%m%d%H%M%S") <= desde:
+            break
+        try:
+            datos = leer(ruta_config, n)
+        except (OSError, ValueError):
+            continue
+        if completa(datos):
+            return n, datos
+    return None
+
+
 def combinar(actual, nueva):
     """La configuracion restaurada/importada, conservando de la actual lo que
-    no debe viajar: credenciales, PIN, cosas de este equipo y de la sesion."""
+    no debe viajar: credenciales, PIN, cosas de este equipo y de la sesion.
+    Si la actual se quedo sin conexion y la copia la tiene, la conexion vuelve
+    (con el PIN de la copia: lo que se protegia sigue protegido)."""
     actual = actual or {}
     conservar = set(SECRETOS) | set(PIN) | set(DE_ESTE_EQUIPO) | VOLATILES | {"base_url"}
+    if not completa(actual) and completa(nueva):
+        conservar -= set(SECRETOS) | {"pin", "pin_auto_min", "base_url"}
     out = {k: v for k, v in nueva.items() if k not in conservar and not k.startswith("_")}
     for k in conservar:
         if k in actual:

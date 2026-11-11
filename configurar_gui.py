@@ -494,7 +494,7 @@ class Wizard:
         # Partir de la config existente: el wizard solo gestiona SUS claves.
         # Volcar un dict fijo borraba todo lo demas (festivos/vacaciones
         # marcados, guardias, teletrabajo, plantillas, comentarios...).
-        cfg = ccore.cargar_previa() or {}
+        cfg = ccore.leer_para_cambiar(danado_vale_vacio=True)
         cfg.update({
             "base_url": self.v["url"].get().strip().rstrip("/"),
             "api_key": self.v["key"].get().strip(),

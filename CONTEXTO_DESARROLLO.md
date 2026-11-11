@@ -474,6 +474,22 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.2.2 (nov 2026): **config perdida en la 3.2.0.** Un usuario (el propio
+  autor) se quedo con config.json solo con `no_laborables`: el choque de la
+  3.2.0 (dos guardados con el mismo .tmp) dejo el fichero roto un instante, la
+  lectura fallo y `guardar_config_valores` partio de `{}` y escribio encima.
+  La app siguio en memoria; al reabrir (ya 3.2.1), todo "sin conexion".
+  Defensas: (1) `configurar.leer_para_cambiar()` reintenta y lanza
+  `ConfigIlegible`, nunca `{}` si el fichero existe (todos los
+  leer-cambiar-escribir lo usan; el asistente puede sustituir uno roto con
+  `danado_vale_vacio`); (2) `escribir_config` nunca quita `base_url`/`api_key`
+  que ya esten en disco; (3) al arrancar, `recuperar_si_hace_falta()` rehace la
+  config desde la ultima copia COMPLETA (encima, lo del fichero actual) y avisa
+  ("recuperada" en inicio()); el PIN vuelve con ella; tras "He olvidado el
+  PIN", `copias.marcar_de_cero` impide usar copias anteriores; (4) `combinar`
+  trae conexion+PIN si la actual no tiene conexion; (5) `purgar` nunca borra
+  la copia completa mas reciente. Tests en `test_proteccion_config.py`.
+
 - v3.2.1 (nov 2026): **guardados de config.json a la vez.** pywebview atiende
   cada llamada del JS en su hilo: "No volver a preguntarme" + marcar el día
   guardaban a la vez con el MISMO `config.json.tmp` → WinError 2 al moverlo,

@@ -211,7 +211,10 @@ La app recuerda la vista que dejaste.
 - 💾 **Copias de seguridad** (*Herramientas*): tu configuración se copia sola
   cuando cambias favoritas, plantillas, permisos o festivos. Desde ahí vuelves
   a una copia anterior, o **exportas** la configuración para llevártela a otro
-  equipo (sin API key ni PIN) e **importas** allí.
+  equipo (sin API key ni PIN) e **importas** allí. Si alguna vez la
+  configuración se queda sin la conexión con ProyectosTIC (todos los días en
+  «sin conexión» aunque la web funcione), la app la **recupera sola** de la
+  última copia buena al abrirse y te avisa.
 - 🪟 **Deja a la vista solo lo que uses**: las cajas de abajo se minimizan
   (**–**) o se cierran (**×**), y el menú **Ver** las vuelve a poner (también
   la franja de resumen y la leyenda de colores).

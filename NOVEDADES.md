@@ -5,6 +5,23 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.2.2
+
+**Correcciones**
+- En la 3.2.0, al guardar dos cosas a la vez, la configuración podía quedarse
+  **sin la conexión con ProyectosTIC** (y sin favoritas, plantillas…): al
+  abrir, todos los días decían «sin conexión». Ahora, si pasa, **se recupera
+  sola** de la última copia de seguridad buena y te lo dice; lo que cambiaste
+  después (los días marcados) se conserva.
+- Si la configuración no se puede leer en ese momento, la app **ya no escribe
+  encima**: avisa y no guarda, en vez de empezar de cero.
+- **Restaurar una copia** también devuelve la conexión (y el PIN que tenía)
+  cuando la configuración actual se ha quedado sin ella.
+- La última copia de seguridad buena **ya no se borra** aunque después se hagan
+  muchas copias.
+
+---
+
 ## 3.2.1
 
 **Correcciones**

@@ -14,7 +14,9 @@ import os
 import json
 import sys
 import base64
+import shutil
 import threading
+import time
 
 # Un solo turno para escribir config.json en todo el proceso. pywebview atiende
 # cada llamada del JS en su propio hilo: dos guardados a la vez (3.2.0: marcar
@@ -267,6 +269,92 @@ def seleccionar_favoritos_en_vivo(base_url, api_key):
     return _multiseleccion("Tareas favoritas (para tenerlas a mano al registrar):", tabla_w)
 
 
+CONEXION = ("base_url", "api_key")     # sin esto la app no puede hacer nada
+
+
+class ConfigIlegible(RuntimeError):
+    """config.json existe pero no se puede leer: NO se escribe encima."""
+
+    def __init__(self, texto, danado=False):
+        super().__init__(texto)
+        self.danado = danado     # contenido roto (no un bloqueo pasajero del fichero)
+
+
+def leer_para_cambiar(danado_vale_vacio=False, intentos=6, espera=0.15):
+    """config.json para LEER-CAMBIAR-ESCRIBIR. Sin fichero: {}. Si existe y no
+    se puede leer (bloqueado un instante por el aviso diario o el antivirus, o
+    roto) se reintenta y, si sigue igual, ConfigIlegible: NUNCA se parte de
+    vacio para escribir encima. Asi se perdio en la 3.2.0 una config entera
+    (se quedo solo con los dias marcados: sin URL, API key, favoritas...).
+    danado_vale_vacio: para quien escribe una config COMPLETA (el asistente)
+    y puede sustituir un fichero roto."""
+    ultimo, danado = None, False
+    for i in range(intentos):
+        if not os.path.exists(CONFIG_PATH):
+            return {}
+        try:
+            with open(CONFIG_PATH, encoding="utf-8-sig") as f:
+                datos = json.load(f)
+            if isinstance(datos, dict):
+                return datos
+            ultimo, danado = "no es una configuración", True
+        except ValueError as e:
+            ultimo, danado = e, True
+        except OSError as e:
+            ultimo, danado = e, False
+        if i < intentos - 1:
+            time.sleep(espera)
+    if danado and danado_vale_vacio:
+        return {}
+    raise ConfigIlegible(f"No se pudo leer la configuración ({ultimo}). "
+                         "No se ha guardado nada, para no perderla.", danado)
+
+
+def _sin_perder_conexion(cfg):
+    """Ninguna escritura quita la URL o la API key que ya hay en disco (nadie
+    lo hace a proposito: "He olvidado el PIN" BORRA el fichero entero)."""
+    faltan = [k for k in CONEXION if not cfg.get(k)]
+    if not faltan or not os.path.exists(CONFIG_PATH):
+        return cfg
+    actual = leer_para_cambiar()          # si no se puede leer, mejor no escribir
+    recuperadas = {k: actual[k] for k in faltan if actual.get(k)}
+    return {**cfg, **recuperadas} if recuperadas else cfg
+
+
+def recuperar_si_hace_falta():
+    """Al arrancar: si config.json se ha quedado sin URL o API key (o roto) y
+    hay una copia de seguridad que si las tiene, se recupera sola. Lo que haya
+    en el fichero actual manda (es mas nuevo: p. ej. dias marcados despues) y
+    el fichero tal como estaba se deja al lado. El PIN vuelve con la copia: una
+    config recuperada queda tan protegida como estaba. Devuelve el nombre de la
+    copia usada, o None."""
+    if not os.path.exists(CONFIG_PATH):
+        return None            # primera vez o "He olvidado el PIN": el asistente
+    with CANDADO_CONFIG:
+        try:
+            actual = leer_para_cambiar()
+        except ConfigIlegible as e:
+            if not e.danado:
+                return None    # bloqueado: ya se vera en el siguiente arranque
+            actual = None
+        if actual is not None and all(actual.get(k) for k in CONEXION):
+            return None
+        import copias
+        r = copias.ultima_completa(CONFIG_PATH)
+        if not r:
+            return None
+        nombre, nueva = r[0], dict(r[1])
+        if actual:
+            nueva.update({k: v for k, v in actual.items() if v or k not in CONEXION})
+        motivo = "danado" if actual is None else "incompleto"
+        try:
+            shutil.copy2(CONFIG_PATH, f"{CONFIG_PATH}.{motivo}-{time.strftime('%Y%m%d-%H%M%S')}")
+        except OSError:
+            pass
+        escribir_config(nueva)
+        return nombre
+
+
 def cargar_previa():
     if os.path.exists(CONFIG_PATH):
         try:
@@ -395,12 +483,22 @@ def escribir_config(cfg):
     # temporal propio de este hilo: nunca dos escrituras sobre el mismo
     tmp = f"{CONFIG_PATH}.{os.getpid()}-{threading.get_ident()}.tmp"
     with CANDADO_CONFIG:
+        cfg = _sin_perder_conexion(cfg)
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp, CONFIG_PATH)
+            for intento in (1, 2, 3):
+                try:
+                    os.replace(tmp, CONFIG_PATH)
+                    break
+                except PermissionError:
+                    # Windows: otro proceso (el aviso diario) lo tiene abierto
+                    # justo en ese instante
+                    if intento == 3:
+                        raise
+                    time.sleep(0.2)
         except Exception:
             try:
                 os.remove(tmp)
@@ -419,7 +517,7 @@ def guardar(cfg):
     # solo pregunta conexion, jornada, actividad y favoritas, y volcar SOLO eso
     # borraba festivos, vacaciones, permisos y sus concesiones, plantillas,
     # guardias, teletrabajo, INARI...
-    completa = cargar_previa() or {}
+    completa = leer_para_cambiar(danado_vale_vacio=True)
     completa.update(cfg)
     escribir_config(completa)
     print(f"\nGuardado en: {CONFIG_PATH}")

@@ -110,7 +110,27 @@ def _cargar_motor():
     return True
 
 
+RECUPERADA = ""     # fecha de la copia de la que se recupero la config al arrancar
+
+
+def _recuperar_config():
+    """config.json sin URL/API key (o roto) y una copia buena: se recupera sola
+    ANTES de cargar el motor (si no, la app abre con todo "sin conexion")."""
+    global RECUPERADA
+    try:
+        nombre = ccore.recuperar_si_hace_falta()
+    except Exception:
+        return
+    if nombre:
+        import copias
+        f = copias._fecha(nombre)
+        RECUPERADA = f.strftime("%d/%m/%Y a las %H:%M") if f else nombre
+
+
+_recuperar_config()
 _cargar_motor()
+if RECUPERADA and core is not None:
+    core.LOG.warning("config.json sin conexion: recuperada de la copia del %s", RECUPERADA)
 
 
 def _recurso(*partes):
@@ -340,7 +360,7 @@ def _config_cambiar(**valores):
     """Cambia claves de config.json SIN el motor (sirve tambien en el asistente
     y con la app aun bloqueada). None = quitar la clave."""
     with ccore.CANDADO_CONFIG:          # leer-cambiar-escribir sin que otro hilo se cuele
-        cfg = ccore.cargar_previa() or {}
+        cfg = ccore.leer_para_cambiar()   # ilegible: error, nunca escribir encima
         for k, v in valores.items():
             if v is None:
                 cfg.pop(k, None)
@@ -497,6 +517,11 @@ class Api:
             pass
         except OSError as e:
             return {"error": f"No se pudo borrar la configuración: {e}"}
+        try:          # las copias de antes no deben recuperarse solas (traen el PIN)
+            import copias
+            copias.marcar_de_cero(ccore.CONFIG_PATH)
+        except Exception:
+            pass
         self._cache.clear()
         self._desbloqueada = True
         self._de_cero = True
@@ -524,6 +549,7 @@ class Api:
             "asociaciones": self.asociaciones(),
             "toca_permisos_anio": core.toca_anadir_permisos_del_anio(),
             "novedades_tras_actualizar": self._novedades_tras_actualizar(),
+            "recuperada": self._recuperada(),
             "sugerir_pin": self._sugerir_pin(),
             "avisos_local_no": self.avisos_local_no(),
             "pin": self.pin_estado(),
@@ -544,6 +570,12 @@ class Api:
             "vista": self.vista(),
             "paneles": self.paneles(),
         }
+
+    def _recuperada(self):
+        """Fecha de la copia de la que se recupero la config, una sola vez."""
+        global RECUPERADA
+        r, RECUPERADA = RECUPERADA, ""
+        return r
 
     def _novedades_tras_actualizar(self):
         """La primera vez que se abre una version distinta de la ultima abierta
@@ -1615,7 +1647,7 @@ class Api:
         """Pone una config restaurada/importada: antes se guarda copia de la
         actual (asi tambien se puede volver atras) y se recarga el motor."""
         import copias
-        actual = ccore.cargar_previa() or {}
+        actual = ccore.leer_para_cambiar(danado_vale_vacio=True)
         copias.quizas_copiar(ccore.CONFIG_PATH, actual)
         ccore.escribir_config(copias.combinar(actual, nueva))
         if not _cargar_motor():
@@ -2067,7 +2099,7 @@ class Api:
             return val
         oficial = _num_jornada(d["jornada"])
         des = (_num_jornada(d.get("desayuno")) or 0) if d.get("desayuno_si") else 0
-        cfg = ccore.cargar_previa() or {}
+        cfg = ccore.leer_para_cambiar(danado_vale_vacio=True)
         cfg.update({
             "base_url": url,
             "api_key": key,

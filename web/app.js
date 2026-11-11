@@ -335,6 +335,16 @@ async function arrancar() {
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
   // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
   if (ini.toca_permisos_anio) setTimeout(() => dlgPermisosAnio({ manual: false }), 700);
+  // La config se habia quedado sin conexion y se recupero sola de una copia
+  // (3.2.2): decirlo antes que nada, para que revise.
+  if (ini.recuperada) {
+    await preguntar("Configuración recuperada",
+      "Tu configuración se había quedado incompleta (sin la conexión con ProyectosTIC) "
+      + `y se ha recuperado de la copia de seguridad del ${ini.recuperada}: conexión, `
+      + "favoritas, plantillas y permisos. Lo que cambiaste después, como los días "
+      + "marcados, se ha conservado.\n\nRevisa que todo esté como lo dejaste.",
+      { soloAceptar: true, si: "Entendido" });
+  }
   // Recien actualizada: lo nuevo de esta version, una sola vez.
   if (ini.novedades_tras_actualizar) setTimeout(() => dlgNovedades(ini.novedades_tras_actualizar), 400);
   // Sin PIN: sugerirlo (no a la vez que las novedades, para no amontonar).
