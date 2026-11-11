@@ -545,15 +545,28 @@ class Api:
         return core.nombre_usuario()
 
     def tareas(self):
-        """Tareas del desplegable: las buscadas en la sesion y las favoritas."""
+        """Tareas del desplegable: las buscadas en la sesion y las favoritas
+        (marcadas, para la estrella del buscador)."""
+        favs = {int(f["id"]) for f in core.FAVORITOS}
         vistas, out = set(), []
         for w in self._extras + list(core.FAVORITOS):
             if int(w["id"]) in vistas:
                 continue
             vistas.add(int(w["id"]))
             out.append({"id": int(w["id"]), "nombre": w["nombre"],
-                        "texto": f"{w['id']} - {w['nombre']}"})
+                        "texto": f"{w['id']} - {w['nombre']}", "favorita": int(w["id"]) in favs})
         return out
+
+    def favorita(self, wp_id, nombre, si):
+        """La estrella del buscador: marca o quita una tarea de favoritas."""
+        if si:
+            core.anadir_favorito({"id": int(wp_id), "nombre": nombre})
+        else:
+            core.quitar_favorito(int(wp_id))
+            # sigue en el desplegable de esta sesion, como una buscada
+            if all(int(e["id"]) != int(wp_id) for e in self._extras):
+                self._extras.insert(0, {"id": int(wp_id), "nombre": nombre})
+        return {"tareas": self.tareas()}
 
     # ---- semana ----
     def semana(self, lunes_iso):
@@ -1236,10 +1249,12 @@ class Api:
             raise
 
     def buscar_tareas(self, texto):
+        """Por nombre (3 letras o mas) o por el NUMERO de la tarea."""
         texto = (texto or "").strip()
-        if len(texto) < 3:
-            return {"error": "Escribe al menos 3 letras."}
-        return {"tareas": core.buscar_wp(texto)}
+        if not texto.lstrip("#").isdigit() and len(texto) < 3:
+            return {"error": "Escribe al menos 3 letras, o el número de la tarea."}
+        favs = {int(f["id"]) for f in core.FAVORITOS}
+        return {"tareas": [{**t, "favorita": t["id"] in favs} for t in core.buscar_wp(texto)]}
 
     def elegir_tareas(self, tareas, a_favoritas):
         """Añade las tareas al desplegable (y a favoritas si se pide)."""

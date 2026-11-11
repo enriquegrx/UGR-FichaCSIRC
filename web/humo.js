@@ -95,6 +95,43 @@
       teclado("z", { ctrlKey: true });
       ok(await hasta(() => cifra(0) === antes), "Ctrl+Z no deshizo");
     });
+    await prueba("buscador de tareas: sin favoritas, por número y estrella", async () => {
+      const guardadas = new Map(st.tareas);
+      st.tareas.clear();                      // usuario sin favoritas ni buscadas
+      try {
+        menuDe(0); pulsarMenu("Editar día");
+        ok(await hasta(() => dlg()), "no abre");
+        [...document.querySelectorAll(".dlg-pie button")].find((b) => b.textContent.includes("Añadir tarea")).click();
+        const inp = document.querySelector(".ed-tarea-input");
+        ok(inp, "la fila nueva no tiene buscador");
+        inp.dispatchEvent(new Event("focus"));
+        const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+        ok(await hasta(() => caja()), "no se abre la lista");
+        ok(caja().textContent.includes("Tus tareas habituales"), "sin habituales");
+        inp.value = "11754"; inp.dispatchEvent(new Event("input"));
+        ok(await hasta(() => caja()?.textContent.includes("ATE › [2026_ATE] Servicio")), "no busca por número (o sin proyecto › padre)");
+        const fila = [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes("11754"));
+        fila.querySelector(".bt-fav").click();
+        ok(await hasta(() => st.favoritas.has(11754)), "la estrella no la hace favorita");
+        fila.isConnected ? fila.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }))
+          : [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes("11754")).dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        ok(inp.value.startsWith("11754 - "), "no queda elegida");
+        ok(await hasta(() => !document.querySelector(".ed-fila.nueva .ed-act").disabled), "no carga sus actividades");
+      } finally {
+        cerrarTodo();
+        if (!st.tareas.size) for (const [k, v] of guardadas) st.tareas.set(k, v);
+      }
+    });
+    await prueba("formulario: la tarea también se busca", async () => {
+      const inp = document.getElementById("tarea");
+      inp.dispatchEvent(new Event("focus"));
+      inp.value = "Proxmox"; inp.dispatchEvent(new Event("input"));
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      ok(await hasta(() => caja()?.querySelector(".bt-item")), "sin resultados en el formulario");
+      caja().querySelector(".bt-item").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      ok(await hasta(() => inp.value.includes("Proxmox")), "no rellena el formulario");
+      inp.dispatchEvent(new Event("blur"));
+    });
     await prueba("horas editables en la ficha", async () => {
       const antes = cifra(1);
       const s = dias()[1].querySelector(".linea-h.editable");
@@ -130,7 +167,7 @@
       // sin ventana no hay foco de teclado fiable: se usa el dia marcado
       st.marcados = new Set([st.dias[0].iso]); pintarMarcados();
       teclado("c", { ctrlKey: true });
-      ok(st.portapapeles, "no copió");
+      ok(st.portapapeles, `no copió (pila=${pila.length}, modal oculto=${document.getElementById("modal").hidden}, marcados=${st.marcados.size}, apuntes dia0=${st.dias[0].apuntes.length}, bloqueo=${!!document.querySelector(".bloqueo")})`);
       const n = dias()[3].querySelectorAll(".ap-tarjeta").length;
       st.marcados = new Set([st.dias[3].iso]); pintarMarcados();
       teclado("v", { ctrlKey: true });

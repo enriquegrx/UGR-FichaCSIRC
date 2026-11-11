@@ -474,6 +474,17 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.1.4 (nov 2026): **buscador de tareas.** Motivo: en Editar día la lista
+  salía vacía sin favoritas, y varios usuarios pedían buscar por número de
+  tarea y distinguir tareas homónimas de padres distintos. `buscadorTarea`
+  (dialogos.js) convierte un input en combobox: grupos locales al momento
+  (habituales, usadas en el periodo, favoritas/buscadas) + `buscar_tareas`
+  remoto con espera de 350 ms. `buscar_wp`: `12345`/`#12345` = GET de esa
+  tarea (403/404 = sin resultados); `_wp_resumen` añade proyecto y padre desde
+  `_links` (sin consultas extra). Estrella: `Api.favorita` (añade/quita;
+  `quitar_favorito`). La lista va en `<body>` con `position: fixed` (el cuerpo
+  con scroll del diálogo la recortaba) y corrige el zoom de `<html>`.
+
 - v3.1.3 (nov 2026): **actualizar sin pantalla vacía.** Medido: el instalador
   tardaba 4,7 s en enseñar su ventana con la app ya cerrada (Sleep 1,5 s +
   bucle de taskkill + Defender revisando el .exe sin firmar), más 1,5 s de la

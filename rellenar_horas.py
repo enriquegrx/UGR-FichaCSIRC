@@ -49,7 +49,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "3.1.3"
+VERSION = "3.1.4"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -619,19 +619,38 @@ def proyectos():
             for p in _get_todos("/api/v3/projects")]
 
 
+def _wp_resumen(w):
+    """Lo que se ensena de una tarea: id, nombre, su proyecto y su tarea padre.
+    El proyecto y el padre distinguen las muchas "Mantenimientos" que hay
+    colgando de padres distintos (vienen en _links, sin consultas extra)."""
+    links = w.get("_links") or {}
+    return {"id": int(w["id"]), "nombre": w.get("subject", "?"),
+            "proyecto": (links.get("project") or {}).get("title") or "",
+            "padre": (links.get("parent") or {}).get("title") or ""}
+
+
 def tareas_proyecto(pid):
-    return [{"id": int(w["id"]), "nombre": w.get("subject", "?")}
-            for w in _get_todos(f"/api/v3/projects/{pid}/work_packages")]
+    return [_wp_resumen(w) for w in _get_todos(f"/api/v3/projects/{pid}/work_packages")]
 
 
 def buscar_wp(texto, limite=50):
-    """Busca tareas por texto en TODOS los proyectos visibles. Lanza excepcion
-    si falla la red (el que llama decide como avisar)."""
-    filtros = [{"subject": {"operator": "~", "values": [texto]}}]
+    """Busca tareas en TODOS los proyectos visibles: por su NUMERO (12345 o
+    #12345, la tarea exacta) o por texto en el nombre. Lanza excepcion si falla
+    la red (el que llama decide como avisar)."""
+    t = (texto or "").strip()
+    m = re.fullmatch(r"#?(\d+)", t)
+    if m:
+        try:
+            return [_wp_resumen(_get(f"/api/v3/work_packages/{int(m.group(1))}"))]
+        except requests.HTTPError as e:
+            # no existe, o es de un proyecto en el que no estas: "no encontrada"
+            if e.response is not None and e.response.status_code in (403, 404):
+                return []
+            raise
+    filtros = [{"subject": {"operator": "~", "values": [t]}}]
     data = _get("/api/v3/work_packages",
                 params={"filters": json.dumps(filtros), "pageSize": limite})
-    return [{"id": int(w["id"]), "nombre": w.get("subject", "?")}
-            for w in data.get("_embedded", {}).get("elements", [])]
+    return [_wp_resumen(w) for w in data.get("_embedded", {}).get("elements", [])]
 
 
 # ----------------------- entradas de usuario -----------------------
@@ -1490,6 +1509,14 @@ def dias_pendientes_semana(referencia=None, incluir_futuros=False):
         if reg < obj - 0.001:
             pendientes.append((d, reg, obj))
     return pendientes
+
+
+def quitar_favorito(wp_id):
+    """Quita una tarea de favoritas (si estaba) y lo persiste."""
+    quedan = [f for f in FAVORITOS if str(f["id"]) != str(wp_id)]
+    if len(quedan) != len(FAVORITOS):
+        FAVORITOS[:] = quedan
+        guardar_config_valor("favoritos", FAVORITOS)
 
 
 def anadir_favorito(wp):

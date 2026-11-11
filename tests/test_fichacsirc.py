@@ -368,8 +368,9 @@ class TestBuscarWp(unittest.TestCase):
     def test_devuelve_resultados(self, m_get):
         m_get.return_value = {"_embedded": {"elements": [
             {"id": 5, "subject": "Proxmox + dockers"}]}}
+        # sin _links (proyecto y padre) quedan vacios, no rompe
         self.assertEqual(core.buscar_wp("prox"),
-                         [{"id": 5, "nombre": "Proxmox + dockers"}])
+                         [{"id": 5, "nombre": "Proxmox + dockers", "proyecto": "", "padre": ""}])
 
     @mock.patch.object(core, "_get", side_effect=RuntimeError("sin red"))
     def test_propaga_errores(self, _m):

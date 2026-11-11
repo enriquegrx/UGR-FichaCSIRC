@@ -5,6 +5,24 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.1.4
+
+**Buscar tareas, por fin cómodo**
+- El campo **Tarea** (en *Añadir apunte* y en *Editar día*) es ahora un
+  **buscador**: mientras escribes salen al momento tus tareas habituales, las
+  que usaste esa semana y tus favoritas; con tres letras o un número busca
+  además en **todo ProyectosTIC**.
+- Se puede buscar por el **número de la tarea** (12345 o #12345).
+- Cada resultado dice su **proyecto y su tarea padre**: se distinguen las
+  distintas «Mantenimientos» que cuelgan de padres diferentes.
+- La **☆** de cada resultado la marca o la **quita** de favoritas.
+
+**Correcciones**
+- En **Editar día → + Añadir tarea**, la lista de tareas salía **vacía** si no
+  tenías tareas favoritas. Con el buscador nuevo ya no pasa.
+
+---
+
 ## 3.1.3
 
 **Mejoras**

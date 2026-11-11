@@ -188,24 +188,26 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
   }
 
   function nuevaFila() {
-    const tarea = el("select", { class: "ed-tarea-sel", "aria-label": "Tarea" },
-      el("option", { value: "", text: "Elige una tarea…" }),
-      ...[...st.tareas].map(([texto, id]) => el("option", { value: String(id), text: texto })));
-    const f = { nueva: true, tarea, horas: campoHoras(""), borrar: false,
+    // Buscador (no un desplegable): sin favoritas, el desplegable salia vacio.
+    const tarea = entrada("", { class: "ed-tarea-input", placeholder: "Busca por nombre o número de tarea",
+                                "aria-label": "Tarea" });
+    const f = { nueva: true, tarea, wpId: null, horas: campoHoras(""), borrar: false,
                 act: el("select", { class: "ed-act", disabled: true }, el("option", { text: "…" })),
                 comentario: "" };
-    tarea.onchange = async () => {
-      const sel = selectorActividad(tarea.value, "");
+    f.fila = el("div", { class: "ed-fila nueva" },
+      el("span", { class: "ed-h" }, f.horas, " h"), tarea, f.act, botonBorrar(f));
+    filas.push(f);
+    lista.append(f.fila);
+    tarea.addEventListener("input", () => { f.wpId = null; });     // reescribir = volver a elegir
+    buscadorTarea(tarea, { alElegir: async (t) => {
+      f.wpId = Number(t.id);
+      const sel = selectorActividad(t.id, "");
       f.act.replaceWith(sel);
       f.act = sel;
       const r = await sel.cargar();
       f.comentario = r.comentario || "";
       f.horas.focus();
-    };
-    f.fila = el("div", { class: "ed-fila nueva" },
-      el("span", { class: "ed-h" }, f.horas, " h"), tarea, f.act, botonBorrar(f));
-    filas.push(f);
-    lista.append(f.fila);
+    } });
     tarea.focus();
     recalcular();
   }
@@ -214,9 +216,9 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
     const cambios = { editar: [], borrar: [], anadir: [] };
     for (const f of filas) {
       if (f.nueva) {
-        if (!f.tarea.value && !f.horas.value.trim()) continue;      // fila vacia: se ignora
-        if (!f.tarea.value) { await avisar("Falta tarea", "Elige la tarea de la fila nueva."); f.tarea.focus(); return; }
-        cambios.anadir.push({ wp_id: f.tarea.value, horas: f.horas.value,
+        if (!f.wpId && !f.tarea.value.trim() && !f.horas.value.trim()) continue;   // fila vacia: se ignora
+        if (!f.wpId) { await avisar("Falta tarea", "Busca y elige la tarea de la fila nueva."); f.tarea.focus(); return; }
+        cambios.anadir.push({ wp_id: f.wpId, horas: f.horas.value,
                               actividad: f.act.value || "", comentario: f.comentario });
       } else if (f.borrar) {
         cambios.borrar.push({ id: f.a.id, destino: f.a.destino || "op" });
@@ -226,7 +228,7 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
     }
     for (const f of filas.filter((x) => !x.borrar && !x.horas.disabled)) {
       const h = numero(f.horas.value);
-      if ((f.nueva && !f.tarea.value) || (h > 0 && h <= 24)) continue;
+      if ((f.nueva && !f.wpId) || (h > 0 && h <= 24)) continue;
       await avisar("Horas no válidas", "Las horas deben ser un número entre 0 y 24 (por ejemplo 3,5).");
       f.horas.focus();
       f.horas.select();
@@ -365,9 +367,179 @@ async function dlgPin() {
   }
 }
 
+// ================================================================ buscador de tareas
+
+// Convierte un <input> en buscador de tareas. Mientras escribes salen, al
+// momento, tus habituales, las usadas en el periodo visible y tus favoritas y
+// buscadas; con un NUMERO de tarea o 3 letras, ademas, lo que haya en TODO
+// ProyectosTIC. Cada resultado dice su proyecto y su tarea padre (las muchas
+// "Mantenimientos" de padres distintos se distinguen) y lleva una estrella
+// para marcarla o quitarla de favoritas. alElegir(t) recibe {id, nombre}.
+// La lista va en <body> con position: fixed: dentro de un dialogo, su cuerpo
+// con scroll la recortaria.
+function buscadorTarea(input, { alElegir }) {
+  input.removeAttribute("list");
+  input.setAttribute("autocomplete", "off");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "false");
+  const caja = el("div", { class: "buscador-tareas", role: "listbox" });
+  caja.hidden = true;
+  document.body.append(caja);
+  let items = [], activo = -1, seq = 0, espera = null, remoto = { q: "", tareas: null, error: "" };
+  const normal = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const consulta = () => normal(input.value.trim()).replace(/^#/, "");
+
+  function grupos(q) {
+    const encaja = (t) => !q || normal(`${t.id} ${t.nombre}`).includes(q);
+    const max = q ? 8 : 5;
+    const vistas = new Set();
+    const tomar = (lista) => lista.filter((t) => t && t.id && !vistas.has(String(t.id)) && encaja(t))
+      .slice(0, max).map((t) => { vistas.add(String(t.id)); return t; });
+    const out = [
+      ["Tus tareas habituales", tomar((st.habituales?.filas || []).map((h) => ({ id: h.wp_id, nombre: h.tarea })))],
+      [st.vista === "mes" ? "Usadas este mes" : "Usadas esta semana",
+       tomar(st.dias.flatMap((d) => d.apuntes).filter((a) => a.destino !== "inari")
+         .map((a) => ({ id: a.wp_id, nombre: a.tarea })))],
+      ["Favoritas y buscadas", tomar([...st.tareas].map(([texto, id]) => ({ id, nombre: texto.split(" - ").slice(1).join(" - ") || texto })))],
+    ];
+    if (remoto.q && remoto.q === q) {
+      out.push(["En todo ProyectosTIC", remoto.tareas ? tomar(remoto.tareas) : null]);
+    }
+    return out;
+  }
+
+  function colocar() {
+    // con zoom en <html>, el rect ya viene ampliado y left/top se volverian a ampliar
+    const z = parseFloat(document.documentElement.style.zoom) || 1;
+    const r = input.getBoundingClientRect();
+    const abajo = innerHeight - r.bottom;
+    caja.style.left = `${r.left / z}px`;
+    caja.style.width = `${Math.max(r.width, 380) / z}px`;
+    if (abajo < 220 && r.top > abajo) {
+      caja.style.top = ""; caja.style.bottom = `${(innerHeight - r.top + 2) / z}px`;
+      caja.style.maxHeight = `${Math.min(340, r.top - 12) / z}px`;
+    } else {
+      caja.style.bottom = ""; caja.style.top = `${(r.bottom + 2) / z}px`;
+      caja.style.maxHeight = `${Math.min(340, abajo - 12) / z}px`;
+    }
+  }
+
+  function pintar() {
+    const q = consulta();
+    items = [];
+    const nodos = [];
+    for (const [titulo, lista] of grupos(q)) {
+      if (lista === null) {
+        nodos.push(el("div", { class: "bt-grupo", text: titulo }), el("div", { class: "bt-nada", text: "Buscando…" }));
+        continue;
+      }
+      if (!lista.length) {
+        if (titulo === "En todo ProyectosTIC") {
+          nodos.push(el("div", { class: "bt-grupo", text: titulo }),
+                     el("div", { class: "bt-nada", text: remoto.error || "Nada más con eso." }));
+        }
+        continue;
+      }
+      nodos.push(el("div", { class: "bt-grupo", text: titulo }));
+      for (const t of lista) {
+        const i = items.length;
+        items.push(t);
+        const fav = st.favoritas?.has(Number(t.id));
+        const estrella = el("button", { class: `bt-fav${fav ? " si" : ""}`, type: "button", tabindex: "-1",
+          title: fav ? "Quitar de favoritas" : "Añadir a favoritas", text: fav ? "★" : "☆" });
+        estrella.addEventListener("mousedown", (e) => e.preventDefault());
+        estrella.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const r = await llamar("favorita", t.id, t.nombre, !fav);
+          ponerTareas(r.tareas);
+          estado(fav ? `«${t.nombre}» ya no es favorita.` : `«${t.nombre}» añadida a favoritas.`);
+          pintar();
+        });
+        const ruta = [t.proyecto, t.padre].filter(Boolean).join(" › ");
+        const fila = el("div", { class: `bt-item${i === activo ? " activo" : ""}`, role: "option" },
+          estrella,
+          el("div", { class: "bt-texto" },
+            el("div", { class: "bt-nombre" }, el("span", { class: "bt-id", text: String(t.id) }), ` ${t.nombre}`),
+            ruta ? el("div", { class: "bt-ruta", text: ruta }) : null));
+        fila.addEventListener("mousedown", (e) => { e.preventDefault(); elegir(t); });
+        nodos.push(fila);
+      }
+    }
+    if (!nodos.length) {
+      nodos.push(el("div", { class: "bt-nada", text: q.length < 3 && !/^\d+$/.test(q)
+        ? "Sigue escribiendo: con 3 letras o un número se busca en todo ProyectosTIC."
+        : "Sin resultados." }));
+    }
+    caja.replaceChildren(...nodos);
+    caja.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    colocar();
+  }
+
+  function buscarFuera() {
+    const q = consulta();
+    clearTimeout(espera);
+    if (!(/^\d+$/.test(q) || q.length >= 3)) { remoto = { q: "", tareas: null, error: "" }; return; }
+    if (remoto.q === q && remoto.tareas) return;
+    remoto = { q, tareas: null, error: "" };
+    const mio = ++seq;
+    espera = setTimeout(async () => {
+      let r;
+      try { r = await api().buscar_tareas(input.value.trim()); }
+      catch (_e) { r = { error: "No se pudo buscar (¿sin conexión?)." }; }
+      if (mio !== seq) return;
+      remoto = { q, tareas: r.error ? [] : r.tareas, error: r.error || "" };
+      if (!caja.hidden) pintar();
+    }, 350);
+  }
+
+  function cerrar() {
+    caja.hidden = true;
+    activo = -1;
+    input.setAttribute("aria-expanded", "false");
+  }
+
+  function elegir(t) {
+    input.value = `${t.id} - ${t.nombre}`;
+    cerrar();
+    alElegir(t);
+  }
+
+  input.addEventListener("focus", () => { input.select(); activo = -1; pintar(); });
+  input.addEventListener("input", () => { activo = -1; buscarFuera(); pintar(); });
+  input.addEventListener("blur", () => setTimeout(cerrar, 120));
+  input.addEventListener("keydown", (e) => {
+    if (caja.hidden) {
+      if (e.key === "ArrowDown") { e.preventDefault(); pintar(); }
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!items.length) return;
+      activo = (activo + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+      pintar();
+      caja.querySelector(".bt-item.activo")?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && activo >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      elegir(items[activo]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      cerrar();
+    }
+  });
+  addEventListener("resize", cerrar);
+  // si el campo desaparece (se cierra el dialogo), su lista tambien
+  new MutationObserver(() => { if (!input.isConnected) { caja.remove(); } })
+    .observe(document.body, { childList: true, subtree: true });
+}
+
 // ================================================================ buscar tarea
 
-function dlgBuscar() {
+/* alElegir(tarea): quien lo abre se queda con la tarea elegida (Editar dia);
+   sin el, la tarea va al formulario de Añadir apunte, como siempre. */
+function dlgBuscar({ alElegir = null } = {}) {
   let tareas = [], filtradas = [], seq = 0;
   const proy = el("select", {}, el("option", { value: "", text: "Cargando proyectos…" }));
   const filtro = entrada("", { placeholder: "Filtra la lista o busca en todos (Enter)", class: "ancho" });
@@ -386,7 +558,8 @@ function dlgBuscar() {
   const pintar = () => {
     const f = filtro.value.trim().toLowerCase();
     filtradas = tareas.filter((t) => t.nombre.toLowerCase().includes(f) || String(t.id).includes(f));
-    lista.replaceChildren(...filtradas.map((t, i) => el("option", { value: String(i), text: `${t.id} - ${t.nombre}` })));
+    lista.replaceChildren(...filtradas.map((t, i) => el("option", { value: String(i),
+      text: `${t.id} - ${t.nombre}${t.padre ? `   (› ${t.padre})` : ""}` })));
   };
   llamar("proyectos").then((ps) => {
     proy.replaceChildren(el("option", { value: "", text: "— elige un proyecto —" }),
@@ -410,7 +583,7 @@ function dlgBuscar() {
   lista.addEventListener("dblclick", () => elegir(d));
   async function buscarTodo() {
     const texto = filtro.value.trim();
-    if (texto.length < 3) { info.textContent = "Escribe al menos 3 letras y pulsa «Buscar en todo» (o Enter)."; return; }
+    if (texto.length < 3 && !/^#?\d+$/.test(texto)) { info.textContent = "Escribe al menos 3 letras, o el número de la tarea, y pulsa «Buscar en todo» (o Enter)."; return; }
     const mio = ++seq;
     info.textContent = `Buscando «${texto}» en todos los proyectos…`;
     const r = await llamar("buscar_tareas", texto);
@@ -426,8 +599,9 @@ function dlgBuscar() {
     const elegidas = [...lista.selectedOptions].map((o) => filtradas[Number(o.value)]);
     if (!elegidas.length) { info.textContent = "Elige al menos una tarea de la lista."; return; }
     ponerTareas(await llamar("elegir_tareas", elegidas, fav.checked));
-    $("tarea").value = `${elegidas[0].id} - ${elegidas[0].nombre}`;
     dd.cerrar();
+    if (alElegir) { alElegir(elegidas[0]); return; }
+    $("tarea").value = `${elegidas[0].id} - ${elegidas[0].nombre}`;
     await elegirTarea();
     estado(fav.checked ? `${elegidas.length} tarea(s) guardada(s) como favoritas.`
                        : `${elegidas.length} tarea(s) añadida(s) al desplegable.`);

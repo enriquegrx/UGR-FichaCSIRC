@@ -313,6 +313,13 @@ async function arrancar() {
   if (ini.logo) { $("logo").src = ini.logo; $("logo").hidden = false; }
   if (ini.inari) { $("subtitulo").textContent += " e INARI"; $("conn-inari").hidden = false; }
   ponerTareas(ini.tareas);
+  // El campo Tarea del formulario: buscador (habituales, favoritas y todo
+  // ProyectosTIC, tambien por numero de tarea).
+  buscadorTarea($("tarea"), { alElegir: async (t) => {
+    if (!textoDeTarea(t.id)) ponerTareas(await llamar("elegir_tareas", [t], false));
+    $("tarea").value = textoDeTarea(t.id) || `${t.id} - ${t.nombre}`;
+    await elegirTarea();
+  } });
   ponerActividades(ini.actividades, ini.actividad_preferida);
   await cargarSemana({ marcarHoy: true });
   avisarSemanaAnterior();
@@ -1101,6 +1108,7 @@ function actualizarTotales() {
 
 function ponerTareas(tareas) {
   st.tareas.clear();
+  st.favoritas = new Set(tareas.filter((t) => t.favorita).map((t) => Number(t.id)));
   $("lista-tareas").replaceChildren(...tareas.map((t) => {
     st.tareas.set(t.texto, t.id);
     return el("option", { value: t.texto });

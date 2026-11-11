@@ -648,6 +648,32 @@ class TestDialogos(Base):
             self.assertIn("NOVEDADES.md", texto, f)
             self.assertIn("TECNOLOGIA.md", texto, f)
 
+    def test_buscar_por_numero_de_tarea(self):
+        w = {"id": 11754, "subject": "[2026_ATE] Mantenimientos",
+             "_links": {"project": {"title": "ATE"}, "parent": {"title": "[2026_ATE] Servicio"}}}
+        with mock.patch.object(core, "_get", return_value=w) as m_get:
+            r = self.api.buscar_tareas("#11754")
+        m_get.assert_called_once_with("/api/v3/work_packages/11754")
+        self.assertEqual(r["tareas"], [{"id": 11754, "nombre": "[2026_ATE] Mantenimientos",
+                                        "proyecto": "ATE", "padre": "[2026_ATE] Servicio",
+                                        "favorita": False}])
+        # no existe o no es tuya: "nada", no un error
+        no = core.requests.HTTPError(response=mock.Mock(status_code=404))
+        with mock.patch.object(core, "_get", side_effect=no):
+            self.assertEqual(self.api.buscar_tareas("99")["tareas"], [])
+        self.assertIn("error", self.api.buscar_tareas("ab"))      # texto corto, sí; número corto, no
+
+    def test_estrella_marca_y_quita_favorita(self):
+        favs = []
+        with mock.patch.object(core, "FAVORITOS", favs), \
+             mock.patch.object(core, "guardar_config_valor"):
+            r = self.api.favorita(11754, "Mantenimientos", True)
+            self.assertTrue(next(t for t in r["tareas"] if t["id"] == 11754)["favorita"])
+            r = self.api.favorita(11754, "Mantenimientos", False)
+            self.assertEqual(favs, [])
+            # sigue en el desplegable de la sesion, ya sin estrella
+            self.assertFalse(next(t for t in r["tareas"] if t["id"] == 11754)["favorita"])
+
     def test_abrir_github_solo_el_repo(self):
         with mock.patch.object(web.webbrowser, "open") as m_open:
             self.api.abrir_github("releases")

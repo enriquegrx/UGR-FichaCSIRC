@@ -20,6 +20,7 @@
     { id: 13001, nombre: "[ATE] Permisos" },
   ];
   const apuntes = {};      // iso -> [{...}]
+  const favDemo = new Set([11765, 12063, 12065, 13001]);
   const marcas = { nolab: {}, guardia: new Set(), tele: new Set() };
   let siguiente = 100;
   let borrados = null;
@@ -78,7 +79,7 @@
   window.pywebview = { api: {
     inicio: () => espera({
       version: "3.1.0", plataforma: "Demo", lunes: iso(l), inari: false, logo: "../logo_ugr.png",
-      tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })),
+      tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })),
       actividades: ["Actuaciones técnicas", "Asuntos propios", "Formación", "Soporte"],
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
@@ -270,8 +271,20 @@
     proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" }]),
     tareas_de_proyecto: (pid) => espera(pid === "2" ? { error: "No tienes permiso para ver las tareas de este proyecto." }
       : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
-    buscar_tareas: (t) => espera(t.length < 3 ? { error: "Escribe al menos 3 letras." }
-      : { tareas: [{ id: 14000, nombre: "[ASG] Migración de correo" }] }),
+    buscar_tareas: (t) => {
+      const q = t.trim().replace(/^#/, "");
+      const todas = [{ id: 14000, nombre: "[ASG] Migración de correo", proyecto: "Sistemas de Gestión", padre: "[2026_ASG] Proyectos" },
+        { id: 11765, nombre: "[2026_ASG] Mantenimientos", proyecto: "Sistemas de Gestión", padre: "[2026_ASG] Servicio" },
+        { id: 11754, nombre: "[2026_ATE] Mantenimientos", proyecto: "ATE", padre: "[2026_ATE] Servicio" }];
+      if (/^\d+$/.test(q)) return espera({ tareas: todas.filter((x) => String(x.id) === q).map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
+      if (q.length < 3) return espera({ error: "Escribe al menos 3 letras, o el número de la tarea." });
+      return espera({ tareas: todas.filter((x) => x.nombre.toLowerCase().includes(q.toLowerCase())).map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
+    },
+    favorita: (id, nombre, si) => {
+      if (si) { favDemo.add(Number(id)); if (!tareas.some((x) => x.id === Number(id))) tareas.unshift({ id: Number(id), nombre }); }
+      else favDemo.delete(Number(id));
+      return espera({ tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })) });
+    },
     elegir_tareas: (ts) => {
       for (const t of ts) if (!tareas.some((x) => x.id === t.id)) tareas.unshift(t);
       return espera(tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })));
