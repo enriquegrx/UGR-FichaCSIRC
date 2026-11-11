@@ -28,10 +28,20 @@ cp logo_ugr.png NOVEDADES.md TECNOLOGIA.md "$APP/"
 
 # Librerias de Python PURAS (sirven para cualquier Python 3.10+ del sistema).
 # pywebview usa en Linux el PyGObject del sistema, que no va aqui.
+# El pip de Ubuntu 22.04 es de 2022 y no sabe construir algunas librerias
+# desde su codigo fuente: se usa uno actual en un entorno aislado.
+python3 -m venv build/linux/venv
+build/linux/venv/bin/python -m pip install --quiet --upgrade pip
+PIP="build/linux/venv/bin/python -m pip"
 # charset-normalizer se publica tambien compilado para UNA version de Python:
-# desde su codigo fuente queda puro y vale para la 3.10 (22.04) y la 3.12 (24.04).
-python3 -m pip install --quiet --target "$APP/vendor" --no-binary charset-normalizer \
-  "pywebview>=6.2,<7" requests
+# se toma su version pura (py3-none-any), que vale para 3.10 (22.04) y 3.12 (24.04).
+$PIP install --quiet --target "$APP/vendor" --only-binary=:all: \
+  --implementation py --platform any --python-version 3.10 charset-normalizer
+# El resto, sin dependencias (ya estan todas aqui y son puras; proxy_tools solo
+# se publica como codigo fuente y se construye, tambien puro).
+$PIP install --quiet --target "$APP/vendor" --no-deps \
+  "pywebview>=6.2,<7" proxy_tools bottle typing_extensions \
+  requests urllib3 idna certifi
 # nada compilado: si se colara, en otra version de Python no cargaria
 if find "$APP/vendor" -name "*.so" | grep -q .; then
   echo "ERROR: hay librerias compiladas en vendor/:"; find "$APP/vendor" -name "*.so"; exit 1
