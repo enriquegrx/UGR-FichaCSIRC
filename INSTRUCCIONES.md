@@ -202,7 +202,16 @@ La app recuerda la vista que dejaste.
 - 📋 **Ctrl+C** sobre un día y **Ctrl+V** en los marcados: copia ese día tal
   cual (también con botón derecho → *Copiar este día* / *Pegar aquí*).
 - ↩️ Después de borrar, editar, mover o añadir, abajo sale un aviso con
-  **Deshacer** (o Ctrl+Z).
+  **Deshacer** (o Ctrl+Z). **Ctrl+Z otra vez** deshace lo anterior, hasta 20
+  acciones; si falla la conexión, vuelve a pulsarlo para reintentar.
+- 🖥 Lo que lleva **«(local)»** en el botón derecho de un día (festivo,
+  vacaciones, apertura de curso, baja, permiso por horas) se guarda **solo en
+  tu FichaCSIRC**: no va a ProyectosTIC. Si tienes una tarea de permisos o
+  bajas, la app te ofrece imputarlo ahí.
+- 💾 **Copias de seguridad** (*Herramientas*): tu configuración se copia sola
+  cuando cambias favoritas, plantillas, permisos o festivos. Desde ahí vuelves
+  a una copia anterior, o **exportas** la configuración para llevártela a otro
+  equipo (sin API key ni PIN) e **importas** allí.
 - 🪟 **Deja a la vista solo lo que uses**: las cajas de abajo se minimizan
   (**–**) o se cierran (**×**), y el menú **Ver** las vuelve a poner (también
   la franja de resumen y la leyenda de colores).
