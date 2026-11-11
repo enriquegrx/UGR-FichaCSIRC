@@ -222,6 +222,8 @@ configuración.
 | `build_instalador.bat` | Genera el instalador con Inno Setup en local. |
 | `build_macos.sh` | Compilación local de apps macOS y su `.dmg`. |
 | `NOVEDADES.md` | Changelog para usuarios; se empaqueta y se ve en Ayuda → Novedades. |
+| `build_linux.sh` + `fichacsirc_linux.py` | Linux: `.deb` y AppImage sin PyInstaller; usan Python, PyGObject y WebKitGTK del sistema (WebKitGTK no se puede empaquetar). GitHub Actions prueba que arranca en Ubuntu 22.04 y 24.04 con pantalla virtual. |
+| `copias.py` | Copias de seguridad automáticas de `config.json`, restaurar y exportar/importar. |
 | `bandeja.py` | Icono en la bandeja (pystray) e inicio con Windows; solo Windows. |
 | `web/humo.js` + `tests/test_js_humo.py` | Pruebas de humo de la interfaz en Edge/Chrome sin ventana (se saltan sin navegador; desde Git Bash no arranca el navegador: usar PowerShell/cmd). |
 | `TECNOLOGIA.md` | Stack y plan de migración a Rust/Tauri, para usuarios; se empaqueta y se ve en Ayuda → Tecnología utilizada. |

@@ -474,6 +474,19 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.2.0 **Linux (Ubuntu)**: los dos usuarios de Linux usan Ubuntu. `.deb` +
+  AppImage con `build_linux.sh`, SIN PyInstaller: WebKitGTK depende de
+  programas auxiliares en rutas fijas y empaquetado se rompe; se usan Python,
+  PyGObject y WebKitGTK del sistema (el .deb los declara) y se meten solo la
+  app y sus librerías puras (`vendor/`, wheels `py3-none-any` para 3.10+).
+  `fichacsirc_linux.py` comprueba WebKitGTK y si falta dice qué instalar. Los
+  lanzadores fijan `FICHACSIRC_CONFIG` (~/.config) y `FICHACSIRC_LANZADOR`
+  (el aviso diario lanza el .AppImage real, no su montaje temporal). Aviso
+  diario = temporizador de usuario de systemd. CI: build en 22.04, compileall
+  con su Python 3.10, y prueba de arranque con xvfb (`timeout` → 124 = seguía
+  abierta) en 22.04 y 24.04; `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS` solo
+  en CI (los runners no permiten el sandbox de WebKit). Sin bandeja ni
+  instalación automática de actualizaciones (abre la página).
 - v3.2.0 (rama `mejoras/3.2`, sin publicar): **copias de seguridad** (`copias.py`,
   sin dependencias del motor). Hook en `escribir_json_atomico` (motor) y en
   `configurar.escribir_config` (asistente): copia en `copias/` si cambia la

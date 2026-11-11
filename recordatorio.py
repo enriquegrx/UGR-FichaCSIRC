@@ -10,7 +10,8 @@ Dos usos:
      opcion de abrir la aplicacion. Si no hay nada pendiente, no molesta.
   2) Como modulo: la app lo usa para activar/desactivar el aviso diario.
      En Windows se programa con el Programador de tareas (schtasks); en macOS
-     con un LaunchAgent de usuario (launchd).
+     con un LaunchAgent de usuario (launchd); en Linux con un temporizador de
+     usuario de systemd (~/.config/systemd/user).
 
 El aviso diario es opcional y por-usuario; no requiere permisos de administrador.
 """
@@ -19,6 +20,8 @@ import os
 import re
 import sys
 import html
+import shlex
+import shutil
 import plistlib
 import subprocess
 import datetime as dt
@@ -34,8 +37,82 @@ AVISO_TIMEOUT_MIN = 10
 
 
 def recordatorios_soportados():
-    """Windows (schtasks) y macOS (launchd)."""
-    return os.name == "nt" or sys.platform == "darwin"
+    """Windows (schtasks), macOS (launchd) y Linux con systemd."""
+    return os.name == "nt" or sys.platform == "darwin" or _es_linux_systemd()
+
+
+# ----------------------- Linux: temporizador de usuario de systemd -----------------------
+
+UNIDAD_LINUX = "fichacsirc-recordatorio"
+
+
+def _es_linux_systemd():
+    return sys.platform.startswith("linux") and bool(shutil.which("systemctl"))
+
+
+def _dir_systemd():
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "systemd", "user")
+
+
+def _argv_linux():
+    """Lo que lanza el temporizador. El .deb y el AppImage dejan en
+    FICHACSIRC_LANZADOR su lanzador (/usr/bin/fichacsirc o el propio
+    .AppImage: NO la carpeta temporal donde se monta, que cambia cada vez)."""
+    lanzador = os.environ.get("FICHACSIRC_LANZADOR")
+    if lanzador:
+        return [lanzador, "--recordatorio"]
+    return [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "registrar_web.py"), "--recordatorio"]
+
+
+def _unidades_linux(hora):
+    h, m = (int(x) for x in hora.split(":"))
+    servicio = ("[Unit]\nDescription=FichaCSIRC: aviso diario de fichaje\n\n"
+                "[Service]\nType=oneshot\n"
+                f"ExecStart={' '.join(shlex.quote(a) for a in _argv_linux())}\n")
+    temporizador = ("[Unit]\nDescription=FichaCSIRC: aviso diario de fichaje (lunes a viernes)\n\n"
+                    f"[Timer]\nOnCalendar=Mon..Fri *-*-* {h:02d}:{m:02d}:00\n\n"
+                    "[Install]\nWantedBy=timers.target\n")
+    return servicio, temporizador
+
+
+def _systemctl(*args):
+    r = subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout or "").strip() or "systemctl fallo")
+
+
+def _activar_linux(hora):
+    servicio, temporizador = _unidades_linux(hora)
+    d = _dir_systemd()
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, f"{UNIDAD_LINUX}.service"), "w", encoding="utf-8") as f:
+        f.write(servicio)
+    with open(os.path.join(d, f"{UNIDAD_LINUX}.timer"), "w", encoding="utf-8") as f:
+        f.write(temporizador)
+    _systemctl("daemon-reload")
+    _systemctl("enable", "--now", f"{UNIDAD_LINUX}.timer")
+    core.LOG.info("Recordatorio diario (systemd) activado a las %s", hora)
+    _recordar_ejecutable(_argv_linux()[0])
+
+
+def _desactivar_linux():
+    d = _dir_systemd()
+    try:
+        _systemctl("disable", "--now", f"{UNIDAD_LINUX}.timer")
+    except RuntimeError:
+        pass                       # ya no estaba: se borran los ficheros igual
+    for ext in ("timer", "service"):
+        try:
+            os.remove(os.path.join(d, f"{UNIDAD_LINUX}.{ext}"))
+        except FileNotFoundError:
+            pass
+    try:
+        _systemctl("daemon-reload")
+    except RuntimeError:
+        pass
+    core.LOG.info("Recordatorio diario (systemd) desactivado")
 
 
 # ----------------------- mensaje -----------------------
@@ -107,6 +184,8 @@ def _plist_contenido(hora):
 def recordatorio_activo():
     if sys.platform == "darwin":
         return os.path.exists(_plist_path())
+    if _es_linux_systemd():
+        return os.path.exists(os.path.join(_dir_systemd(), f"{UNIDAD_LINUX}.timer"))
     if os.name != "nt":
         return False
     try:
@@ -143,9 +222,12 @@ def activar_recordatorio(hora="16:00"):
         core.LOG.info("Recordatorio diario (launchd) activado a las %s", hora)
         _recordar_ejecutable()
         return
+    if _es_linux_systemd():
+        _activar_linux(hora)
+        return
     if os.name != "nt":
         raise RuntimeError("El aviso diario automatico solo esta disponible "
-                           "en Windows y macOS.")
+                           "en Windows, macOS y Linux con systemd.")
     cmd = ["schtasks", "/create", "/tn", TASK_NAME,
            "/tr", _comando_recordatorio(),
            "/sc", "weekly", "/d", "MON,TUE,WED,THU,FRI",
@@ -168,9 +250,12 @@ def desactivar_recordatorio():
             pass
         core.LOG.info("Recordatorio diario (launchd) desactivado")
         return
+    if _es_linux_systemd():
+        _desactivar_linux()
+        return
     if os.name != "nt":
         raise RuntimeError("El aviso diario automatico solo esta disponible "
-                           "en Windows y macOS.")
+                           "en Windows, macOS y Linux con systemd.")
     r = subprocess.run(["schtasks", "/delete", "/tn", TASK_NAME, "/f"],
                        capture_output=True, text=True,
                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))

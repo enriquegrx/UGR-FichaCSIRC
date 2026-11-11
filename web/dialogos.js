@@ -1340,7 +1340,7 @@ async function dlgRecordatorio() {
       + "Actívalo o desactívalo desde la app normal (Herramientas → Aviso diario de fichaje).");
   }
   if (!e.soportado) {
-    return avisar("Aviso diario de fichaje", "El aviso diario solo está disponible en Windows y macOS.");
+    return avisar("Aviso diario de fichaje", "El aviso diario solo está disponible en Windows, macOS y Linux con systemd.");
   }
   if (e.activo) {
     if (await preguntar("Aviso diario",

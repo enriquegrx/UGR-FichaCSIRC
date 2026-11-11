@@ -7,6 +7,13 @@ instalada aparece en el pie de la ventana.
 
 ## 3.2.0
 
+**FichaCSIRC para Linux (Ubuntu)**
+- Nuevo **.deb** para Ubuntu y Debian (doble clic y se instala con lo que
+  necesita) y **AppImage** (un solo archivo, sin instalar).
+- Todo funciona igual que en Windows y Mac, incluido el aviso diario de
+  fichaje. La bandeja del sistema, de momento, solo en Windows.
+- Las actualizaciones avisan como siempre y abren la página de descarga.
+
 **Copias de seguridad**
 - FichaCSIRC guarda sola una **copia de tu configuración** cada vez que cambian
   tus favoritas, plantillas, permisos, vacaciones o festivos: las 10 últimas y

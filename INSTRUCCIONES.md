@@ -47,6 +47,21 @@ Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INAR
    > 🗑️ **Para desinstalar:** *Configuración de Windows → Aplicaciones →
    > FichaCSIRC → Desinstalar*. Tu configuración y tus horas no se tocan.
 
+### 🐧 Linux (Ubuntu)
+
+1. Descarga **fichacsirc_X.Y.Z_all.deb** de la página de versiones
+   (https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest).
+2. **Doble clic** sobre él → *Instalar* (o en una terminal:
+   `sudo apt install ./fichacsirc_*_all.deb`). Instala solo lo que le falte.
+3. Ábrela desde el menú de aplicaciones: **FichaCSIRC**.
+
+¿Otra distribución? Usa **FichaCSIRC-linux-x86_64.AppImage**: dale permiso de
+ejecución (botón derecho → *Propiedades* → *Permitir ejecutar*) y ábrelo. Si
+falta WebKitGTK, te dice qué instalar.
+
+Tu configuración se guarda en `~/.config/FichaCSIRC`. Al salir una versión
+nueva, la app te avisa y abre la página para descargarla.
+
 ### 🍎 macOS
 
 1. **Descarga** el `.dmg` de tu Mac desde:

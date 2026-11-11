@@ -79,6 +79,54 @@ jobs:
             dist/FichaCSIRC-Instalador.exe
           generate_release_notes: true
 
+  # Linux: .deb (Ubuntu/Debian) y AppImage, sin PyInstaller (ver build_linux.sh).
+  # Se construye en la Ubuntu mas antigua soportada (22.04, Python 3.10) y se
+  # PRUEBA que arranca en una pantalla virtual (xvfb) antes de publicar.
+  build-linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Dependencias del sistema (WebKitGTK, pantalla virtual)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q python3-pip python3-gi gir1.2-webkit2-4.1 xvfb dpkg-dev
+
+      - name: Construir .deb y AppImage
+        run: bash build_linux.sh
+
+      - name: El codigo compila con el Python de Ubuntu 22.04 (3.10)
+        run: python3 -m compileall -q build/linux/app
+
+      # 124 = timeout lo corto con la ventana abierta (el asistente, sin config):
+      # arranco bien. Cualquier otro codigo es que se cerro solo.
+      # El sandbox de WebKit no funciona en los runners de GitHub (solo aqui).
+      - name: Probar que arranca (.deb)
+        env:
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+          FICHACSIRC_CONFIG: /tmp/fichacsirc-deb/config.json
+        run: |
+          sudo apt-get install -y -q ./dist/fichacsirc_*_all.deb
+          set +e; xvfb-run -a timeout 25 fichacsirc; rc=$?; set -e
+          echo "codigo: $rc"; test "$rc" = 124
+
+      - name: Probar que arranca (AppImage)
+        env:
+          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          FICHACSIRC_CONFIG: /tmp/fichacsirc-appimage/config.json
+        run: |
+          set +e; xvfb-run -a timeout 25 ./dist/FichaCSIRC-linux-x86_64.AppImage; rc=$?; set -e
+          echo "codigo: $rc"; test "$rc" = 124
+
+      - name: Publicar release con Linux
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/fichacsirc_*_all.deb
+            dist/FichaCSIRC-linux-x86_64.AppImage
+
   build-macos:
     strategy:
       fail-fast: false

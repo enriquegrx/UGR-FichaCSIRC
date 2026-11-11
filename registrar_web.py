@@ -522,7 +522,8 @@ class Api:
             "zoom": self.zoom(),
             "tema": self.tema(),
             "plataforma": "macOS" if sys.platform == "darwin" else
-                          ("Windows" if os.name == "nt" else sys.platform),
+                          ("Windows" if os.name == "nt" else
+                           ("Linux" if sys.platform.startswith("linux") else sys.platform)),
             "lunes": (hoy - dt.timedelta(days=hoy.weekday())).isoformat(),
             "inari": destinos.inari_activo(),
             "logo": logo,
