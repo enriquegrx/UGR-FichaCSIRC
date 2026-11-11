@@ -1967,6 +1967,8 @@ class Api:
             pass
         return {
             "primera_vez": core is None or self._de_cero,
+            # donde se guarda (para decirlo: nada de esto va a ProyectosTic)
+            "ruta_config": os.path.dirname(os.path.abspath(ccore.CONFIG_PATH)),
             "tema": self.tema(),
             "hay_pin": "pin" in previa,
             "aviso": ERROR_ARRANQUE if ERROR_ARRANQUE and "No encuentro" not in ERROR_ARRANQUE else "",

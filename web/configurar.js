@@ -26,6 +26,14 @@ const PASOS = [
 ];
 
 const caja = () => $("contenido");
+// append() de DOM escribe "null" si le llega un null (salia "nullnull" en la
+// bienvenida al abrir el asistente desde Herramientas): se filtran.
+const poner = (...nodos) => caja().append(...nodos.filter((n) => n !== null && n !== undefined && n !== false));
+// Titulo de paso con la etiqueta "Solo en este equipo": todo lo del asistente
+// se guarda en tu FichaCSIRC; nada cambia en ProyectosTic.
+const tituloLocal = (texto) => el("h2", { class: "titulo-local" }, texto,
+  el("span", { class: "chip-local", title: "Se guarda en tu FichaCSIRC; no cambia nada en ProyectosTIC",
+               text: "🖥 Solo en este equipo" }));
 const fila = (etiqueta, control, ayuda) => el("div", { class: "campo-asistente" },
   el("label", { text: etiqueta }), control, ayuda ? el("span", { class: "tenue", text: ayuda }) : null);
 function entrada(valor, props = {}) {
@@ -37,13 +45,16 @@ function entrada(valor, props = {}) {
 // ------------------------------------------------------------------ pasos
 
 function pBienvenida() {
-  caja().append(
+  poner(
     el("h2", { text: "Bienvenido al asistente de FichaCSIRC" }),
     el("p", { text: "Te guiará para configurar el registro de horas en OpenProject (ProyectosTic):" }),
     el("ul", {},
       el("li", { text: "la dirección y tu clave de acceso (API key);" }),
       el("li", { text: "tu jornada (horas normales, desayuno y verano);" }),
       el("li", { text: "tus tareas favoritas y la actividad por defecto." })),
+    el("p", { class: "nota-local" }, "🖥 ", el("b", { text: "Todo esto se guarda solo en este equipo" }),
+      " (en tu FichaCSIRC). No cambia nada en ProyectosTIC/OpenProject: allí solo llegan las horas que "
+      + "imputes después.", W.ini.ruta_config ? el("span", { class: "tenue", text: ` Carpeta: ${W.ini.ruta_config}` }) : null),
     W.ini.primera_vez ? el("p", { class: "tenue", text: "Es la primera vez que abres FichaCSIRC: hace falta "
       + "configurarlo antes de registrar horas." }) : null,
     W.ini.aviso ? el("p", { class: "nota ambar", text: `Tu configuración no se pudo leer (${W.ini.aviso}). `
@@ -61,10 +72,12 @@ function pConexion() {
   const guardar = () => { W.d.url = url.value.trim(); W.d.key = key.value.trim(); };
   url.addEventListener("input", guardar);
   key.addEventListener("input", guardar);
-  caja().append(
-    el("h2", { text: "Conexión con ProyectosTic" }),
+  poner(
+    tituloLocal("Conexión con ProyectosTic"),
     fila("URL de OpenProject", url),
     fila("API key", key, "Se saca en: avatar (arriba a la derecha) › Mi cuenta › Tokens de acceso › API"),
+    el("p", { class: "tenue pequeno", text: "La API key se guarda solo en este equipo; «Probar conexión» "
+      + "solo lee de ProyectosTIC, no cambia nada." }),
     el("button", { text: "Probar conexión", onclick: () => probar(msg) }), msg);
   url.focus();
 }
@@ -119,8 +132,10 @@ function pJornada() {
   };
   for (const c of [jor, des, ver, vini, vfin]) c.addEventListener("input", recalcular);
   for (const c of [tdes, tver]) c.addEventListener("change", recalcular);
-  caja().append(
-    el("h2", { text: "Tu jornada (lunes a viernes)" }),
+  poner(
+    tituloLocal("Tu jornada (lunes a viernes)"),
+    el("p", { class: "tenue pequeno", text: "Sirve para calcular lo que te falta cada día. No cambia tu "
+      + "jornada en ProyectosTIC ni en el portal de personal." }),
     fila("Horas por día", jor, "tu jornada OFICIAL, p. ej. 7"),
     el("label", { class: "check bloque" }, tdes, " Descontar desayuno (no se ficha)"),
     fila("Desayuno (horas)", des, "p. ej. 0,5"),
@@ -172,8 +187,10 @@ function pTareas() {
     }
     pintarFavs();
   };
-  caja().append(
-    el("h2", { text: "Tareas favoritas y actividad" }),
+  poner(
+    tituloLocal("Tareas favoritas y actividad"),
+    el("p", { class: "tenue pequeno", text: "Tus favoritas son un atajo en tu FichaCSIRC: no te apuntan "
+      + "ni te quitan de ninguna tarea en ProyectosTIC." }),
     fila("Proyecto", proy),
     el("div", { class: "dos-listas" },
       el("div", {}, el("h4", { text: "Tareas del proyecto" }), tareas,
@@ -201,7 +218,7 @@ function pTareas() {
 // el asistente no lo pisa.
 function pPin() {
   if (W.ini.hay_pin) {
-    caja().append(el("h2", { text: "PIN de acceso" }),
+    poner(tituloLocal("PIN de acceso"),
       el("p", { text: "Ya tienes un PIN de acceso: FichaCSIRC lo pide al abrirse." }),
       el("p", { class: "tenue", text: "Para cambiarlo o quitarlo: Herramientas → PIN de acceso." }));
     return;
@@ -216,8 +233,8 @@ function pPin() {
   const pintar = () => { campos.hidden = !si.checked; guardar(); };
   si.onchange = () => { pintar(); if (si.checked) pin.focus(); };
   pin.oninput = pin2.oninput = guardar;
-  caja().append(
-    el("h2", { text: "PIN de acceso (opcional)" }),
+  poner(
+    tituloLocal("PIN de acceso (opcional)"),
     el("p", { text: "Si compartes el equipo, FichaCSIRC puede pedir un PIN cada vez que se abre." }),
     el("label", { class: "check" }, si, " Pedir un PIN al abrir FichaCSIRC"),
     campos,
@@ -246,13 +263,15 @@ function pResumen() {
     ["PIN de acceso", W.ini.hay_pin ? "el que ya tienes" : (d.pin_si ? "sí (se pedirá al abrir)" : "no")],
   ];
   const MAX = 10;   // no alargar el resumen sin fin si hay muchas favoritas
-  caja().append(
+  poner(
     el("h2", { text: "Resumen" }),
     el("table", { class: "tabla-dlg" }, el("tbody", {},
       ...lineas.map(([k, v]) => el("tr", {}, el("td", { class: "tenue", text: k }), el("td", { text: v }))))),
     el("ul", { class: "favs-resumen" },
       ...d.favoritos.slice(0, MAX).map((f) => el("li", { text: `${f.id}  ${f.nombre}` })),
       d.favoritos.length > MAX ? el("li", { class: "tenue", text: `… y ${d.favoritos.length - MAX} más` }) : null),
+    el("p", { class: "nota-local" }, "🖥 Se guardará ", el("b", { text: "solo en este equipo" }),
+      W.ini.ruta_config ? ` (${W.ini.ruta_config})` : "", ". ProyectosTIC no cambia."),
     el("p", { class: "tenue", text: "Pulsa «Finalizar» para guardar." }));
 }
 

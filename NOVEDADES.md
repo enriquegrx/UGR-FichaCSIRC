@@ -34,6 +34,9 @@ instalada aparece en el pie de la ventana.
   de permisos o bajas**, te ofrece **imputarlo ahí** con un clic (abre *Editar
   día* con esa tarea y las horas puestas). Con «No volver a preguntarme» deja
   de avisar; en *Herramientas* puedes volver a activarlo.
+- El **asistente de configuración** marca cada paso como **«Solo en este
+  equipo»** y dice en qué carpeta se guarda: nada de lo que configuras ahí
+  (jornada, favoritas, PIN, API key) cambia ProyectosTIC.
 - **Completar con…** dice la actividad de cada tarea (ya no salen dos
   «Mantenimientos» que parecían la misma) y **Añadir otra tarea…** vuelve a
   funcionar (el menú se cerraba solo).

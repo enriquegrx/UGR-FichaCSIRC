@@ -59,13 +59,17 @@ class TestHumoWeb(unittest.TestCase):
         html = html.replace("</body>", '<script src="humo.js"></script>\n</body>')
         with open(os.path.join(cls.web, "humo.html"), "w", encoding="utf-8") as f:
             f.write(html)
+        with open(os.path.join(cls.web, "configurar.html"), encoding="utf-8") as f:
+            asistente = f.read().replace("</body>", '<script src="humo.js"></script>\n</body>')
+        with open(os.path.join(cls.web, "humo_asistente.html"), "w", encoding="utf-8") as f:
+            f.write(asistente)
 
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
-    def _correr(self, consulta):
-        url = "file:///" + os.path.join(self.web, "humo.html").replace("\\", "/") + "?" + consulta
+    def _correr(self, consulta, pagina="humo.html"):
+        url = "file:///" + os.path.join(self.web, pagina).replace("\\", "/") + "?" + consulta
         perfil = os.path.join(self.tmp, "perfil")
         cmd = [navegador(), "--headless=new", "--disable-gpu", "--no-sandbox",
                f"--user-data-dir={perfil}", "--window-size=1440,900",
@@ -91,6 +95,10 @@ class TestHumoWeb(unittest.TestCase):
     def test_recorrido_principal(self):
         lineas = self._correr("demo&humo")
         self.assertGreaterEqual(sum(1 for ln in lineas if ln.startswith("OK")), 20)
+
+    def test_asistente(self):
+        lineas = self._correr("demo&humo", "humo_asistente.html")
+        self.assertTrue(any("todos los pasos" in ln for ln in lineas if ln.startswith("OK")))
 
     def test_pantalla_del_pin(self):
         lineas = self._correr("demo&humo&pin")

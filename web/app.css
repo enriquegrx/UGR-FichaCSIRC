@@ -502,6 +502,13 @@ body.arrastrando .dia, body.arrastrando .celda { transition: none; }
 .aviso-semana .enlace { white-space: nowrap; }
 .aviso-semana .cerrar-aviso { border: 0; background: none; color: inherit; font-size: 17px; padding: 0 4px; }
 
+/* asistente: todo es local */
+.titulo-local { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chip-local { font-size: 11.5px; font-weight: 500; padding: 2px 9px; border-radius: 999px;
+              background: var(--tele-bg); color: var(--tele-fg); white-space: nowrap; }
+.nota-local { background: var(--tele-bg); color: var(--texto); border-radius: 6px; padding: 8px 12px; }
+.nota-local .tenue { display: block; margin-top: 4px; font-size: 12px; word-break: break-all; }
+
 /* aviso al marcar un dia solo en este equipo */
 .aviso-local { background: var(--permiso-bg); color: var(--permiso-fg); border-radius: 6px; padding: 4px 12px; margin: 10px 0; }
 .aviso-local p { margin: 6px 0; }

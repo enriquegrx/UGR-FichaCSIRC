@@ -381,6 +381,7 @@
     abrir_github: () => espera({ ok: true }),
     // ---- asistente, actualizaciones, aviso ----
     cfg_cargar: () => espera({ primera_vez: /[?&]primera\b/.test(location.search), aviso: "", experimento: true,
+      ruta_config: "C:\\Users\\demo\\AppData\\Roaming\\FichaCSIRC",
       logo: "", url: "https://proyectostic.ugr.es", hay_key: true, jornada: "7", desayuno_si: true,
       desayuno: "0,5", verano_si: true, verano: "5", verano_inicio: "16/06", verano_fin: "15/09",
       actividad: "soporte", actividades: ["actuacion tecnica", "correctivo", "formacion", "gestion/planificacion", "soporte"],

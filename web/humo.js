@@ -277,5 +277,27 @@
     apuntar("HUMO-FIN");
   }
 
-  cuandoListo(() => setTimeout(() => (/[?&]pin\b/.test(location.search) ? escenarioPin() : escenarioPrincipal()), 50));
+  // El asistente: cada paso se pinta sin errores, sin textos "null" y dice
+  // que todo se guarda solo en este equipo.
+  async function escenarioAsistente() {
+    // Una sola pasada (repintar "Tareas" dos veces deja, en Edge sin ventana,
+    // una carga a medias que no deja terminar al navegador).
+    await prueba("asistente: todos los pasos, sin «null» y «Solo en este equipo»", async () => {
+      ok(await hasta(() => typeof W !== "undefined" && W.ini), "no carga");
+      for (let i = 0; i < PASOS.length; i++) {
+        W.paso = i;
+        mostrar();
+        await espera(150);
+        const c = document.getElementById("contenido");
+        ok(c.querySelector("h2"), `paso ${i + 1} sin título`);
+        ok(!/null|undefined/.test(c.textContent), `paso ${i + 1} escribe null/undefined`);
+        if (i === 0) ok(c.querySelector(".nota-local")?.textContent.includes("solo en este equipo"), "bienvenida sin aviso local");
+        if (i >= 1 && i <= 4) ok(c.querySelector(".chip-local"), `paso ${i + 1} sin «Solo en este equipo»`);
+      }
+    });
+    apuntar("HUMO-FIN");
+  }
+
+  cuandoListo(() => setTimeout(() => (document.body.classList.contains("asistente") ? escenarioAsistente()
+    : /[?&]pin\b/.test(location.search) ? escenarioPin() : escenarioPrincipal()), 50));
 })();

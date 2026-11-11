@@ -786,6 +786,7 @@ class TestAsistente(unittest.TestCase):
 
     def test_cargar_no_manda_la_api_key(self):
         c = self.api.cfg_cargar()
+        self.assertEqual(c["ruta_config"], self.dir)      # se dice donde se guarda (todo es local)
         self.assertNotIn("guardada", str(c))
         self.assertTrue(c["hay_key"])
         self.assertEqual((c["jornada"], c["desayuno"]), ("7", "0,5"))   # oficial = 6,5 + 0,5
