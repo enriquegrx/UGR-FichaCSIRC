@@ -339,13 +339,14 @@ def _pin_correcto(pin, guardado):
 def _config_cambiar(**valores):
     """Cambia claves de config.json SIN el motor (sirve tambien en el asistente
     y con la app aun bloqueada). None = quitar la clave."""
-    cfg = ccore.cargar_previa() or {}
-    for k, v in valores.items():
-        if v is None:
-            cfg.pop(k, None)
-        else:
-            cfg[k] = v
-    ccore.escribir_config(cfg)
+    with ccore.CANDADO_CONFIG:          # leer-cambiar-escribir sin que otro hilo se cuele
+        cfg = ccore.cargar_previa() or {}
+        for k, v in valores.items():
+            if v is None:
+                cfg.pop(k, None)
+            else:
+                cfg[k] = v
+        ccore.escribir_config(cfg)
 
 
 class Api:
@@ -1378,10 +1379,10 @@ class Api:
             raise
 
     def buscar_tareas(self, texto):
-        """Por nombre (3 letras o mas) o por el NUMERO de la tarea."""
+        """Por nombre (desde 1 letra), por el NUMERO de la tarea o, sin texto,
+        todas las abiertas de todos tus proyectos. Antes pedia 3 letras: no hace
+        falta y los usuarios querian buscar en todo sin escribir nada."""
         texto = (texto or "").strip()
-        if not texto.lstrip("#").isdigit() and len(texto) < 3:
-            return {"error": "Escribe al menos 3 letras, o el número de la tarea."}
         favs = {int(f["id"]) for f in core.FAVORITOS}
         return {"tareas": [{**t, "favorita": t["id"] in favs} for t in core.buscar_wp(texto)]}
 

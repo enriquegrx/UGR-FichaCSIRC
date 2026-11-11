@@ -741,7 +741,13 @@ class TestDialogos(Base):
         no = core.requests.HTTPError(response=mock.Mock(status_code=404))
         with mock.patch.object(core, "_get", side_effect=no):
             self.assertEqual(self.api.buscar_tareas("99")["tareas"], [])
-        self.assertIn("error", self.api.buscar_tareas("ab"))      # texto corto, sí; número corto, no
+        # texto corto y vacio: ya no son error (vacio = todas las abiertas)
+        with mock.patch.object(core, "_get", return_value={"_embedded": {"elements": [w]}, "total": 1}) as m_get:
+            self.assertEqual(len(self.api.buscar_tareas("ma")["tareas"]), 1)
+            todas = self.api.buscar_tareas("")["tareas"]
+        self.assertEqual(todas[0]["id"], 11754)
+        filtros = m_get.call_args.kwargs["params"]["filters"]
+        self.assertIn('"status"', filtros)                        # sin texto: las abiertas
 
     def test_estrella_marca_y_quita_favorita(self):
         favs = []

@@ -474,6 +474,15 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.2.1 (nov 2026): **guardados de config.json a la vez.** pywebview atiende
+  cada llamada del JS en su hilo: "No volver a preguntarme" + marcar el día
+  guardaban a la vez con el MISMO `config.json.tmp` → WinError 2 al moverlo,
+  y la lectura-modificación-escritura podía perder un cambio. Ahora: temporal
+  propio por hilo (`.pid-hilo.tmp`) y `configurar.CANDADO_CONFIG` (RLock) en
+  `guardar_config_valores`, `escribir_config` y `_config_cambiar`. Test
+  `test_concurrencia` (3 hilos x 40 guardados). Y `dialogo()` filtra los
+  null de `cuerpo.append` (salía "null" en el aviso local de un festivo).
+
 - v3.2.0 **Linux (Ubuntu)**: los dos usuarios de Linux usan Ubuntu. `.deb` +
   AppImage con `build_linux.sh`, SIN PyInstaller: WebKitGTK depende de
   programas auxiliares en rutas fijas y empaquetado se rompe; se usan Python,

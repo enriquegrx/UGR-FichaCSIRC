@@ -122,6 +122,13 @@
         if (!st.tareas.size) for (const [k, v] of guardadas) st.tareas.set(k, v);
       }
     });
+    await prueba("buscar en todo sin escribir nada", async () => {
+      dlgBuscar();
+      ok(await hasta(() => dlg()), "no abre");
+      [...dlg().querySelectorAll("button")].find((b) => b.textContent.includes("Buscar en todo")).click();
+      ok(await hasta(() => dlg().querySelectorAll("select.lista option").length >= 2), "no lista todas");
+      cerrarTodo();
+    });
     await prueba("formulario: la tarea también se busca", async () => {
       const inp = document.getElementById("tarea");
       inp.dispatchEvent(new Event("focus"));
@@ -171,6 +178,13 @@
       ok(!dlg(), "volvió a preguntar");
       menuDe(3); pulsarMenu("Quitar marca");
       await hasta(() => !cifra(3).toLowerCase().includes("baja"));
+    });
+    await prueba("aviso local de un festivo: sin «null»", async () => {
+      menuDe(3); pulsarMenu("Marcar como festivo (local)");
+      ok(await hasta(() => dlg()), "no avisa");
+      ok(!/null|undefined/.test(dlg().textContent), `el aviso dice: ${dlg().textContent.slice(0, 120)}`);
+      botonDlg("Cancelar");
+      ok(await hasta(() => !dlg()), "Cancelar no cierra");
     });
     await prueba("menú del día: «Añadir otra tarea…» abre su menú", async () => {
       menuDe(4);
@@ -261,6 +275,7 @@
         fn();
         ok(await hasta(() => dlg()), "no abre");
         await espera(300);                 // que terminen sus llamadas a la API
+        ok(!/\bnull\b|undefined/.test(dlg().textContent), "escribe null/undefined");
         if (nombre === "festivos") ok(await hasta(() => document.querySelector(".festivo.ugr input")), "sin días UGR revisables");
         cerrarTodo();
         ok(!dlg(), "no cierra");

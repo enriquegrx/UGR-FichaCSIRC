@@ -12,6 +12,7 @@ pero puedes cerrar el dia sin completarlo. Puedes borrar apuntes.
 
 import os
 import re
+import threading
 import sys
 import json
 import csv
@@ -49,7 +50,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "3.2.0"
+VERSION = "3.2.1"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -309,7 +310,7 @@ def escribir_json_atomico(ruta, datos):
     version, cada marca de dia...). Escribiendo encima, un corte de luz o un
     cierre a mitad lo dejaba truncado y la app ya no arrancaba, perdiendo API
     key, permisos, plantillas y festivos. Asi o queda el viejo o el nuevo."""
-    tmp = f"{ruta}.tmp"
+    tmp = f"{ruta}.{os.getpid()}-{threading.get_ident()}.tmp"   # propio: nunca dos sobre el mismo
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(datos, f, ensure_ascii=False, indent=2)
@@ -346,15 +347,19 @@ def _copia_de_seguridad(cfg):
 
 
 def guardar_config_valores(valores):
-    """Actualiza varias claves de config.json en una sola lectura/escritura."""
-    try:
-        with open(CONFIG_PATH, encoding="utf-8-sig") as f:
-            cfg = json.load(f)
-    except Exception:
-        cfg = {}
-    cfg.update(valores)
-    escribir_json_atomico(CONFIG_PATH, cfg)
-    _cfg.update(valores)
+    """Actualiza varias claves de config.json en una sola lectura/escritura.
+    Con el turno de config.json: leer, cambiar y escribir sin que otro hilo
+    escriba en medio (si no, uno pisaba al otro y se perdia un cambio)."""
+    from configurar import CANDADO_CONFIG
+    with CANDADO_CONFIG:
+        try:
+            with open(CONFIG_PATH, encoding="utf-8-sig") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+        cfg.update(valores)
+        escribir_json_atomico(CONFIG_PATH, cfg)
+        _cfg.update(valores)
 
 
 def guardar_config_valor(clave, valor):
@@ -645,11 +650,28 @@ def tareas_proyecto(pid):
     return [_wp_resumen(w) for w in _get_todos(f"/api/v3/projects/{pid}/work_packages")]
 
 
+MAX_TODAS = 1000      # "Buscar en todo" sin texto: tope de tareas que se traen
+
+
 def buscar_wp(texto, limite=50):
     """Busca tareas en TODOS los proyectos visibles: por su NUMERO (12345 o
-    #12345, la tarea exacta) o por texto en el nombre. Lanza excepcion si falla
-    la red (el que llama decide como avisar)."""
+    #12345, la tarea exacta), por texto en el nombre (de 1 letra en adelante)
+    o, sin texto, TODAS las abiertas (hasta MAX_TODAS). Lanza excepcion si
+    falla la red (el que llama decide como avisar)."""
     t = (texto or "").strip()
+    if not t:
+        filtros = [{"status": {"operator": "o", "values": []}}]
+        out, offset = [], 1
+        while len(out) < MAX_TODAS:
+            data = _get("/api/v3/work_packages",
+                        params={"filters": json.dumps(filtros), "pageSize": 200, "offset": offset,
+                                "sortBy": json.dumps([["subject", "asc"]])})
+            elems = data.get("_embedded", {}).get("elements", [])
+            out.extend(_wp_resumen(w) for w in elems)
+            if not elems or len(out) >= data.get("total", len(out)):
+                break
+            offset += 1
+        return out[:MAX_TODAS]
     m = re.fullmatch(r"#?(\d+)", t)
     if m:
         try:

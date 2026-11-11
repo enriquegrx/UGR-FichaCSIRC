@@ -5,6 +5,22 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.2.1
+
+**Correcciones**
+- Al marcar un día (festivo, vacaciones…) con «No volver a preguntarme», salía
+  «Algo ha fallado… config.json.tmp». Era la app guardando dos cosas a la vez;
+  ahora se guardan por turnos y ningún cambio se pierde.
+- En el aviso de «solo en este equipo» de un festivo aparecía un «null» suelto.
+
+**Mejoras**
+- **Buscar en todo** ya no pide tres letras: con el filtro **vacío** lista
+  todas tus tareas abiertas de todos los proyectos, y con una o dos letras
+  también busca. El campo **Tarea** busca en todo ProyectosTIC desde la
+  primera letra.
+
+---
+
 ## 3.2.0
 
 **FichaCSIRC para Linux (Ubuntu)**

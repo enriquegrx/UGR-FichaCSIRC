@@ -288,7 +288,7 @@
         { id: 11765, nombre: "[2026_ASG] Mantenimientos", proyecto: "Sistemas de Gestión", padre: "[2026_ASG] Servicio" },
         { id: 11754, nombre: "[2026_ATE] Mantenimientos", proyecto: "ATE", padre: "[2026_ATE] Servicio" }];
       if (/^\d+$/.test(q)) return espera({ tareas: todas.filter((x) => String(x.id) === q).map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
-      if (q.length < 3) return espera({ error: "Escribe al menos 3 letras, o el número de la tarea." });
+      if (!q) return espera({ tareas: todas.map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
       return espera({ tareas: todas.filter((x) => x.nombre.toLowerCase().includes(q.toLowerCase())).map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
     },
     favorita: (id, nombre, si) => {

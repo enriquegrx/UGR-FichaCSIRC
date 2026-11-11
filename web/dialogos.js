@@ -12,6 +12,11 @@ const pila = [];   // dialogos abiertos, el ultimo arriba
 /* botones: [{texto, clase, accion(d), izquierda, id}] */
 function dialogo({ titulo, ancho = 520, botones = [] }) {
   const cuerpo = el("div", { class: "dlg-cuerpo" });
+  // append() de DOM escribe "null" si le llega un null (salia "null" en el
+  // aviso de "solo en este equipo" al marcar un festivo): se filtran aqui,
+  // para todos los dialogos.
+  const anadir = cuerpo.append.bind(cuerpo);
+  cuerpo.append = (...nodos) => anadir(...nodos.filter((n) => n !== null && n !== undefined && n !== false));
   const izq = el("div", { class: "dlg-botones" });
   const der = el("div", { class: "dlg-botones" });
   const d = { cuerpo, botones: {}, cerrar: null };
@@ -343,17 +348,21 @@ async function confirmarLocal(d, motivo) {
     // cerrar el dialogo y decir que se eligio (la X y Esc cuentan como Cancelar)
     const salir = (v) => { cerrarDialogo(); fin(v); };
     const nomas = el("input", { type: "checkbox" });
-    const recordar = () => {
+    // se espera a que se guarde antes de marcar el dia: dos guardados a la vez
+    // chocaban (3.2.0)
+    const recordar = async () => {
       if (!nomas.checked) return;
-      llamar("no_avisar_local", motivo).then((r) => { st.ini.avisos_local_no = r.avisos_local_no; }).catch(() => {});
+      try {
+        st.ini.avisos_local_no = (await llamar("no_avisar_local", motivo)).avisos_local_no;
+      } catch (_e) { /* llamar ya aviso */ }
     };
     const botones = [
       { texto: "Cancelar", accion: () => salir(null) },
       { texto: motivo === "permiso" ? "Seguir (solo aquí)" : "Marcar solo aquí", clase: tarea ? "" : "primario",
-        accion: () => { recordar(); salir("local"); } }];
+        accion: async () => { await recordar(); salir("local"); } }];
     if (tarea) {
-      botones.unshift({ texto: "Imputar en esa tarea", clase: "primario", izquierda: true, accion: () => {
-        recordar();
+      botones.unshift({ texto: "Imputar en esa tarea", clase: "primario", izquierda: true, accion: async () => {
+        await recordar();
         salir("imputar");
         dlgEditarDia(d, { tarea, horas: d.falta > 0.001 ? d.falta : d.obj });
       } });
@@ -585,9 +594,8 @@ function buscadorTarea(input, { alElegir }) {
       }
     }
     if (!nodos.length) {
-      nodos.push(el("div", { class: "bt-nada", text: q.length < 3 && !/^\d+$/.test(q)
-        ? "Sigue escribiendo: con 3 letras o un número se busca en todo ProyectosTIC."
-        : "Sin resultados." }));
+      nodos.push(el("div", { class: "bt-nada", text: q
+        ? "Sin resultados." : "Escribe un nombre o un número de tarea: se busca en todo ProyectosTIC." }));
     }
     caja.replaceChildren(...nodos);
     caja.hidden = false;
@@ -598,7 +606,7 @@ function buscadorTarea(input, { alElegir }) {
   function buscarFuera() {
     const q = consulta();
     clearTimeout(espera);
-    if (!(/^\d+$/.test(q) || q.length >= 3)) { remoto = { q: "", tareas: null, error: "" }; return; }
+    if (!q) { remoto = { q: "", tareas: null, error: "" }; return; }   // desde la 1.a letra
     if (remoto.q === q && remoto.tareas) return;
     remoto = { q, tareas: null, error: "" };
     const mio = ++seq;
@@ -661,7 +669,7 @@ function buscadorTarea(input, { alElegir }) {
 function dlgBuscar({ alElegir = null } = {}) {
   let tareas = [], filtradas = [], seq = 0;
   const proy = el("select", {}, el("option", { value: "", text: "Cargando proyectos…" }));
-  const filtro = entrada("", { placeholder: "Filtra la lista o busca en todos (Enter)", class: "ancho" });
+  const filtro = entrada("", { placeholder: "Filtra la lista, o Enter para buscar en todos (vacío: todas)", class: "ancho" });
   const lista = el("select", { multiple: true, size: "14", class: "lista" });
   const info = nota("Cargando proyectos…");
   const fav = el("input", { type: "checkbox" });
@@ -702,17 +710,18 @@ function dlgBuscar({ alElegir = null } = {}) {
   lista.addEventListener("dblclick", () => elegir(d));
   async function buscarTodo() {
     const texto = filtro.value.trim();
-    if (texto.length < 3 && !/^#?\d+$/.test(texto)) { info.textContent = "Escribe al menos 3 letras, o el número de la tarea, y pulsa «Buscar en todo» (o Enter)."; return; }
     const mio = ++seq;
-    info.textContent = `Buscando «${texto}» en todos los proyectos…`;
+    info.textContent = texto ? `Buscando «${texto}» en todos los proyectos…`
+                             : "Cargando todas tus tareas abiertas de todos los proyectos…";
     const r = await llamar("buscar_tareas", texto);
     if (mio !== seq) return;
     if (r.error) { info.textContent = r.error; return; }
     tareas = r.tareas;
     filtro.value = "";
     pintar();
-    info.textContent = tareas.length ? `${tareas.length} tareas encontradas en todos tus proyectos.`
-                                     : `Nada con «${texto}» en tus proyectos.`;
+    info.textContent = tareas.length
+      ? `${tareas.length} tareas ${texto ? "encontradas" : "abiertas"} en todos tus proyectos. Filtra y elige.`
+      : texto ? `Nada con «${texto}» en tus proyectos.` : "No hay tareas abiertas en tus proyectos.";
   }
   async function elegir(dd) {
     const elegidas = [...lista.selectedOptions].map((o) => filtradas[Number(o.value)]);

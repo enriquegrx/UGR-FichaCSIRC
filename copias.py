@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 
 MAX_RECIENTES = 10
 DIAS_DIARIAS = 7
@@ -64,7 +65,7 @@ def _indice(dirc):
 
 
 def _escribir(ruta, datos):
-    tmp = f"{ruta}.tmp"
+    tmp = f"{ruta}.{os.getpid()}-{threading.get_ident()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(datos, f, ensure_ascii=False, indent=2)
     os.replace(tmp, ruta)

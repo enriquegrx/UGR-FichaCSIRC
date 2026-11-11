@@ -14,6 +14,14 @@ import os
 import json
 import sys
 import base64
+import threading
+
+# Un solo turno para escribir config.json en todo el proceso. pywebview atiende
+# cada llamada del JS en su propio hilo: dos guardados a la vez (3.2.0: marcar
+# un festivo con "No volver a preguntarme") compartian config.json.tmp
+# (WinError 2 al moverlo) y uno podia pisar al otro y perder un cambio.
+# RLock: quien ya lo tiene puede volver a entrar (leer-modificar-escribir).
+CANDADO_CONFIG = threading.RLock()
 
 try:
     import requests
@@ -384,19 +392,21 @@ def escribir_config(cfg):
     """Escribe config.json de forma atomica (temporal + os.replace): un corte a
     mitad no puede dejarlo truncado. Misma tecnica que el motor; aqui va
     aparte porque importar rellenar_horas sin config.json hace sys.exit."""
-    tmp = f"{CONFIG_PATH}.tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, ensure_ascii=False, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, CONFIG_PATH)
-    except Exception:
+    # temporal propio de este hilo: nunca dos escrituras sobre el mismo
+    tmp = f"{CONFIG_PATH}.{os.getpid()}-{threading.get_ident()}.tmp"
+    with CANDADO_CONFIG:
         try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        raise
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, CONFIG_PATH)
+        except Exception:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
     try:                       # copia de seguridad si cambio algo que importa
         import copias
         copias.quizas_copiar(CONFIG_PATH, cfg)
