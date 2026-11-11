@@ -1316,7 +1316,7 @@ function dlgAcerca() {
 
 function dlgAtajos() {
   const filas = [["Enter", "Añadir el apunte (desde Horas o Comentario)"],
-    ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…)"],
+    ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…); otra vez, lo anterior (hasta 20)"],
     ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],

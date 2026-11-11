@@ -132,6 +132,20 @@
       ok(await hasta(() => inp.value.includes("Proxmox")), "no rellena el formulario");
       inp.dispatchEvent(new Event("blur"));
     });
+    await prueba("deshacer en varios niveles", async () => {
+      const antes = cifra(2);
+      for (const h of ["2", "3"]) {                     // dos cambios seguidos en el miércoles
+        dias()[2].querySelector(".linea-h.editable").dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+        const i = document.querySelector(".horas-en-sitio");
+        i.value = h; i.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        ok(await hasta(() => cifra(2).startsWith(`${h}h`)), `no cambió a ${h}h`);
+      }
+      teclado("z", { ctrlKey: true });
+      ok(await hasta(() => cifra(2).startsWith("2h")), "el primer Ctrl+Z no volvió a 2h");
+      ok(!$("b-deshacer").hidden, "tras el primero ya no se puede seguir deshaciendo");
+      teclado("z", { ctrlKey: true });
+      ok(await hasta(() => cifra(2) === antes), "el segundo Ctrl+Z no volvió al principio");
+    });
     await prueba("horas editables en la ficha", async () => {
       const antes = cifra(1);
       const s = dias()[1].querySelector(".linea-h.editable");

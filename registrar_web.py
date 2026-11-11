@@ -133,6 +133,15 @@ def actividades_de_permiso():
             for t in core.permisos_tipos()} - {""}
 
 
+def _dia_corto(iso):
+    """'martes 10/11' para los textos de Deshacer."""
+    try:
+        d = dt.date.fromisoformat(iso)
+        return f"{core.DIAS_ES[d.weekday()].lower()} {d.strftime('%d/%m')}"
+    except (ValueError, IndexError, TypeError):
+        return str(iso)
+
+
 def objetivo_dia(d, apuntes, acts_permiso=None):
     """Objetivo del dia contando los permisos IMPUTADOS como actividad.
 
@@ -342,7 +351,8 @@ class Api:
 
     def __init__(self):
         self._cache = {}          # iso -> apuntes (None si fallo la lectura)
-        self._deshacer = None     # pasos para deshacer lo ultimo (borrar / editar dia)
+        self._pila = []           # acciones deshacibles, la ultima al final (Ctrl+Z repetido)
+        self._ids = {}            # id viejo -> id nuevo de los apuntes recreados al deshacer
         self._extras = []         # tareas elegidas con Buscar en esta sesion
         self._copia = None        # copia preparada (dia/semana anterior)
         self._ventana = None      # ventana pywebview (dialogo de guardar)
@@ -997,9 +1007,10 @@ class Api:
                 ultimo = str(e)
         if creados:
             self._recordar(wp_id, comentario, actividad)
-        self._deshacer = deshacer or None
+        self._apilar(f"añadir {_horas(horas)} a {creados} día(s)" if creados > 1
+                     else f"añadir {_horas(horas)} al {_dia_corto(dias_iso[0])}", deshacer)
         return {"creados": creados, "saltados": saltados, "errores": errores,
-                "ultimo": ultimo, "puede_deshacer": bool(deshacer)}
+                "ultimo": ultimo, "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
 
     # ---- arrastrar un apunte a otro dia (Mayus = moverlo) ----
     def mover_apunte(self, fecha, entry_id, destino_iso):
@@ -1018,11 +1029,11 @@ class Api:
         try:
             deshacer.append(self._borrar_uno(fecha, entry_id, "op"))
         except Exception as e:
-            self._deshacer = deshacer or None
+            self._apilar("mover un apunte", deshacer)
             return {"error": f"Se copió al otro día, pero no se pudo quitar de este: {e}",
-                    "puede_deshacer": bool(deshacer)}
-        self._deshacer = [p for p in deshacer if p] or None
-        return {"ok": True, "puede_deshacer": self._deshacer is not None}
+                    "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
+        si = self._apilar(f"mover un apunte al {_dia_corto(destino_iso)}", deshacer)
+        return {"ok": True, "puede_deshacer": si, "quedan": len(self._pila)}
 
     def _recordar(self, wp_id, comentario, actividad):
         try:
@@ -1055,7 +1066,7 @@ class Api:
             return None
         return {"tipo": "crear", "fecha": fecha, "wp_id": datos["wp_id"],
                 "horas": datos["horas"], "comentario": datos["comentario"],
-                "actividad": datos["actividad"]}
+                "actividad": datos["actividad"], "id_original": str(entry_id)}
 
     def eliminar(self, items):
         """items: [{id, fecha, destino}]. Borra y guarda lo necesario para deshacer."""
@@ -1069,30 +1080,74 @@ class Api:
             except Exception as e:
                 errores += 1
                 ultimo = str(e)
-        self._deshacer = deshacer or None
+        dias = sorted({it["fecha"] for it in items})
+        self._apilar(f"borrar {n_ok} apunte(s)" + (f" del {_dia_corto(dias[0])}" if len(dias) == 1 else ""),
+                     deshacer)
         return {"eliminados": n_ok, "errores": errores, "ultimo": ultimo,
-                "puede_deshacer": bool(deshacer)}
+                "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
+
+    # ---- deshacer en varios niveles ----
+    MAX_DESHACER = 20
+
+    def _apilar(self, texto, pasos):
+        """Una accion deshacible a la pila (las MAX_DESHACER ultimas)."""
+        pasos = [p for p in pasos or [] if p]
+        if pasos:
+            self._pila.append({"texto": texto, "pasos": pasos})
+            del self._pila[:-self.MAX_DESHACER]
+        return bool(pasos)
+
+    def _id_actual(self, i):
+        """Un apunte borrado y recreado al deshacer tiene OTRO id en
+        ProyectosTic (no se puede recuperar el original): los pasos mas
+        antiguos que lo nombran usan el nuevo. Puede haber cadena (borrado,
+        recreado, vuelto a borrar...)."""
+        s = str(i)
+        if s not in self._ids:
+            return i
+        vistos = set()
+        while s in self._ids and s not in vistos:
+            vistos.add(s)
+            s = self._ids[s]
+        return s
+
+    def deshacer_estado(self):
+        return {"quedan": len(self._pila),
+                "siguiente": self._pila[-1]["texto"] if self._pila else ""}
 
     def deshacer(self):
-        """Lo contrario de lo ultimo, del final al principio: recrea lo borrado,
-        devuelve las horas editadas a como estaban y borra lo que se anadio."""
-        pasos, self._deshacer = self._deshacer, None
-        restaurados, errores, ultimo = 0, 0, ""
-        for p in reversed(pasos or []):
+        """Deshace la ULTIMA accion de la pila; Ctrl+Z otra vez, la anterior.
+        Del final al principio: recrea lo borrado, devuelve las horas editadas a
+        como estaban y borra lo que se anadio. Lo que falle (sin red, o ya no
+        existe) se queda en la pila para reintentarlo con el siguiente Ctrl+Z,
+        en vez de perderse."""
+        if not self._pila:
+            return {"restaurados": 0, "errores": 0, "ultimo": "", "texto": "",
+                    "pendiente": False, **self.deshacer_estado()}
+        accion = self._pila.pop()
+        restaurados, errores, ultimo, fallidos = 0, 0, "", []
+        for p in reversed(accion["pasos"]):
             try:
                 if p["tipo"] == "crear":
-                    core.crear_entrada(p["fecha"], p["wp_id"], p["horas"],
-                                       p["comentario"], p["actividad"])
+                    nuevo = core.crear_entrada(p["fecha"], p["wp_id"], p["horas"],
+                                               p["comentario"], p["actividad"])
+                    if nuevo and p.get("id_original"):
+                        self._ids[str(p["id_original"])] = str(nuevo)
                 elif p["tipo"] == "editar":
-                    core.actualizar_entrada(p["id"], p["horas"], p["comentario"],
+                    core.actualizar_entrada(self._id_actual(p["id"]), p["horas"], p["comentario"],
                                             p["actividad"] or None, p["wp_id"])
                 else:
-                    core.eliminar_entrada(p["id"])
+                    core.eliminar_entrada(self._id_actual(p["id"]))
                 restaurados += 1
             except Exception as e:
                 errores += 1
                 ultimo = str(e)
-        return {"restaurados": restaurados, "errores": errores, "ultimo": ultimo}
+                fallidos.append(p)
+        if fallidos:
+            # en su orden original, para que el proximo Ctrl+Z los reintente
+            self._pila.append({"texto": accion["texto"], "pasos": list(reversed(fallidos))})
+        return {"restaurados": restaurados, "errores": errores, "ultimo": ultimo,
+                "texto": accion["texto"], "pendiente": bool(fallidos), **self.deshacer_estado()}
 
     # ---- editar un dia entero (boton derecho -> Editar dia) ----
     def guardar_dia(self, fecha, cambios):
@@ -1160,9 +1215,9 @@ class Api:
             except Exception as e:
                 errores += 1
                 ultimo = str(e)
-        self._deshacer = deshacer or None
+        self._apilar(f"editar el {_dia_corto(fecha)}", deshacer)
         return {"hechos": hechos, "errores": errores, "ultimo": ultimo,
-                "puede_deshacer": bool(deshacer)}
+                "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
 
     # ---- menu del dia (marcas locales) ----
     def accion_dia(self, iso, accion, motivo=""):
@@ -1208,10 +1263,11 @@ class Api:
         comentario = apunte["comentario"] if comentario is None else (comentario or "").strip()
         actividad = apunte["actividad"] if actividad is None else actividad
         core.actualizar_entrada(entry_id, horas, comentario, actividad or None, apunte["wp_id"])
-        self._deshacer = [{"tipo": "editar", "id": apunte["id"], "horas": apunte["horas"],
-                           "comentario": apunte["comentario"], "actividad": apunte["actividad"],
-                           "wp_id": apunte["wp_id"]}]
-        return {"ok": True, "puede_deshacer": True}
+        self._apilar(f"cambiar «{apunte.get('wp_titulo') or 'un apunte'}» del {_dia_corto(fecha)}",
+                     [{"tipo": "editar", "id": apunte["id"], "horas": apunte["horas"],
+                       "comentario": apunte["comentario"], "actividad": apunte["actividad"],
+                       "wp_id": apunte["wp_id"]}])
+        return {"ok": True, "puede_deshacer": True, "quedan": len(self._pila)}
 
     # ---- asociar actividad <-> tarea (en los dos sentidos) ----
     def asociaciones(self):
@@ -1297,9 +1353,9 @@ class Api:
                 except Exception as e:
                     errores += 1
                     ultimo = str(e)
-        self._deshacer = deshacer or None
+        self._apilar(f"copiar {creados} apunte(s)", deshacer)
         return {"creados": creados, "saltados": saltados, "errores": errores,
-                "ultimo": ultimo, "puede_deshacer": bool(deshacer)}
+                "ultimo": ultimo, "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
 
     def preparar_copia_dia(self, dias_iso, origen=None):
         """Busca el ultimo dia laborable con horas (14 dias atras) antes del

@@ -427,4 +427,25 @@
     aviso_aplicaciones: () => espera(""),
     abrir_aplicaciones: () => espera({ ok: true }),
   });
+
+  // Deshacer en varios niveles: una foto de los apuntes antes de cada cambio.
+  const pilaDemo = [];
+  const api = window.pywebview.api;
+  for (const [n, texto] of [["anadir", "añadir"], ["eliminar", "borrar"], ["editar", "cambiar un apunte"],
+                            ["guardar_dia", "editar un día"], ["mover_apunte", "mover un apunte"],
+                            ["ejecutar_copia", "copiar"]]) {
+    const original = api[n];
+    api[n] = (...args) => {
+      pilaDemo.push([texto, JSON.stringify(apuntes)]);
+      return original(...args).then((r) => (r && !r.error ? { ...r, puede_deshacer: true, quedan: pilaDemo.length } : r));
+    };
+  }
+  api.deshacer = () => {
+    const ultima = pilaDemo.pop();
+    if (!ultima) return espera({ restaurados: 0, texto: "", quedan: 0, siguiente: "", pendiente: false });
+    for (const k of Object.keys(apuntes)) delete apuntes[k];
+    Object.assign(apuntes, JSON.parse(ultima[1]));
+    return espera({ restaurados: 1, errores: 0, texto: ultima[0], pendiente: false, quedan: pilaDemo.length,
+                    siguiente: pilaDemo.length ? pilaDemo[pilaDemo.length - 1][0] : "" });
+  };
 })();

@@ -335,6 +335,47 @@ class TestBorrarYMarcas(Base):
             ("crear", L.isoformat(), "20", 3, "", "soporte"),
             ("editar", 7, 2, "c", "soporte", "10")])
 
+    def test_deshacer_en_varios_niveles_y_ids_nuevos(self):
+        """Cambiar las horas de un apunte y luego borrarlo: el primer Ctrl+Z lo
+        recrea (con OTRO id) y el segundo le devuelve las horas... al id nuevo."""
+        self._dia_cargado()
+        llamadas = []
+        with mock.patch.object(core, "actualizar_entrada",
+                               lambda *a: llamadas.append(("editar",) + a)), \
+             mock.patch.object(core, "eliminar_entrada", lambda i: llamadas.append(("borrar", i))), \
+             mock.patch.object(core, "crear_entrada",
+                               lambda *a: llamadas.append(("crear",) + a) or 500):
+            self.api.editar(L.isoformat(), "7", "4")
+            self.api.eliminar([{"id": "7", "fecha": L.isoformat(), "destino": "op"}])
+            self.assertEqual(self.api.deshacer_estado()["quedan"], 2)
+            llamadas.clear()
+            r1 = self.api.deshacer()
+            self.assertIn("borrar", r1["texto"])
+            self.assertEqual((r1["quedan"], r1["pendiente"]), (1, False))
+            r2 = self.api.deshacer()
+            self.assertEqual(r2["quedan"], 0)
+        self.assertEqual(llamadas, [("crear", L.isoformat(), "10", 2, "c", "soporte"),
+                                    ("editar", "500", 2, "c", "soporte", "10")])
+
+    def test_deshacer_sin_red_queda_pendiente(self):
+        self._dia_cargado()
+        with mock.patch.object(core, "eliminar_entrada"):
+            self.api.eliminar([{"id": "7", "fecha": L.isoformat(), "destino": "op"},
+                               {"id": "8", "fecha": L.isoformat(), "destino": "op"}])
+        fallos = iter([RuntimeError("sin red"), 101])
+        def crear(*_a):
+            x = next(fallos)
+            if isinstance(x, Exception):
+                raise x
+            return x
+        with mock.patch.object(core, "crear_entrada", side_effect=crear):
+            r = self.api.deshacer()                     # uno entra, el otro no
+        self.assertEqual((r["restaurados"], r["errores"], r["pendiente"], r["quedan"]), (1, 1, True, 1))
+        with mock.patch.object(core, "crear_entrada", return_value=102) as m_cr:
+            r = self.api.deshacer()                     # Ctrl+Z otra vez: lo reintenta
+        self.assertEqual((r["restaurados"], r["pendiente"], r["quedan"]), (1, False, 0))
+        m_cr.assert_called_once()
+
     def test_guardar_dia_valida_antes_de_tocar_nada(self):
         self._dia_cargado()
         with mock.patch.object(core, "actualizar_entrada") as m_ed, \
@@ -352,7 +393,7 @@ class TestBorrarYMarcas(Base):
         with mock.patch.object(core, "crear_entrada",
                                lambda *a: llamadas.append(("crear",) + a) or 55),              mock.patch.object(core, "eliminar_entrada", lambda i: llamadas.append(("borrar", i))):
             r = self.api.mover_apunte(L.isoformat(), "7", M.isoformat())
-            self.assertEqual(r, {"ok": True, "puede_deshacer": True})
+            self.assertEqual(r, {"ok": True, "puede_deshacer": True, "quedan": 1})
             self.assertEqual(llamadas, [("crear", M.isoformat(), "10", 2, "c", "soporte"),
                                         ("borrar", "7")])
             llamadas.clear()
@@ -492,7 +533,7 @@ class TestDialogos(Base):
         self._semana({L.isoformat(): [apunte(7, 2, wp="10")]})
         with mock.patch.object(core, "actualizar_entrada") as m_upd:
             self.assertEqual(self.api.editar(L.isoformat(), "7", "3,5", " c ", "soporte"),
-                             {"ok": True, "puede_deshacer": True})
+                             {"ok": True, "puede_deshacer": True, "quedan": 1})
         m_upd.assert_called_once_with("7", 3.5, "c", "soporte", "10")
         # solo las horas (desde la ficha): comentario y actividad se conservan
         with mock.patch.object(core, "actualizar_entrada") as m_upd:

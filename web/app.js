@@ -142,7 +142,8 @@ async function informarLote(r, { hecho, nada }) {
 let avisoT = null;
 function trasCambio(r, texto) {
   estado(texto);
-  if (!r.puede_deshacer) { $("b-deshacer").hidden = true; ocultarAviso(); return; }
+  if (r.quedan !== undefined) $("b-deshacer").hidden = !r.quedan;   // la pila sigue aunque esta accion no entre
+  if (!r.puede_deshacer) { ocultarAviso(); return; }
   $("b-deshacer").hidden = false;
   const a = $("aviso-deshacer");
   a.replaceChildren(el("span", { text: texto }),
@@ -1272,20 +1273,23 @@ function eliminarSeleccion() {
   }));
 }
 
+// Ctrl+Z repetido va hacia atras (hasta 20 acciones). Si algo no se pudo
+// deshacer (sin red...), se queda pendiente y el siguiente Ctrl+Z lo reintenta.
 async function deshacer() {
   if ($("b-deshacer").hidden || st.ocupado) return;
-  $("b-deshacer").hidden = true;
   ocultarAviso();
   st.ocupado = true;
-  estado("Restaurando…");
+  estado("Deshaciendo…");
   try {
     const r = await llamar("deshacer");
-    if (r.errores) {
-      await avisar("Restaurado con errores",
-        `Restaurados: ${r.restaurados}. Con errores: ${r.errores}.\nÚltimo error: ${r.ultimo}`);
-    }
+    $("b-deshacer").hidden = !r.quedan;
+    $("b-deshacer").title = r.siguiente ? `Deshacer: ${r.siguiente} (Ctrl+Z)` : "Deshacer (Ctrl+Z)";
     await cargarSemana();
-    estado(r.restaurados === 1 ? "Apunte restaurado." : `${r.restaurados} apuntes restaurados.`);
+    if (r.pendiente) {
+      estado(`No se pudo deshacer todo «${r.texto}» (${r.ultimo || "sin conexión"}). Pulsa Ctrl+Z para reintentarlo.`);
+    } else if (r.texto) {
+      estado(`Deshecho: ${r.texto}.` + (r.quedan ? ` Ctrl+Z otra vez: ${r.siguiente} (quedan ${r.quedan}).` : ""));
+    }
   } finally {
     st.ocupado = false;
   }
@@ -1307,7 +1311,6 @@ function navegar(delta) {
   } else {
     st.lunes = delta === 0 ? st.hoyLunes : sumarDias(st.lunes, 7 * delta);
   }
-  $("b-deshacer").hidden = true;
   ocultarAviso();
   st.ancla = null;
   cargarSemana({ marcarHoy: true });
@@ -1315,7 +1318,6 @@ function navegar(delta) {
 
 function irADia(iso) {
   if (st.vista === "mes") st.mesSel = mesDe(iso); else st.lunes = lunesDe(iso);
-  $("b-deshacer").hidden = true;
   cargarSemana({ marcar: [iso] });
 }
 

@@ -483,6 +483,12 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   antes hace copia de la actual. Exportar quita credenciales y PIN. Decisión
   del usuario: "He olvidado el PIN" conserva `copias/` (recuperar favoritas y
   plantillas) pero el PIN nunca vuelve al restaurar.
+  **Deshacer en varios niveles**: `_pila` (20 acciones, `_apilar`) en vez de
+  un solo `_deshacer`. Al deshacer un borrado, ProyectosTic da OTRO id al
+  apunte recreado: `_ids` guarda viejo→nuevo (paso `crear` con `id_original`)
+  y `_id_actual` lo sigue en los pasos `editar`/`borrar` más antiguos. Lo que
+  falla vuelve a la pila (reintento con el siguiente Ctrl+Z). La pila no se
+  vacía al cambiar de semana (los ids no dependen de la vista).
 
 - v3.1.4 (nov 2026): **buscador de tareas.** Motivo: en Editar día la lista
   salía vacía sin favoritas, y varios usuarios pedían buscar por número de

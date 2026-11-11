@@ -19,6 +19,14 @@ instalada aparece en el pie de la ventana.
 - «He olvidado el PIN» ya no te hace perder las favoritas y plantillas: las
   copias se conservan y puedes restaurarlas (sin el PIN antiguo).
 
+**Deshacer en varios niveles**
+- **Ctrl+Z** (o *Deshacer*) deshace lo último; **otra vez**, lo anterior, hasta
+  20 acciones: borrar, cambiar horas, editar un día, añadir, mover o copiar.
+- Te dice qué ha deshecho y qué viene después («Deshecho: borrar 2 apuntes del
+  martes 10/11. Ctrl+Z otra vez: cambiar…»).
+- Si algo no se puede deshacer porque falla la conexión, **no se pierde**:
+  vuelve a pulsar Ctrl+Z para reintentarlo.
+
 ---
 
 ## 3.1.4
