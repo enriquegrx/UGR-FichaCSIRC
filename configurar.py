@@ -397,6 +397,11 @@ def escribir_config(cfg):
         except OSError:
             pass
         raise
+    try:                       # copia de seguridad si cambio algo que importa
+        import copias
+        copias.quizas_copiar(CONFIG_PATH, cfg)
+    except Exception:
+        pass
 
 
 def guardar(cfg):

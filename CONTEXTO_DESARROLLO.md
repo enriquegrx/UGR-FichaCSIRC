@@ -474,6 +474,16 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     suma esas horas con UNA consulta por rango (`entradas_rango`, filtro `<>d`)
     y se cachea en `_USADAS_PT` para no bloquear la interfaz.
 
+- v3.2.0 (rama `mejoras/3.2`, sin publicar): **copias de seguridad** (`copias.py`,
+  sin dependencias del motor). Hook en `escribir_json_atomico` (motor) y en
+  `configurar.escribir_config` (asistente): copia en `copias/` si cambia la
+  huella de la config sin las claves VOLATILES (ventana, zoom, chequeos...).
+  Retención: 10 últimas + 1/día de 7 días. Restaurar/importar = `combinar`:
+  conserva credenciales, PIN, `bandeja` y volátiles de la config actual;
+  antes hace copia de la actual. Exportar quita credenciales y PIN. Decisión
+  del usuario: "He olvidado el PIN" conserva `copias/` (recuperar favoritas y
+  plantillas) pero el PIN nunca vuelve al restaurar.
+
 - v3.1.4 (nov 2026): **buscador de tareas.** Motivo: en Editar día la lista
   salía vacía sin favoritas, y varios usuarios pedían buscar por número de
   tarea y distinguir tareas homónimas de padres distintos. `buscadorTarea`

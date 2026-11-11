@@ -5,6 +5,22 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 3.2.0
+
+**Copias de seguridad**
+- FichaCSIRC guarda sola una **copia de tu configuración** cada vez que cambian
+  tus favoritas, plantillas, permisos, vacaciones o festivos: las 10 últimas y
+  una por día de la última semana.
+- *Herramientas → Copias de seguridad…* para **volver a una copia anterior**.
+  Tu API key, el token de INARI y el PIN no cambian, y antes se guarda una
+  copia de cómo estás, así que también se puede volver atrás.
+- **Exportar e importar** la configuración para llevártela a otro equipo (el
+  archivo no incluye la API key, el token ni el PIN).
+- «He olvidado el PIN» ya no te hace perder las favoritas y plantillas: las
+  copias se conservan y puedes restaurarlas (sin el PIN antiguo).
+
+---
+
 ## 3.1.4
 
 **Buscar tareas, por fin cómodo**

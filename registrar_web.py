@@ -32,6 +32,7 @@ import importlib
 import threading
 import shutil
 import base64
+import json
 import hashlib
 import hmac
 import secrets
@@ -1464,14 +1465,71 @@ class Api:
         self._ultima_exportacion = ruta
         return {"ruta": ruta, "n": len(apuntes), "total": _horas(total)}
 
-    def _pedir_ruta(self, nombre):
+    def _pedir_ruta(self, nombre, tipos=("CSV (Excel) (*.csv)",), abrir=False):
         import webview
-        res = self._ventana.create_file_dialog(
-            webview.FileDialog.SAVE, save_filename=nombre,
-            file_types=("CSV (Excel) (*.csv)",))
+        if abrir:
+            res = self._ventana.create_file_dialog(webview.FileDialog.OPEN, file_types=tipos)
+        else:
+            res = self._ventana.create_file_dialog(
+                webview.FileDialog.SAVE, save_filename=nombre, file_types=tipos)
         if isinstance(res, (list, tuple)):
             res = res[0] if res else None
         return res or None
+
+    # ---- copias de seguridad, restaurar y exportar/importar ----
+    def copias(self):
+        import copias
+        return [{"id": c["id"], "fecha": c["fecha"].strftime("%d/%m/%Y %H:%M"),
+                 "resumen": c["resumen"]} for c in copias.listar(ccore.CONFIG_PATH)]
+
+    def _aplicar_config(self, nueva):
+        """Pone una config restaurada/importada: antes se guarda copia de la
+        actual (asi tambien se puede volver atras) y se recarga el motor."""
+        import copias
+        actual = ccore.cargar_previa() or {}
+        copias.quizas_copiar(ccore.CONFIG_PATH, actual)
+        ccore.escribir_config(copias.combinar(actual, nueva))
+        if not _cargar_motor():
+            return {"error": f"Se guardó, pero no se pudo cargar: {ERROR_ARRANQUE}"}
+        self._cache.clear()
+        return {"ok": True}
+
+    def restaurar_copia(self, nombre):
+        self._exigir_desbloqueo()
+        import copias
+        try:
+            datos = copias.leer(ccore.CONFIG_PATH, nombre)
+        except (OSError, ValueError):
+            return {"error": "Esa copia ya no existe o está dañada."}
+        return self._aplicar_config(datos)
+
+    def exportar_config(self):
+        """Para llevarla a otro equipo: sin API key, token de INARI ni PIN."""
+        self._exigir_desbloqueo()
+        import copias
+        ruta = self._pedir_ruta(f"FichaCSIRC-configuracion-{dt.date.today():%Y-%m-%d}.json",
+                                ("Configuración de FichaCSIRC (*.json)",))
+        if not ruta:
+            return {"cancelado": True}
+        with open(ruta, "w", encoding="utf-8") as f:
+            json.dump(copias.para_exportar(ccore.cargar_previa() or {}, core.VERSION),
+                      f, ensure_ascii=False, indent=2)
+        return {"ok": True, "ruta": ruta}
+
+    def importar_config(self):
+        self._exigir_desbloqueo()
+        import copias
+        ruta = self._pedir_ruta("", ("Configuración de FichaCSIRC (*.json)",), abrir=True)
+        if not ruta:
+            return {"cancelado": True}
+        try:
+            with open(ruta, encoding="utf-8-sig") as f:
+                datos = json.load(f)
+        except (OSError, ValueError):
+            return {"error": "No se pudo leer ese archivo."}
+        if not copias.es_exportacion(datos):
+            return {"error": "Ese archivo no es una configuración de FichaCSIRC."}
+        return self._aplicar_config(datos)
 
     def abrir_exportacion(self):
         """Abre el ultimo CSV exportado con su programa (Excel). Solo ese: el JS

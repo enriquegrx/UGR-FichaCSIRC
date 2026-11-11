@@ -256,6 +256,59 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
   recalcular();
 }
 
+// ================================================================ copias de seguridad
+
+async function dlgCopias() {
+  const lista = el("div", { class: "lista-copias" });
+  const d = dialogo({ titulo: "Copias de seguridad", ancho: 620, botones: [
+    { texto: "Exportar…", izquierda: true, accion: exportar },
+    { texto: "Importar…", izquierda: true, accion: importar },
+    cerrarBoton] });
+  d.cuerpo.append(
+    nota("FichaCSIRC guarda sola una copia de tu configuración cada vez que cambian tus favoritas, "
+         + "plantillas, permisos, vacaciones o festivos: las 10 últimas y una por día de la última semana."),
+    lista,
+    nota("Restaurar no cambia tu API key, el token de INARI ni el PIN. Antes se guarda una copia de cómo "
+         + "estás ahora, así que también se puede volver atrás.\n«Exportar» crea un archivo para llevarte "
+         + "la configuración a otro equipo (sin API key, token ni PIN); allí, «Importar»."));
+  await pintar();
+
+  async function pintar() {
+    const copias = await llamar("copias");
+    lista.replaceChildren(...(copias.length ? copias.map((c, i) => el("div", { class: "fila-copia" },
+      el("span", { class: "num", text: c.fecha }),
+      el("span", { class: "tenue crece", text: i === 0 ? `${c.resumen}  (la más reciente)` : c.resumen }),
+      el("button", { text: "Restaurar", onclick: () => restaurar(c) })))
+      : [el("p", { class: "tenue", text: "Todavía no hay copias: se hará la primera al cambiar algo." })]));
+  }
+  async function restaurar(c) {
+    if (!(await preguntar("Restaurar copia",
+        `¿Volver a la configuración del ${c.fecha}?\n\n${c.resumen}\n\n`
+        + "Tu API key, el token de INARI y el PIN se quedan como están.", { si: "Restaurar", no: "Cancelar" }))) return;
+    const r = await llamar("restaurar_copia", c.id);
+    if (r.error) { await avisar("Restaurar copia", r.error); return; }
+    await avisar("Restaurar copia", `Restaurada la configuración del ${c.fecha}. La app se recarga.`);
+    location.reload();
+  }
+  async function exportar() {
+    const r = await llamar("exportar_config");
+    if (r.cancelado) return;
+    if (r.error) { await avisar("Exportar", r.error); return; }
+    estado(`Configuración exportada (sin API key, token ni PIN): ${r.ruta}`);
+  }
+  async function importar() {
+    if (!(await preguntar("Importar configuración",
+        "Se sustituirán tus favoritas, plantillas, permisos, vacaciones y festivos por los del archivo "
+        + "(antes se guarda una copia de los actuales). Tu API key y el PIN no cambian.\n\n¿Elegir el archivo?",
+        { si: "Elegir archivo", no: "Cancelar" }))) return;
+    const r = await llamar("importar_config");
+    if (r.cancelado) return;
+    if (r.error) { await avisar("Importar", r.error); return; }
+    await avisar("Importar", "Configuración importada. La app se recarga.");
+    location.reload();
+  }
+}
+
 // ================================================================ bandeja del sistema
 
 // Icono junto al reloj (cerrar = esconder) e iniciar con Windows escondida.

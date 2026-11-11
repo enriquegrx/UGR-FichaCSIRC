@@ -49,7 +49,7 @@ def _config_path():
 
 CONFIG_PATH = _config_path()
 
-VERSION = "3.1.4"
+VERSION = "3.2.0"
 # Repo de GitHub "usuario/repositorio" para avisar de versiones nuevas.
 # Vacio = comprobacion desactivada.
 GITHUB_REPO = "enriquegrx/UGR-FichaCSIRC"
@@ -324,6 +324,8 @@ def escribir_json_atomico(ruta, datos):
     for intento in (1, 2, 3):
         try:
             os.replace(tmp, ruta)
+            if os.path.abspath(ruta) == os.path.abspath(CONFIG_PATH):
+                _copia_de_seguridad(datos)
             return
         except PermissionError:
             # Windows: otro proceso (el aviso de fichaje) puede tenerlo abierto
@@ -331,6 +333,16 @@ def escribir_json_atomico(ruta, datos):
             if intento == 3:
                 raise
             time.sleep(0.2)
+
+
+def _copia_de_seguridad(cfg):
+    """Copia en copias/ si cambio algo que importa (ver copias.py). Nunca debe
+    impedir guardar."""
+    try:
+        import copias
+        copias.quizas_copiar(CONFIG_PATH, cfg)
+    except Exception as e:
+        LOG.warning("No se pudo hacer la copia de seguridad: %s", e)
 
 
 def guardar_config_valores(valores):

@@ -218,6 +218,7 @@ const MENUS = {
     { texto: "Aviso diario de fichaje…", accion: dlgRecordatorio },
     { texto: "PIN de acceso…", accion: dlgPin },
     { texto: "Bandeja e inicio con Windows…", accion: dlgBandeja },
+    { texto: "Copias de seguridad…", accion: dlgCopias },
     "-",
     { texto: "Configuración (asistente)…", accion: () => { location.href = "configurar.html"; } },
   ],

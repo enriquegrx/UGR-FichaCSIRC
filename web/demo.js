@@ -218,6 +218,11 @@
     pin_bloquear: () => { if (pinActivo) pinOk = false; return espera({ bloqueada: !pinOk }); },
     guardar_zoom: (z) => espera({ ok: true, zoom: z }),
     guardar_tema: () => espera({ ok: true }),
+    copias: () => espera([{ id: "config-20261111-1002.json", fecha: "11/11/2026 10:02", resumen: "4 favoritas · 1 plantilla · 2 tipos de permiso · 5 días marcados" },
+      { id: "config-20261110-0915.json", fecha: "10/11/2026 09:15", resumen: "3 favoritas · 1 plantilla · 2 tipos de permiso · 5 días marcados" }]),
+    restaurar_copia: () => espera({ ok: true }),
+    exportar_config: () => espera({ ok: true, ruta: "C:\\Users\\demo\\FichaCSIRC-configuracion.json" }),
+    importar_config: () => espera({ cancelado: true }),
     bandeja_estado: () => espera({ soportada: true, activa: false, inicio: false, mac: false }),
     bandeja_guardar: (a, i) => espera({ ok: true, soportada: true, activa: a || i, inicio: i, mac: false }),
     semana_anterior_pendiente: () => espera(/[?&]semana\b/.test(location.search)

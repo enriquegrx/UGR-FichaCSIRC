@@ -205,7 +205,7 @@
     });
     const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["resumen del mes", dlgResumen],
       ["exportar", dlgExportar], ["festivos", dlgFestivos], ["ajustes de días", dlgAjustesDias],
-      ["INARI", dlgInari], ["buscar tarea", dlgBuscar], ["PIN", dlgPin], ["bandeja", dlgBandeja],
+      ["INARI", dlgInari], ["buscar tarea", dlgBuscar], ["PIN", dlgPin], ["bandeja", dlgBandeja], ["copias", dlgCopias],
       ["novedades", dlgNovedades], ["tecnología", dlgTecnologia], ["atajos", dlgAtajos], ["acerca de", dlgAcerca]];
     for (const [nombre, fn] of dialogos) {
       await prueba(`diálogo ${nombre} abre y cierra`, async () => {
