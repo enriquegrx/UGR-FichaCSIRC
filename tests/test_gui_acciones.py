@@ -14,6 +14,9 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests._tk_local import saltar_si_es_local  # noqa: E402
+saltar_si_es_local()     # ventanas reales: en local parpadean y no dejan trabajar
+
 from tests import test_fichacsirc  # noqa: F401  (fija FICHACSIRC_CONFIG e importa core)
 import rellenar_horas as core      # noqa: E402
 
