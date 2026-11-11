@@ -21,6 +21,7 @@
   ];
   const apuntes = {};      // iso -> [{...}]
   const favDemo = new Set([11765, 12063, 12065, 13001]);
+  const avisosLocalNo = [];
   const marcas = { nolab: {}, guardia: new Set(), tele: new Set() };
   let siguiente = 100;
   let borrados = null;
@@ -86,6 +87,7 @@
       asociaciones: { "Asuntos propios": 13001 }, toca_permisos_anio: false, experimento: false,
       novedades_tras_actualizar: /[?&]novedades\b/.test(location.search) ? { desde: "" } : null,
       sugerir_pin: /[?&]sugerirpin\b/.test(location.search),
+      avisos_local_no: [],
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
       zoom: 1, tema: (location.search.match(/[?&]tema=(\w+)/) || [])[1] || "sistema", pin: { activo: /[?&]pin\b/.test(location.search), desbloqueada: true, auto_min: 15 },
       paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
@@ -218,6 +220,10 @@
     pin_bloquear: () => { if (pinActivo) pinOk = false; return espera({ bloqueada: !pinOk }); },
     guardar_zoom: (z) => espera({ ok: true, zoom: z }),
     guardar_tema: () => espera({ ok: true }),
+    tarea_ausencia: (motivo) => espera(motivo === "festivo" ? null
+      : { id: 13001, nombre: "[ATE] Permisos", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "Asuntos propios" }),
+    no_avisar_local: (m) => { avisosLocalNo.push(m); return espera({ ok: true, avisos_local_no: [...avisosLocalNo] }); },
+    volver_a_avisar_local: () => { avisosLocalNo.length = 0; return espera({ ok: true }); },
     copias: () => espera([{ id: "config-20261111-1002.json", fecha: "11/11/2026 10:02", resumen: "4 favoritas · 1 plantilla · 2 tipos de permiso · 5 días marcados" },
       { id: "config-20261110-0915.json", fecha: "10/11/2026 09:15", resumen: "3 favoritas · 1 plantilla · 2 tipos de permiso · 5 días marcados" }]),
     restaurar_copia: () => espera({ ok: true }),

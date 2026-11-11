@@ -496,6 +496,13 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   antes hace copia de la actual. Exportar quita credenciales y PIN. Decisión
   del usuario: "He olvidado el PIN" conserva `copias/` (recuperar favoritas y
   plantillas) pero el PIN nunca vuelve al restaurar.
+  **Marcas locales avisadas**: festivo/vacaciones/apertura/baja y permiso por
+  horas llevan "(local)" en el menú; `confirmarLocal` (dialogos.js) avisa y,
+  para baja/vacaciones/permiso, `Api.tarea_ausencia` busca la tarea de
+  ausencias (asociación actividad→tarea, habituales/favoritas por nombre sin
+  tildes, y una búsqueda en ProyectosTic cacheada por sesión) para ofrecer
+  "Imputar en esa tarea" (`dlgEditarDia` con `tarea`/`horas`). Config
+  `avisos_local_no` (casilla "No volver a preguntarme").
   **Deshacer en varios niveles**: `_pila` (20 acciones, `_apilar`) en vez de
   un solo `_deshacer`. Al deshacer un borrado, ProyectosTic da OTRO id al
   apunte recreado: `_ids` guarda viejo→nuevo (paso `crear` con `id_original`)

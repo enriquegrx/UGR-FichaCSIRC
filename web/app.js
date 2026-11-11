@@ -220,6 +220,11 @@ const MENUS = {
     { texto: "PIN de acceso…", accion: dlgPin },
     { texto: "Bandeja e inicio con Windows…", accion: dlgBandeja },
     { texto: "Copias de seguridad…", accion: dlgCopias },
+    ...((st.ini?.avisos_local_no || []).length ? [{ texto: "Volver a avisar al marcar días en local", accion: async () => {
+      await llamar("volver_a_avisar_local");
+      st.ini.avisos_local_no = [];
+      estado("Se volverá a avisar al marcar festivos, vacaciones, bajas y permisos (solo en este equipo).");
+    } }] : []),
     "-",
     { texto: "Configuración (asistente)…", accion: () => { location.href = "configurar.html"; } },
   ],
@@ -916,10 +921,12 @@ function menuDia(x, y, d) {
   // Rellenar lo que falta con una tarea habitual: un clic y el dia en verde.
   if (d.falta > 0.001 && !d.no_laborable && d.estado !== "error") {
     for (const f of (st.habituales?.filas || []).slice(0, 2)) {
-      items.push({ texto: `＋ Completar con ${corto(f.tarea, 32)} (+${fmtHoras(d.falta)}h)`,
+      items.push({ texto: `＋ Completar con ${corto(f.tarea, 30)}${f.actividad ? ` · ${f.actividad}` : ""} (+${fmtHoras(d.falta)}h)`,
                    accion: () => anadirRapido(d, f, d.falta) });
     }
-    items.push({ texto: "＋ Añadir otra tarea…", accion: () => menuAnadirRapido(d, x, y) }, "-");
+    // Despues del clic: si no, el mismo clic llega al documento y, como la
+    // opcion pulsada ya no existe, lo toma por "fuera del menu" y lo cierra.
+    items.push({ texto: "＋ Añadir otra tarea…", accion: () => setTimeout(() => menuAnadirRapido(d, x, y)) }, "-");
   }
   items.push({ texto: "Copiar este día (Ctrl+C)", desactivado: !d.apuntes.length,
                accion: () => copiarDia(d) });
@@ -932,16 +939,21 @@ function menuDia(x, y, d) {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
         && !(await preguntar("Teletrabajo",
               "Ya tienes cubierto el cupo de teletrabajo de esta semana.\n¿Marcar otro igualmente?"))) return;
+    // festivo, vacaciones, baja...: solo en este equipo (avisar antes)
+    if (accion === "no_laborable" && (await confirmarLocal(d, motivo)) !== "local") return;
     await llamar("accion_dia", d.iso, accion, motivo);
     await repintarLocal();
   };
   if (d.no_laborable) {
     items.push({ texto: `Quitar marca (${d.motivo})`, accion: marca("quitar_no_laborable") });
   } else {
+    // "(local)": se guarda en este equipo, NO se envia a ProyectosTic
     for (const motivo of ["festivo", "vacaciones", "apertura de curso", "baja"]) {
-      items.push({ texto: `Marcar como ${motivo}`, accion: marca("no_laborable", motivo) });
+      items.push({ texto: `Marcar como ${motivo} (local)`, accion: marca("no_laborable", motivo) });
     }
-    items.push("-", { texto: "Añadir permiso por horas…", accion: () => dlgPermisoDia(d) });
+    items.push("-", { texto: "Añadir permiso por horas… (local)", accion: async () => {
+      if ((await confirmarLocal(d, "permiso")) === "local") dlgPermisoDia(d);
+    } });
     d.permiso_detalle.forEach((p, i) => {
       items.push({ texto: `Quitar permiso: ${p}`, accion: marca("quitar_permiso", String(i)) });
     });

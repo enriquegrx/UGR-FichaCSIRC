@@ -133,6 +133,12 @@ def actividades_de_permiso():
             for t in core.permisos_tipos()} - {""}
 
 
+def _sin_tildes(texto):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", str(texto or "").lower())
+                   if unicodedata.category(c) != "Mn")
+
+
 def _dia_corto(iso):
     """'martes 10/11' para los textos de Deshacer."""
     try:
@@ -518,6 +524,7 @@ class Api:
             "toca_permisos_anio": core.toca_anadir_permisos_del_anio(),
             "novedades_tras_actualizar": self._novedades_tras_actualizar(),
             "sugerir_pin": self._sugerir_pin(),
+            "avisos_local_no": self.avisos_local_no(),
             "pin": self.pin_estado(),
             "zoom": self.zoom(),
             "tema": self.tema(),
@@ -1219,6 +1226,70 @@ class Api:
         self._apilar(f"editar el {_dia_corto(fecha)}", deshacer)
         return {"hechos": hechos, "errores": errores, "ultimo": ultimo,
                 "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
+
+    # ---- marcas que SOLO viven en este equipo (no van a ProyectosTic) ----
+    # Por que: festivo, vacaciones, baja y permiso por horas pintan el dia y
+    # ajustan lo que falta, pero no envian nada; en algunos servicios eso se
+    # imputa en una tarea de permisos/bajas y alguien podia creer que ya lo
+    # habia comunicado. Antes de marcar se avisa y, si hay una tarea de
+    # ausencias en ProyectosTic, se ofrece imputar ahi.
+    PALABRAS_AUSENCIA = {
+        "baja": ("baja", "permiso", "ausencia", "licencia", "incapacidad"),
+        "vacaciones": ("vacacion", "permiso", "ausencia"),
+        "permiso": ("permiso", "asuntos", "ausencia", "licencia", "conciliac"),
+    }
+
+    def avisos_local_no(self):
+        return list(core.config_valor("avisos_local_no") or [])
+
+    def no_avisar_local(self, motivo):
+        """La casilla "No volver a preguntarme" de ese motivo."""
+        lista = self.avisos_local_no()
+        if motivo not in lista:
+            lista.append(motivo)
+            core.guardar_config_valor("avisos_local_no", lista)
+        return {"ok": True, "avisos_local_no": lista}
+
+    def volver_a_avisar_local(self):
+        core.guardar_config_valor("avisos_local_no", [])
+        return {"ok": True}
+
+    def tarea_ausencia(self, motivo, habituales=None):
+        """La tarea de ProyectosTic donde este usuario imputaria ese motivo
+        (baja, vacaciones, permiso), o None. De mas fiable a menos:
+        1) la tarea asociada a mano a una actividad de ausencias o la de un
+           permiso enlazado a su actividad; 2) habituales, favoritas y buscadas
+           cuyo nombre lo diga; 3) una busqueda en ProyectosTic (sin red: nada)."""
+        palabras = self.PALABRAS_AUSENCIA.get(motivo)
+        if not palabras:
+            return None
+        encaja = lambda texto: any(p in _sin_tildes(texto) for p in palabras)
+        asociadas = core.config_valor("tareas_actividad") or {}
+        acts = [core.actividad_de_permiso(t["id"]) for t in core.permisos_tipos()]
+        for act, wp in asociadas.items():
+            if encaja(act) or (motivo == "permiso" and act in acts):
+                nombre = next((t["nombre"] for t in self.tareas() if int(t["id"]) == int(wp)), "")
+                return {"id": int(wp), "nombre": nombre or f"Tarea {wp}", "proyecto": "", "padre": "",
+                        "actividad": act}
+        candidatas = [{"id": int(h["wp_id"]), "nombre": h["tarea"], "actividad": h.get("actividad", "")}
+                      for h in (habituales or []) if h.get("wp_id")]
+        candidatas += [{"id": int(t["id"]), "nombre": t["nombre"], "actividad": ""} for t in self.tareas()]
+        for t in candidatas:
+            if encaja(t["nombre"]):
+                return {**t, "proyecto": "", "padre": ""}
+        busqueda = getattr(self, "_ausencias_buscadas", {})
+        if motivo not in busqueda:
+            busqueda[motivo] = None
+            try:
+                for t in core.buscar_wp(palabras[0] if motivo != "permiso" else "permiso", limite=20):
+                    if encaja(t["nombre"]):
+                        busqueda[motivo] = {**t, "actividad": ""}
+                        break
+            except Exception:
+                del busqueda[motivo]              # sin red: se reintenta otro dia
+                return None
+            self._ausencias_buscadas = busqueda
+        return busqueda.get(motivo)
 
     # ---- menu del dia (marcas locales) ----
     def accion_dia(self, iso, accion, motivo=""):

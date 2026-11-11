@@ -113,7 +113,9 @@ async function dlgEditar(dia, a) {
 // Todo el dia de una vez: horas y actividad de cada apunte, quitar alguno o
 // anadir tareas. Nada se envia hasta "Guardar"; entonces va todo junto y
 // "Deshacer" (Ctrl+Z) lo devuelve a como estaba.
-function dlgEditarDia(dia, { nueva = false } = {}) {
+/* nueva: abre con una fila nueva; tarea {id, nombre} y horas: esa fila ya
+   rellena (p. ej. "Imputar en esa tarea" al marcar una baja). */
+function dlgEditarDia(dia, { nueva = false, tarea = null, horas = null } = {}) {
   const filas = [];
   const total = el("span", { class: "ed-total" });
   const lista = el("div", { class: "ed-lista" });
@@ -187,7 +189,7 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
     lista.append(f.fila);
   }
 
-  function nuevaFila() {
+  function nuevaFila(puesta = null) {
     // Buscador (no un desplegable): sin favoritas, el desplegable salia vacio.
     const tarea = entrada("", { class: "ed-tarea-input", placeholder: "Busca por nombre o número de tarea",
                                 "aria-label": "Tarea" });
@@ -199,16 +201,23 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
     filas.push(f);
     lista.append(f.fila);
     tarea.addEventListener("input", () => { f.wpId = null; });     // reescribir = volver a elegir
-    buscadorTarea(tarea, { alElegir: async (t) => {
+    const elegir = async (t, actividad = "") => {
       f.wpId = Number(t.id);
-      const sel = selectorActividad(t.id, "");
+      const sel = selectorActividad(t.id, actividad);
       f.act.replaceWith(sel);
       f.act = sel;
       const r = await sel.cargar();
       f.comentario = r.comentario || "";
       f.horas.focus();
-    } });
-    tarea.focus();
+    };
+    buscadorTarea(tarea, { alElegir: (t) => elegir(t) });
+    if (puesta) {
+      tarea.value = `${puesta.id} - ${puesta.nombre}`;
+      if (puesta.horas) f.horas.value = fmtHoras(puesta.horas);
+      elegir(puesta, puesta.actividad || "");
+    } else {
+      tarea.focus();
+    }
     recalcular();
   }
 
@@ -251,7 +260,8 @@ function dlgEditarDia(dia, { nueva = false } = {}) {
     trasCambio(r, `${dia.nombre} ${dia.fecha} actualizado.`);
   }
 
-  if (!dia.apuntes.length || nueva) nuevaFila();
+  if (tarea) nuevaFila({ ...tarea, horas });
+  else if (!dia.apuntes.length || nueva) nuevaFila();
   else filas[0].horas.focus();
   recalcular();
 }
@@ -307,6 +317,62 @@ async function dlgCopias() {
     await avisar("Importar", "Configuración importada. La app se recarga.");
     location.reload();
   }
+}
+
+// ================================================================ marcas solo en este equipo
+
+// Antes de marcar festivo, vacaciones, baja o permiso por horas: dejar claro
+// que se guarda SOLO en este equipo (no va a ProyectosTic) y, si hay una tarea
+// de ausencias en ProyectosTic, ofrecer imputar ahi. Devuelve "local"
+// (marcar), "imputar" (ya se abrio Editar dia) o null (cancelado).
+// "No volver a preguntarme" lo calla para ese motivo (Herramientas lo repone).
+const CON_TAREA = ["baja", "vacaciones", "permiso"];
+async function confirmarLocal(d, motivo) {
+  if ((st.ini?.avisos_local_no || []).includes(motivo)) return "local";
+  let tarea = null;
+  if (CON_TAREA.includes(motivo)) {
+    estado("Comprobando si tienes una tarea de ausencias en ProyectosTIC…");
+    tarea = await llamar("tarea_ausencia", motivo, st.habituales?.filas || []).catch(() => null);
+    estado("");
+  }
+  const que = motivo === "permiso" ? "Añadir un permiso por horas el" : "Marcar el";
+  const como = motivo === "permiso" ? "" : ` como ${motivo}`;
+  return new Promise((resolver) => {
+    let resuelto = false, cerrarDialogo = null;
+    const fin = (v) => { if (!resuelto) { resuelto = true; resolver(v); } };
+    // cerrar el dialogo y decir que se eligio (la X y Esc cuentan como Cancelar)
+    const salir = (v) => { cerrarDialogo(); fin(v); };
+    const nomas = el("input", { type: "checkbox" });
+    const recordar = () => {
+      if (!nomas.checked) return;
+      llamar("no_avisar_local", motivo).then((r) => { st.ini.avisos_local_no = r.avisos_local_no; }).catch(() => {});
+    };
+    const botones = [
+      { texto: "Cancelar", accion: () => salir(null) },
+      { texto: motivo === "permiso" ? "Seguir (solo aquí)" : "Marcar solo aquí", clase: tarea ? "" : "primario",
+        accion: () => { recordar(); salir("local"); } }];
+    if (tarea) {
+      botones.unshift({ texto: "Imputar en esa tarea", clase: "primario", izquierda: true, accion: () => {
+        recordar();
+        salir("imputar");
+        dlgEditarDia(d, { tarea, horas: d.falta > 0.001 ? d.falta : d.obj });
+      } });
+    }
+    const dlg = dialogo({ titulo: `${que} ${d.nombre.toLowerCase()} ${d.fecha}${como} (solo en este equipo)`,
+                          ancho: 560, botones });
+    cerrarDialogo = dlg.cerrar;
+    dlg.cerrar = () => salir(null);                    // la X y Esc = cancelar
+    dlg.cuerpo.append(
+      el("p", {}, "Esto se guarda ", el("b", { text: "solo en tu FichaCSIRC" }),
+         ": no se envía a ProyectosTIC y en OpenProject no aparecerá."),
+      tarea ? el("div", { class: "aviso-local" },
+        el("p", {}, "⚠ Tienes en ProyectosTIC la tarea ", el("b", { text: `«${tarea.nombre}»` }),
+          tarea.proyecto || tarea.padre ? ` (${[tarea.proyecto, tarea.padre].filter(Boolean).join(" › ")})` : "", "."),
+        el("p", { text: `Si en tu servicio ${motivo === "permiso" ? "los permisos" : motivo === "baja" ? "las bajas" : "las vacaciones"} `
+                        + "se imputan ahí, impútalo en esa tarea en vez de (o además de) marcarlo aquí." }))
+        : null,
+      el("label", { class: "check" }, nomas, ` No volver a preguntarme para «${motivo === "permiso" ? "permiso por horas" : motivo}»`));
+  });
 }
 
 // ================================================================ bandeja del sistema

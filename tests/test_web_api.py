@@ -480,6 +480,45 @@ class TestBorrarYMarcas(Base):
         self.assertEqual([x["iso"] for x in r["dias"]], [hoy.isoformat()])   # ayer ya no falta
         self.assertIn("error", self.api.aviso_fichar(hoy.isoformat(), "10", "x", ""))
 
+    def test_tarea_de_ausencias(self):
+        """Antes de marcar una baja en local, que tarea de ProyectosTic la
+        recogeria: asociada a mano, habituales/favoritas por nombre o, si no,
+        una busqueda (sin red, nada)."""
+        guardado = {}
+        favs = [{"id": 12154, "nombre": "[2026_ATE] Permisos (Asuntos propios y bajas)"}]
+        with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)), \
+             mock.patch.object(core, "guardar_config_valor", lambda k, v: guardado.__setitem__(k, v)), \
+             mock.patch.object(core, "FAVORITOS", favs), \
+             mock.patch.object(core, "permisos_tipos", lambda: []), \
+             mock.patch.object(core, "buscar_wp", side_effect=AssertionError("no hacía falta buscar")):
+            t = self.api.tarea_ausencia("baja")
+            self.assertEqual(t["id"], 12154)                     # por nombre, entre favoritas
+            self.assertEqual(self.api.tarea_ausencia("vacaciones")["id"], 12154)
+            self.assertIsNone(self.api.tarea_ausencia("festivo"))    # festivo: no se busca
+            # asociada a mano gana, aunque el nombre no diga nada
+            guardado["tareas_actividad"] = {"Bajas médicas": 777}
+            self.assertEqual(self.api.tarea_ausencia("baja")["id"], 777)
+            # "No volver a preguntarme"
+            self.assertEqual(self.api.no_avisar_local("baja")["avisos_local_no"], ["baja"])
+            self.api.volver_a_avisar_local()
+            self.assertEqual(self.api.avisos_local_no(), [])
+        # sin nada local: busca en ProyectosTic una vez, y sin red no pasa nada
+        with mock.patch.object(core, "config_valor", lambda k, d=None: None), \
+             mock.patch.object(core, "FAVORITOS", []), \
+             mock.patch.object(core, "permisos_tipos", lambda: []), \
+             mock.patch.object(core, "buscar_wp", return_value=[
+                 {"id": 5, "nombre": "Otra cosa", "proyecto": "", "padre": ""},
+                 {"id": 6, "nombre": "[ATE] Permisos", "proyecto": "ATE", "padre": ""}]) as m_b:
+            api = web.Api()
+            self.assertEqual(api.tarea_ausencia("permiso")["id"], 6)
+            api.tarea_ausencia("permiso")
+            m_b.assert_called_once()                             # cacheada en la sesion
+        with mock.patch.object(core, "config_valor", lambda k, d=None: None), \
+             mock.patch.object(core, "FAVORITOS", []), \
+             mock.patch.object(core, "permisos_tipos", lambda: []), \
+             mock.patch.object(core, "buscar_wp", side_effect=RuntimeError("sin red")):
+            self.assertIsNone(web.Api().tarea_ausencia("baja"))
+
     def test_paneles_se_recuerdan_y_se_validan(self):
         guardado = {}
         with mock.patch.object(core, "config_valor", lambda k, d=None: guardado.get(k, d)),              mock.patch.object(core, "guardar_config_valor",

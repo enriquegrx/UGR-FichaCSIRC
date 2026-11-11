@@ -502,6 +502,10 @@ body.arrastrando .dia, body.arrastrando .celda { transition: none; }
 .aviso-semana .enlace { white-space: nowrap; }
 .aviso-semana .cerrar-aviso { border: 0; background: none; color: inherit; font-size: 17px; padding: 0 4px; }
 
+/* aviso al marcar un dia solo en este equipo */
+.aviso-local { background: var(--permiso-bg); color: var(--permiso-fg); border-radius: 6px; padding: 4px 12px; margin: 10px 0; }
+.aviso-local p { margin: 6px 0; }
+
 /* copias de seguridad */
 .lista-copias { display: flex; flex-direction: column; border-top: 1px solid var(--borde); margin: 8px 0; max-height: 300px; overflow: auto; }
 .fila-copia { display: flex; align-items: center; gap: 12px; padding: 6px 2px; border-bottom: 1px solid var(--borde-suave); }

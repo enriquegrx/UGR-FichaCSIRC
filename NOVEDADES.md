@@ -26,6 +26,18 @@ instalada aparece en el pie de la ventana.
 - «He olvidado el PIN» ya no te hace perder las favoritas y plantillas: las
   copias se conservan y puedes restaurarlas (sin el PIN antiguo).
 
+**Lo que solo queda en tu equipo, avisado**
+- En el botón derecho de un día, **festivo, vacaciones, apertura de curso,
+  baja y permiso por horas** llevan **«(local)»**: se guardan solo en tu
+  FichaCSIRC y no se envían a ProyectosTIC.
+- Al marcarlos, la app te lo recuerda y, si tienes en ProyectosTIC una **tarea
+  de permisos o bajas**, te ofrece **imputarlo ahí** con un clic (abre *Editar
+  día* con esa tarea y las horas puestas). Con «No volver a preguntarme» deja
+  de avisar; en *Herramientas* puedes volver a activarlo.
+- **Completar con…** dice la actividad de cada tarea (ya no salen dos
+  «Mantenimientos» que parecían la misma) y **Añadir otra tarea…** vuelve a
+  funcionar (el menú se cerraba solo).
+
 **Deshacer en varios niveles**
 - **Ctrl+Z** (o *Deshacer*) deshace lo último; **otra vez**, lo anterior, hasta
   20 acciones: borrar, cambiar horas, editar un día, añadir, mover o copiar.

@@ -146,6 +146,41 @@
       teclado("z", { ctrlKey: true });
       ok(await hasta(() => cifra(2) === antes), "el segundo Ctrl+Z no volvió al principio");
     });
+    await prueba("menú del día: «(local)», aviso y no volver a preguntar", async () => {
+      const b = menuDe(3);
+      ok(b.some((x) => x.textContent === "Marcar como baja (local)"), "sin «(local)»");
+      ok(b.some((x) => x.textContent.startsWith("Añadir permiso por horas… (local)")), "permiso sin «(local)»");
+      pulsarMenu("Marcar como baja (local)");
+      ok(await hasta(() => dlg()?.textContent.includes("solo en tu FichaCSIRC")), "no avisa de que es local");
+      ok(dlg().textContent.includes("[ATE] Permisos"), "no ofrece la tarea de permisos");
+      // Imputar en esa tarea: Editar dia con la tarea ya puesta
+      botonDlg("Imputar en esa tarea");
+      ok(await hasta(() => document.querySelector(".ed-tarea-input")?.value.startsWith("13001 - ")), "no abre Editar día con la tarea");
+      cerrarTodo();
+      // ahora sí, solo aquí y sin volver a preguntar
+      menuDe(3); pulsarMenu("Marcar como baja (local)");
+      ok(await hasta(() => dlg()), "no vuelve a avisar");
+      dlg().querySelector('.check input[type="checkbox"]').click();
+      botonDlg("Marcar solo aquí");
+      ok(await hasta(() => cifra(3).toLowerCase().includes("baja")), "no marcó la baja");
+      ok(await hasta(() => (st.ini.avisos_local_no || []).includes("baja")), "no recuerda «no volver a preguntar»");
+      menuDe(3); pulsarMenu("Quitar marca");
+      ok(await hasta(() => !cifra(3).toLowerCase().includes("baja")), "no quita la marca");
+      menuDe(3); pulsarMenu("Marcar como baja (local)");
+      ok(await hasta(() => cifra(3).toLowerCase().includes("baja")), "volvió a preguntar o no marcó");
+      ok(!dlg(), "volvió a preguntar");
+      menuDe(3); pulsarMenu("Quitar marca");
+      await hasta(() => !cifra(3).toLowerCase().includes("baja"));
+    });
+    await prueba("menú del día: «Añadir otra tarea…» abre su menú", async () => {
+      menuDe(4);
+      const otra = [...document.querySelectorAll("#menu button")].find((x) => x.textContent.includes("Añadir otra tarea"));
+      if (!otra) { cerrarMenu(); return; }              // el viernes ya esta completo: no sale
+      otra.click();                                       // .click() hace burbujear el clic como uno de verdad
+      ok(await hasta(() => document.querySelector("#menu .titulo-menu")?.textContent.startsWith("Añadir al")), "el menú se cierra solo");
+      ok(!document.getElementById("menu").hidden, "el menú se cerró");
+      cerrarMenu();
+    });
     await prueba("horas editables en la ficha", async () => {
       const antes = cifra(1);
       const s = dias()[1].querySelector(".linea-h.editable");
