@@ -336,8 +336,12 @@
       ok(!dlg(), "salió en una ventana flotante");
       $("b-sig").click();
       ok(await hasta(() => $("titulo-semana").textContent.length > 0), "las flechas no mueven el periodo");
-      document.querySelector('.selector-vista [data-vista="semana"]').click();
-      ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "no vuelve a la semana");
+      ok(!$("estadisticas").hidden, "las flechas sacan de Estadísticas");
+      // "Hoy": a la semana de hoy, con su ficha marcada
+      $("b-hoy").click();
+      ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "Hoy no vuelve a la semana");
+      ok(await hasta(() => document.querySelector(".dia.hoy.marcado")), "Hoy no marca la ficha de hoy");
+      ok(document.querySelector('.selector-vista [data-vista="semana"]').classList.contains("activo"), "no queda en Semana");
     });
     await prueba("vista mensual", async () => {
       document.querySelector('.selector-vista [data-vista="mes"]').click();

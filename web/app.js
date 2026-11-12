@@ -1038,7 +1038,7 @@ function pintarSelectorVista() {
   if (st.estad) {
     $("b-ant").title = "Periodo anterior (Ctrl+←)";
     $("b-sig").title = "Periodo siguiente (Ctrl+→)";
-    $("b-hoy").title = "Volver al periodo actual";
+    $("b-hoy").title = "Volver a la semana de hoy";
   }
 }
 
@@ -1499,7 +1499,14 @@ function enCampo(e) {
 }
 
 function navegar(delta) {
-  if (st.estad) { st.estad.mover(delta); return; }
+  // En Estadisticas, las flechas mueven su periodo; "Hoy" vuelve a la semana
+  // de hoy con su ficha marcada (es lo que se espera de "Hoy" en cualquier sitio).
+  if (st.estad && delta !== 0) { st.estad.mover(delta); return; }
+  if (st.estad) {
+    salirEstadisticas();
+    if (st.vista !== "semana") { st.vista = "semana"; llamar("guardar_vista", "semana").catch(() => {}); }
+    pintarSelectorVista();
+  }
   if (st.vista === "mes") {
     if (delta === 0) st.mesSel = mesDe(hoyIso());
     else {
