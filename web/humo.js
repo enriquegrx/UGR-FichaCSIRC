@@ -206,6 +206,14 @@
       ok(await hasta(() => !dlg()), "Cancelar no cierra");
       ok(!dias()[4].textContent.includes("Teletrabajo"), "Cancelar marcó el teletrabajo");
     });
+    await prueba("Permisos: la actividad es un desplegable con todas", async () => {
+      dlgPermisos();
+      ok(await hasta(() => dlg()?.querySelector("select.actividad-permiso")), "la actividad no es un desplegable");
+      const s = dlg().querySelector("select.actividad-permiso");
+      ok(s.options.length >= 3, `solo ${s.options.length} opciones`);
+      ok([...s.options].some((o) => o.value === "Asuntos propios"), "no ofrece «Asuntos propios»");
+      cerrarTodo();
+    });
     await prueba("Permisos: elegir dónde se imputa lo local", async () => {
       dlgPermisos();
       ok(await hasta(() => dlg()?.querySelectorAll(".tarea-local-fila").length === 5), "sin las 5 filas");

@@ -1075,14 +1075,13 @@ const SIN_ACTIVIDAD = "— solo se marca en el día —";
 function dlgPermisos() {
   const info = nota("");
   const cuerpo = el("div");
-  const listaAct = el("datalist", { id: "permisos-actividades" });
   const d = dialogo({ titulo: "Permisos (horas)", ancho: 660, botones: [
     { texto: `Añadir los permisos de ${new Date().getFullYear()}…`, izquierda: true,
       accion: () => dlgPermisosAnio({ manual: true, alTerminar: () => llamar("permisos").then(pintar) }) },
     cerrarBoton] });
   const cabecera = nota("");
   const destinos = el("div");
-  d.cuerpo.append(cabecera, info, listaAct, cuerpo, destinos);
+  d.cuerpo.append(cabecera, info, cuerpo, destinos);
 
   // Donde imputa ESTE usuario lo que se marca en local: al marcarlo, la app
   // ofrece esa tarea (sin elegir, la deduce por el nombre).
@@ -1102,6 +1101,7 @@ function dlgPermisos() {
         if (r.error) { await avisar("Permisos", r.error); return; }
         estado(`${f.titulo}: se ofrecerá «${t.nombre}».`);
         pintarDestinos(r.filas);
+        llamar("permisos").then(pintar).catch(() => {});      // sus actividades, al desplegable
       } });
       modo.addEventListener("change", async () => {
         if (modo.value === "tarea") { tarea.hidden = false; tarea.focus(); return; }   // se guarda al elegirla
@@ -1118,7 +1118,14 @@ function dlgPermisos() {
   function pintar(p) {
     cabecera.textContent = `Saldo desde el ${p.desde}: lo que no usas se arrastra y las horas de cada año `
                            + "se suman a lo que te queda. Las usadas se calculan solas.";
-    listaAct.replaceChildren(...[SIN_ACTIVIDAD, ...p.actividades].map((a) => el("option", { value: a })));
+    // Desplegable (antes un campo con autocompletado: con "— solo se marca…"
+    // escrito solo enseñaba esa opcion). Actividades de verdad: las del
+    // Python y las de tus tareas habituales, sin repetir.
+    const vistas = new Map();
+    for (const a of [...p.actividades, ...(st.habituales?.filas || []).map((h) => h.actividad)]) {
+      if (a && !vistas.has(a.toLowerCase())) vistas.set(a.toLowerCase(), a);
+    }
+    const actividades = [...vistas.values()].sort((x, y) => x.localeCompare(y, "es"));
     cuerpo.replaceChildren(...p.filas.map((f) => {
       const caja = el("fieldset", { class: "permiso" }, el("legend", { text: f.nombre }));
       caja.append(el("div", { class: "fila cifras-permiso" },
@@ -1143,15 +1150,16 @@ function dlgPermisos() {
             }
           } })));
       });
-      const act = entrada(f.actividad || SIN_ACTIVIDAD, { list: "permisos-actividades", class: "actividad-permiso" });
-      const fijar = async () => {
-        const nueva = act.value.trim() === SIN_ACTIVIDAD ? "" : act.value.trim();
+      const opciones = [{ valor: "", texto: SIN_ACTIVIDAD }, ...actividades.map((a) => ({ valor: a, texto: a }))];
+      if (f.actividad && !vistas.has(f.actividad.toLowerCase())) opciones.push({ valor: f.actividad, texto: f.actividad });
+      const act = selector(opciones, f.actividad || "");
+      act.classList.add("actividad-permiso");
+      act.addEventListener("change", async () => {
+        const nueva = act.value;
         if (nueva === (f.actividad || "")) return;
         pintar(await llamar("fijar_actividad_permiso", f.id, nueva));
         if (nueva) leerPt();
-      };
-      act.addEventListener("change", fijar);
-      act.addEventListener("focus", () => act.select());
+      });
       caja.append(el("div", { class: "fila pie-permiso" },
         el("button", { text: "＋ Añadir concesión", onclick: () => pedirConcesion(f) }),
         el("span", { class: "crece" }),

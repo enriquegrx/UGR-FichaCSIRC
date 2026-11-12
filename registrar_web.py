@@ -1999,9 +1999,22 @@ class Api:
 
     # ---- permisos ----
     def permisos(self):
-        conocidas = set(core.ACTIVIDADES)
-        conocidas |= set((core.config_valor("tareas_actividad") or {}).keys())
+        # Actividades de verdad (las de ProyectosTic se llaman p. ej. "Asuntos
+        # propios"; la lista generica del motor no las tiene): las ya usadas o
+        # asociadas y las de las tareas elegidas para permisos/bajas/vacaciones.
+        conocidas = set((core.config_valor("tareas_actividad") or {}).keys())
+        conocidas |= set((core.config_valor("actividades_tarea") or {}).values())
+        conocidas.add(core.config_valor("ultima_actividad") or "")
         conocidas |= {core.actividad_de_permiso(t["id"]) for t in core.permisos_tipos()}
+        for m in ("permiso", "baja", "vacaciones"):
+            wp = ((core.config_valor("tareas_local") or {}).get(m) or {}).get("id")
+            if wp:
+                try:
+                    conocidas |= set(core._actividades_disponibles(wp).keys())
+                except Exception:
+                    pass          # sin red: con las que ya se conocen
+        if not any(conocidas):
+            conocidas = set(core.ACTIVIDADES)
         filas = []
         for f in core.resumen_permisos():
             filas.append({

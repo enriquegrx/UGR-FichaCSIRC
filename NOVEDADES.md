@@ -41,6 +41,9 @@ instalada aparece en el pie de la ventana.
   quedan por completar, cada uno con su enlace.
 - **Etiquetas de guardia, teletrabajo y permiso**: rellenas si está imputado en
   ProyectosTIC; con borde y «· local» si solo está marcado en tu equipo.
+- En *Permisos*, **«Se imputa como actividad»** es ahora un desplegable con
+  todas tus actividades de verdad (p. ej. «Asuntos propios»). Antes solo
+  enseñaba «— solo se marca en el día —» y no dejaba buscar.
 - **Deshacer** sale del pie y pasa arriba, en el centro de la caja *Días*:
   «↶ Deshacer cambios realizados», con cuántos cambios puedes deshacer.
 
