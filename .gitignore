@@ -33,3 +33,7 @@ desktop.ini
 
 # ---- Config local de Claude Code ----
 .claude/
+
+# Rust / Tauri
+tauri/target/
+tauri/gen/
