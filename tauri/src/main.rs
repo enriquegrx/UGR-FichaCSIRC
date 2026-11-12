@@ -17,6 +17,7 @@ mod ayuda;
 mod config;
 mod copias;
 mod herramientas;
+mod modo;
 mod inari;
 mod openproject;
 mod permisos;
@@ -81,9 +82,9 @@ fn main() {
             let asistente = std::env::args().any(|a| a == "--configurar") || !config::ruta_config().exists();
             let bandeja = !asistente && config::leer().is_ok_and(|c| sistema::bandeja_activa(&c));
             let (pagina, titulo, ancho, alto) = if asistente {
-                ("configurar.html", "FichaCSIRC · configuración (Rust, en pruebas)", 900.0, 760.0)
+                ("configurar.html", format!("FichaCSIRC · configuración{}", modo::sufijo()), 900.0, 760.0)
             } else {
-                ("index.html", "FichaCSIRC (Rust, en pruebas)", 1280.0, 860.0)
+                ("index.html", format!("FichaCSIRC {}{}", api::VERSION, modo::sufijo()), 1280.0, 860.0)
             };
             tauri::WebviewWindowBuilder::new(app, "principal", tauri::WebviewUrl::App(pagina.into()))
                 // Tauri captura por defecto el arrastrar y soltar (para recibir

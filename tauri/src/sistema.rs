@@ -8,6 +8,7 @@ use crate::api::{candado, Estado, VERSION};
 use crate::config::{self, Cfg};
 use crate::openproject::Cliente;
 use crate::reglas::{fmt_horas, Reglas, DIAS_ES};
+use crate::modo;
 use crate::resumen;
 use chrono::{Datelike, Duration, Local, NaiveDate, NaiveDateTime};
 use serde_json::{json, Map, Value};
@@ -16,8 +17,7 @@ use tauri_plugin_opener::OpenerExt;
 
 const GITHUB_REPO: &str = "enriquegrx/UGR-FichaCSIRC";
 const HORAS_ENTRE_CHEQUEOS: i64 = 4;
-pub const TAREA: &str = "FichaCSIRC-Rust-Recordatorio";
-const VALOR_RUN: &str = "FichaCSIRC-Rust";
+
 const CLAVE_RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 pub const AVISO_MINUTOS: u64 = 10;
 
@@ -72,11 +72,42 @@ pub async fn comprobar_actualizacion(e: &Estado, cfg: &Cfg, forzar: bool) -> Val
     match (version_tupla(tag), version_tupla(VERSION)) {
         (Some(nueva), Some(actual)) if nueva > actual => {
             *candado(&e.pagina_actualizacion) = datos["html_url"].as_str().map(String::from);
-            // la version Rust en pruebas aun no tiene instalador propio: se abre la pagina
-            json!({"version": tag.trim_start_matches('v'), "actual": VERSION, "puede_instalar": false,
-                   "experimento": false, "mac": cfg!(target_os = "macos")})
+            // en produccion (Windows), el instalador de la release; en pruebas, la pagina
+            let instalador = datos["assets"].as_array().and_then(|a| a.iter()
+                .find(|x| x["name"].as_str() == Some(modo::INSTALADOR_WINDOWS))
+                .and_then(|x| x["browser_download_url"].as_str().map(String::from)))
+                .filter(|_| modo::PRODUCCION && cfg!(windows));
+            let puede = instalador.is_some();
+            *candado(&e.instalador) = instalador.map(|u| (tag.trim_start_matches('v').to_string(), u));
+            json!({"version": tag.trim_start_matches('v'), "actual": VERSION, "puede_instalar": puede,
+                   "experimento": !modo::PRODUCCION, "mac": cfg!(target_os = "macos")})
         }
         _ => json!({"al_dia": true, "version": VERSION}),
+    }
+}
+
+/// Descarga el instalador de la version nueva y lo lanza. La app sigue
+/// abierta: el instalador la cierra al instalar (si se cancela, sigue ahi).
+pub async fn instalar_actualizacion(e: &Estado) -> Value {
+    let Some((version, url)) = candado(&e.instalador).clone() else {
+        return json!({"error": "No hay ninguna actualización preparada.", "pagina": true});
+    };
+    let ruta = std::env::temp_dir().join(format!("FichaCSIRC-Instalador-{version}.exe"));
+    let descarga = async {
+        let http = reqwest::Client::builder().user_agent("FichaCSIRC").build().map_err(|x| x.to_string())?;
+        let r = http.get(&url).send().await.map_err(|x| x.to_string())?;
+        if !r.status().is_success() {
+            return Err(format!("respuesta {}", r.status().as_u16()));
+        }
+        let bytes = r.bytes().await.map_err(|x| x.to_string())?;
+        std::fs::write(&ruta, &bytes).map_err(|x| x.to_string())
+    };
+    if let Err(x) = descarga.await {
+        return json!({"error": format!("No se pudo descargar el instalador: {x}"), "pagina": true});
+    }
+    match std::process::Command::new(&ruta).spawn() {
+        Ok(_) => json!({"ok": true, "mac": false}),
+        Err(x) => json!({"error": format!("No se pudo abrir el instalador: {x}"), "pagina": true}),
     }
 }
 
@@ -91,7 +122,7 @@ pub fn abrir_pagina_actualizacion(e: &Estado, app: &AppHandle) -> Value {
 
 pub fn recordatorio_estado() -> Value {
     let soportado = cfg!(windows);
-    let activo = soportado && ejecutar("schtasks", &["/query", "/tn", TAREA]).is_ok_and(|o| o.status.success());
+    let activo = soportado && ejecutar("schtasks", &["/query", "/tn", modo::tarea_recordatorio()]).is_ok_and(|o| o.status.success());
     json!({"soportado": soportado, "activo": activo, "experimento": false})
 }
 
@@ -101,10 +132,10 @@ pub fn recordatorio_activar(hora: &str) -> Value {
         return json!({"error": "Escribe la hora como HH:MM (ej. 16:00)."});
     }
     if !cfg!(windows) {
-        return json!({"error": "En la versión Rust en pruebas, el aviso diario solo está en Windows."});
+        return json!({"error": "De momento, el aviso diario de esta versión solo está en Windows."});
     }
     let comando = format!("\"{}\" --recordatorio", exe());
-    match ejecutar("schtasks", &["/create", "/tn", TAREA, "/tr", &comando, "/sc", "weekly",
+    match ejecutar("schtasks", &["/create", "/tn", modo::tarea_recordatorio(), "/tr", &comando, "/sc", "weekly",
                                  "/d", "MON,TUE,WED,THU,FRI", "/st", hora, "/f"]) {
         Ok(o) if o.status.success() => json!({"ok": true}),
         Ok(o) => json!({"error": String::from_utf8_lossy(if o.stderr.is_empty() { &o.stdout } else { &o.stderr }).trim().to_string()}),
@@ -113,7 +144,7 @@ pub fn recordatorio_activar(hora: &str) -> Value {
 }
 
 pub fn recordatorio_desactivar() -> Value {
-    let _ = ejecutar("schtasks", &["/delete", "/tn", TAREA, "/f"]);
+    let _ = ejecutar("schtasks", &["/delete", "/tn", modo::tarea_recordatorio(), "/f"]);
     json!({"ok": true})
 }
 
@@ -221,18 +252,18 @@ pub fn aviso_responder(app: &AppHandle, abrir: bool) -> Value {
 // ---------------------------------------------------------------- bandeja
 
 pub fn inicio_activo() -> bool {
-    cfg!(windows) && ejecutar("reg", &["query", CLAVE_RUN, "/v", VALOR_RUN]).is_ok_and(|o| o.status.success())
+    cfg!(windows) && ejecutar("reg", &["query", CLAVE_RUN, "/v", modo::valor_inicio()]).is_ok_and(|o| o.status.success())
 }
 
 fn activar_inicio(si: bool) -> Result<(), String> {
     let r = if si {
         let comando = format!("\"{}\" --minimizado", exe());
-        ejecutar("reg", &["add", CLAVE_RUN, "/v", VALOR_RUN, "/t", "REG_SZ", "/d", &comando, "/f"])
+        ejecutar("reg", &["add", CLAVE_RUN, "/v", modo::valor_inicio(), "/t", "REG_SZ", "/d", &comando, "/f"])
     } else {
         if !inicio_activo() {
             return Ok(());
         }
-        ejecutar("reg", &["delete", CLAVE_RUN, "/v", VALOR_RUN, "/f"])
+        ejecutar("reg", &["delete", CLAVE_RUN, "/v", modo::valor_inicio(), "/f"])
     };
     match r {
         Ok(o) if o.status.success() => Ok(()),
@@ -292,7 +323,7 @@ pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
     let sep = PredefinedMenuItem::separator(app)?;
     let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&abrir, &hoy, &sep, &salir])?;
-    let mut b = TrayIconBuilder::with_id("bandeja").tooltip("FichaCSIRC (Rust, en pruebas)").menu(&menu)
+    let mut b = TrayIconBuilder::with_id("bandeja").tooltip(format!("FichaCSIRC{}", modo::sufijo())).menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
             "abrir" => mostrar(app),

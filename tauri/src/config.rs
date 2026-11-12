@@ -38,7 +38,11 @@ pub fn ruta_config() -> PathBuf {
     if let Ok(r) = std::env::var("FICHACSIRC_CONFIG") {
         return PathBuf::from(r);
     }
-    let destino = carpeta_base().join("FichaCSIRC-rust").join("config.json");
+    let destino = carpeta_base().join(crate::modo::carpeta_config()).join("config.json");
+    // en produccion es la MISMA config que la 3.x: nada que copiar
+    if crate::modo::PRODUCCION {
+        return destino;
+    }
     // solo la PRIMERA vez (sin carpeta): tras "He olvidado el PIN" no hay que
     // volver a traer la config de la app de Python (con el PIN olvidado)
     if !destino.exists() && !destino.parent().is_some_and(Path::exists) {

@@ -29,6 +29,11 @@ hex = "0.4"
 subtle = "2"
 base64 = "0.22"
 
+[features]
+# FichaCSIRC 4.x de verdad (ver src/modo.rs): misma config que la 3.x,
+# mismos nombres de aviso diario e inicio con Windows y actualizacion sola.
+produccion = []
+
 [profile.release]
 opt-level = "s"
 lto = true

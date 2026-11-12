@@ -43,6 +43,8 @@ pub struct Estado {
     pub(crate) ausencias: Mutex<HashMap<String, Value>>,
     /// ultimo CSV exportado (el unico que se puede abrir desde la app)
     pub(crate) ultima_exportacion: Mutex<Option<std::path::PathBuf>>,
+    /// (version, url) del instalador de la version nueva (en produccion)
+    pub(crate) instalador: Mutex<Option<(String, String)>>,
     /// pagina de la version nueva (Ayuda > Comprobar actualizaciones)
     pub(crate) pagina_actualizacion: Mutex<Option<String>>,
     /// aviso diario: el texto y los dias con huecos (dia, registrado, objetivo)
@@ -604,7 +606,7 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             Ok(sistema::comprobar_actualizacion(e, &cfg, forzar).await)
         }
         "abrir_pagina_actualizacion" => Ok(sistema::abrir_pagina_actualizacion(e, &app)),
-        "instalar_actualizacion" => Ok(json!({"error": "La versión Rust en pruebas aún no se instala sola: descárgala desde la página.", "pagina": true})),
+        "instalar_actualizacion" => Ok(sistema::instalar_actualizacion(e).await),
         "recordatorio_estado" => Ok(sistema::recordatorio_estado()),
         "recordatorio_activar" => {
             e.exigir_desbloqueo(&cfg)?;
@@ -626,7 +628,7 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             let b = |i: usize| args.get(i).and_then(Value::as_bool).unwrap_or(false);
             sistema::bandeja_guardar(&app, b(0), b(1))
         }
-        otro => Err(format!("Esto aún no está en la versión Rust (en pruebas): «{otro}». Hazlo desde FichaCSIRC normal.")),
+        otro => Err(format!("Función desconocida: «{otro}».")),
     }
 }
 
@@ -790,7 +792,7 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "pin": pin_estado(e, cfg),
         "zoom": zoom(cfg),
         "tema": tema(cfg),
-        "plataforma": format!("{} · Rust (en pruebas)", plataforma()),
+        "plataforma": format!("{}{}", plataforma(), if crate::modo::PRODUCCION { "" } else { " · Rust (en pruebas)" }),
         "lunes": lunes.to_string(),
         "logo": logo(),
         "tareas": tareas(e, cfg),

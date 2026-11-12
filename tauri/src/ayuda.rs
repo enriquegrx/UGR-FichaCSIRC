@@ -270,7 +270,7 @@ pub async fn diagnostico() -> Value {
     let buena = copias::ultima_completa(&ruta).and_then(|(nombre, _)| copias::fecha_de(&nombre));
     let so = if cfg!(target_os = "windows") { "Windows" } else if cfg!(target_os = "macos") { "macOS" } else { "Linux" };
     let mut lin = vec![
-        format!("FichaCSIRC {VERSION} (Rust, en pruebas) · {so} · {}", Local::now().format("%d/%m/%Y %H:%M")),
+        format!("FichaCSIRC {VERSION}{} · {so} · {}", crate::modo::sufijo(), Local::now().format("%d/%m/%Y %H:%M")),
         String::new(),
         format!("Configuración: {} ({leida})", ruta.display()),
         format!("  Dirección: {}", if url.is_empty() { "(FALTA)".into() } else { url.clone() }),
