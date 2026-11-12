@@ -42,7 +42,8 @@ jobs:
               tauri/target/release/bundle/deb/*.deb
               tauri/target/release/bundle/appimage/*.AppImage
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    # el Mac Intel de GitHub tarda mucho en compilar Rust la primera vez
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
@@ -53,6 +54,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
+
+      # lo ya compilado se reutiliza entre ejecuciones (de ~40 min a pocos minutos)
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri
 
       - uses: actions/setup-node@v5
         with:
