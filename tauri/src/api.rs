@@ -2,6 +2,7 @@
 //! llega aqui como (metodo, args) y devuelve lo mismo que la clase Api de
 //! registrar_web.py. Fase 1: abrir, PIN y ver la semana (solo lectura).
 
+use crate::apuntes;
 use crate::config::{self, Cfg};
 use crate::openproject::{self, Cliente, ErrorOp};
 use crate::pin;
@@ -25,11 +26,17 @@ pub struct Estado {
     usuario: Mutex<Option<Value>>,
     desbloqueada: Mutex<Option<bool>>,
     /// iso -> apuntes (None = no se pudo leer)
-    cache: Mutex<HashMap<String, Option<Vec<Apunte>>>>,
+    pub(crate) cache: Mutex<HashMap<String, Option<Vec<Apunte>>>>,
     error: Mutex<Option<ErrorOp>>,
+    /// acciones deshacibles, la ultima al final (Ctrl+Z repetido)
+    pub(crate) pila: Mutex<Vec<crate::apuntes::Accion>>,
+    /// id viejo -> id nuevo de los apuntes recreados al deshacer
+    pub(crate) ids: Mutex<HashMap<String, String>>,
+    /// wp_id -> [(actividad, href)]
+    pub(crate) actividades: Mutex<HashMap<String, Vec<(String, String)>>>,
 }
 
-fn candado<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+pub(crate) fn candado<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -49,6 +56,17 @@ impl Estado {
         *candado(&self.usuario) = Some(u.clone());
         Ok(u)
     }
+}
+
+fn arg_opcional(args: &[Value], i: usize) -> Option<String> {
+    match args.get(i) {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(arg(args, i)),
+    }
+}
+
+fn arg_lista(args: &[Value], i: usize) -> Vec<Value> {
+    args.get(i).and_then(Value::as_array).cloned().unwrap_or_default()
 }
 
 fn arg(args: &[Value], i: usize) -> String {
@@ -119,6 +137,41 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             Ok(Value::String(nombre.unwrap_or_default()))
         }
         "tareas" => Ok(tareas(&cfg)),
+        // ---- fichar (fase 2) ----
+        "comprobar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let dias: Vec<String> = arg_lista(&args, 0).iter().filter_map(|d| d.as_str().map(String::from)).collect();
+            Ok(apuntes::comprobar(e, &cfg, &dias, &arg(&args, 1), args.get(2).unwrap_or(&Value::Null)))
+        }
+        "anadir" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let dias: Vec<String> = arg_lista(&args, 0).iter().filter_map(|d| d.as_str().map(String::from)).collect();
+            let repetir = args.get(5).and_then(Value::as_bool).unwrap_or(true);
+            apuntes::anadir(e, &cfg, &dias, &arg(&args, 1), args.get(2).unwrap_or(&Value::Null),
+                            &arg(&args, 3), &arg(&args, 4), repetir).await
+        }
+        "eliminar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            apuntes::eliminar(e, &cfg, &arg_lista(&args, 0)).await
+        }
+        "editar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            apuntes::editar(e, &cfg, &arg(&args, 0), &arg(&args, 1), args.get(2).unwrap_or(&Value::Null),
+                            arg_opcional(&args, 3), arg_opcional(&args, 4)).await
+        }
+        "guardar_dia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            apuntes::guardar_dia(e, &cfg, &arg(&args, 0), args.get(1).unwrap_or(&Value::Null)).await
+        }
+        "mover_apunte" => {
+            e.exigir_desbloqueo(&cfg)?;
+            apuntes::mover(e, &cfg, &arg(&args, 0), &arg(&args, 1), &arg(&args, 2)).await
+        }
+        "deshacer" => {
+            e.exigir_desbloqueo(&cfg)?;
+            apuntes::deshacer(e, &cfg).await
+        }
+        "deshacer_estado" => Ok(apuntes::deshacer_estado(e)),
         "actividades" => Ok(actividades(&cfg, &arg(&args, 0)).await),
         // ---- preferencias de la ventana ----
         "vista" => Ok(Value::String(vista(&cfg))),

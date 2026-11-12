@@ -113,25 +113,100 @@ impl Cliente {
         }
     }
 
-    /// Actividades permitidas en ESA tarea (formulario de time_entries).
-    pub async fn actividades(&self, wp_id: &str) -> Result<Vec<String>, ErrorOp> {
-        let cuerpo = json!({"_links": {"workPackage": {"href": format!("/api/v3/work_packages/{wp_id}")}}});
-        let resp = self.http.post(format!("{}/api/v3/time_entries/form", self.base))
-            .header("Authorization", &self.auth)
-            .json(&cuerpo)
-            .send()
-            .await
-            .map_err(desde_reqwest)?;
-        if !resp.status().is_success() {
-            return Err(ErrorOp::Http(resp.status().as_u16()));
+    async fn enviar(&self, metodo: reqwest::Method, ruta: &str, cuerpo: Option<&Value>, oks: &[u16]) -> Result<Value, ErrorOp> {
+        let mut pet = self.http.request(metodo, format!("{}{ruta}", self.base)).header("Authorization", &self.auth);
+        if let Some(c) = cuerpo {
+            pet = pet.json(c);
         }
-        let datos: Value = resp.json().await.map_err(|e| ErrorOp::Otro(e.to_string()))?;
+        let resp = pet.send().await.map_err(desde_reqwest)?;
+        let codigo = resp.status().as_u16();
+        let texto = resp.text().await.unwrap_or_default();
+        if !oks.contains(&codigo) {
+            if codigo == 401 || codigo == 403 || codigo >= 500 {
+                return Err(ErrorOp::Http(codigo));
+            }
+            // 422 y compania: el motivo que da ProyectosTIC (como la app de Python)
+            let corto: String = texto.chars().take(200).collect();
+            return Err(ErrorOp::Otro(format!("Error {codigo}: {corto}")));
+        }
+        Ok(serde_json::from_str(&texto).unwrap_or(Value::Null))
+    }
+
+    /// Crea un apunte y devuelve su id (para poder deshacerlo).
+    pub async fn crear(&self, fecha: &str, wp_id: &str, horas: f64, comentario: &str,
+                       actividad_href: Option<&str>) -> Result<Option<String>, ErrorOp> {
+        let mut cuerpo = json!({
+            "hours": iso_dur(horas),
+            "spentOn": fecha,
+            "comment": {"raw": comentario},
+            "_links": {"workPackage": {"href": format!("/api/v3/work_packages/{wp_id}")}},
+        });
+        if let Some(h) = actividad_href {
+            cuerpo["_links"]["activity"] = json!({"href": h});
+        }
+        let r = self.enviar(reqwest::Method::POST, "/api/v3/time_entries", Some(&cuerpo), &[200, 201]).await?;
+        Ok(match &r["id"] {
+            Value::Number(n) => Some(n.to_string()),
+            Value::String(s) => Some(s.clone()),
+            _ => None,
+        })
+    }
+
+    /// Cambia horas y comentario (y la actividad, si se da su href).
+    pub async fn actualizar(&self, id: &str, horas: f64, comentario: &str, actividad_href: Option<&str>) -> Result<(), ErrorOp> {
+        let mut cuerpo = json!({"hours": iso_dur(horas), "comment": {"raw": comentario}});
+        if let Some(h) = actividad_href {
+            cuerpo["_links"] = json!({"activity": {"href": h}});
+        }
+        self.enviar(reqwest::Method::PATCH, &format!("/api/v3/time_entries/{id}"), Some(&cuerpo), &[200, 201]).await?;
+        Ok(())
+    }
+
+    pub async fn eliminar(&self, id: &str) -> Result<(), ErrorOp> {
+        self.enviar(reqwest::Method::DELETE, &format!("/api/v3/time_entries/{id}"), None, &[200, 204]).await?;
+        Ok(())
+    }
+
+    /// Actividades permitidas en ESA tarea, con su href (formulario de time_entries).
+    pub async fn actividades_href(&self, wp_id: &str) -> Result<Vec<(String, String)>, ErrorOp> {
+        let cuerpo = json!({"_links": {"workPackage": {"href": format!("/api/v3/work_packages/{wp_id}")}}});
+        let datos = self.enviar(reqwest::Method::POST, "/api/v3/time_entries/form", Some(&cuerpo), &[200]).await?;
         let vals = datos["_embedded"]["schema"]["activity"]["_embedded"]["allowedValues"]
             .as_array().cloned().unwrap_or_default();
         Ok(vals.iter().filter_map(|v| {
-            v["name"].as_str().or_else(|| v["_links"]["self"]["title"].as_str()).map(String::from)
-        }).filter(|n| !n.is_empty()).collect())
+            let nombre = v["name"].as_str().or_else(|| v["_links"]["self"]["title"].as_str())?;
+            let href = v["_links"]["self"]["href"].as_str()?;
+            (!nombre.is_empty() && !href.is_empty()).then(|| (nombre.to_string(), href.to_string()))
+        }).collect())
     }
+
+    /// Solo los nombres de las actividades de ESA tarea.
+    pub async fn actividades(&self, wp_id: &str) -> Result<Vec<String>, ErrorOp> {
+        Ok(self.actividades_href(wp_id).await?.into_iter().map(|(n, _)| n).collect())
+    }
+}
+
+/// 3.5 -> "PT3H30M" (como _iso_dur).
+pub fn iso_dur(horas: f64) -> String {
+    let total = (horas * 60.0).round() as i64;
+    let (h, m) = (total / 60, total % 60);
+    let mut s = String::from("PT");
+    if h != 0 {
+        s += &format!("{h}H");
+    }
+    if m != 0 {
+        s += &format!("{m}M");
+    }
+    if s == "PT" { "PT0H".into() } else { s }
+}
+
+/// La actividad 'nombre' entre las de la tarea: igual (sin mayusculas) o,
+/// si no, la que la contenga (como _actividad_href).
+pub fn elegir_actividad<'a>(acts: &'a [(String, String)], nombre: &str) -> Option<&'a str> {
+    let n = nombre.to_lowercase();
+    acts.iter().find(|(a, _)| a.to_lowercase() == n)
+        .or_else(|| acts.iter().find(|(a, _)| a.to_lowercase().contains(&n)))
+        .map(|(_, h)| h.as_str())
 }
 
 /// "PT3H30M" -> 3.5 (como _parse_horas).
@@ -214,6 +289,25 @@ mod tests {
         assert_eq!(duracion("PT45M"), 0.75);
         assert_eq!(duracion("PT1.5H"), 1.5);
         assert_eq!(duracion(""), 0.0);
+    }
+
+    #[test]
+    fn duraciones_hacia_la_api() {
+        assert_eq!(iso_dur(3.5), "PT3H30M");
+        assert_eq!(iso_dur(7.0), "PT7H");
+        assert_eq!(iso_dur(0.25), "PT15M");
+        assert_eq!(iso_dur(0.0), "PT0H");
+        assert_eq!(duracion(&iso_dur(6.75)), 6.75);
+    }
+
+    #[test]
+    fn la_actividad_se_elige_como_en_python() {
+        let acts = vec![("Actuaciones técnicas".to_string(), "/a/1".to_string()),
+                        ("Formación".to_string(), "/a/2".to_string()),
+                        ("Asuntos propios".to_string(), "/a/3".to_string())];
+        assert_eq!(elegir_actividad(&acts, "formación"), Some("/a/2"));
+        assert_eq!(elegir_actividad(&acts, "Asuntos"), Some("/a/3"));
+        assert_eq!(elegir_actividad(&acts, "soporte"), None);
     }
 
     #[test]
