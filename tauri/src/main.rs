@@ -93,6 +93,14 @@ fn main() {
                 .title(titulo)
                 .inner_size(ancho, alto)
                 .min_inner_size(820.0, 600.0)
+                // como la de Python: la principal, maximizada; y el fondo del
+                // tema desde el primer instante (sin fogonazo blanco en oscuro)
+                .maximized(!asistente)
+                .background_color(if config::leer().is_ok_and(|c| c.texto("tema") == "oscuro") {
+                    tauri::window::Color(0x14, 0x18, 0x1d, 0xff)
+                } else {
+                    tauri::window::Color(0xe9, 0xed, 0xf2, 0xff)
+                })
                 // --minimizado (inicio con Windows): escondida en la bandeja
                 .visible(!(minimizado && bandeja))
                 .build()?;

@@ -22,4 +22,11 @@
     },
   });
   window.pywebview = { api };
+  // Como en la app de Python: el boton derecho no saca el menu del navegador
+  // ("Atras", "Actualizar", "Imprimir"... que aqui no pintan nada). Los menus
+  // propios de la app ya cancelan este evento; en los campos de texto se deja
+  // el de Copiar / Pegar.
+  document.addEventListener("contextmenu", (e) => {
+    if (!e.target.closest("input, textarea, [contenteditable]")) e.preventDefault();
+  });
 })();
