@@ -245,7 +245,7 @@ const MENUS = {
   archivo: () => [
     { texto: "Exportar a CSV…", accion: dlgExportar },
     { texto: "Resumen del mes", accion: dlgResumen },
-    { texto: "Estadísticas…", accion: () => dlgEstadisticas() },
+    { texto: "Estadísticas", accion: () => entrarEstadisticas() },
   ],
   ver: () => [
     ...PANELES.map(([id, nombre]) => ({
@@ -1028,13 +1028,40 @@ function alternarDia(iso, e = null) {
 
 function pintarSelectorVista() {
   for (const b of document.querySelectorAll(".selector-vista button")) {
-    const activo = b.dataset.vista === st.vista;
+    const activo = b.dataset.vista === (st.estad ? "estad" : st.vista);
     b.classList.toggle("activo", activo);
     b.setAttribute("aria-pressed", String(activo));
   }
   $("b-ant").title = st.vista === "mes" ? "Mes anterior (Ctrl+←)" : "Semana anterior (Ctrl+←)";
   $("b-sig").title = st.vista === "mes" ? "Mes siguiente (Ctrl+→)" : "Semana siguiente (Ctrl+→)";
   $("b-hoy").title = st.vista === "mes" ? "Volver al mes actual" : "Volver a la semana actual";
+  if (st.estad) {
+    $("b-ant").title = "Periodo anterior (Ctrl+←)";
+    $("b-sig").title = "Periodo siguiente (Ctrl+→)";
+    $("b-hoy").title = "Volver al periodo actual";
+  }
+}
+
+// ---------------------------------------------------------------- estadisticas, en la ventana
+
+// La pestaña Estadisticas ocupa el sitio de las fichas, la franja y los
+// paneles de abajo (los esconde el CSS con body.modo-estad); el titulo de
+// arriba dice el periodo y las flechas / "Hoy" lo mueven.
+function entrarEstadisticas() {
+  if (st.estad) return;
+  const ref = st.vista === "mes" ? `${st.mesSel.anio}-${String(st.mesSel.mes).padStart(2, "0")}-01` : st.lunes;
+  document.body.classList.add("modo-estad");
+  $("estadisticas").hidden = false;
+  st.estad = montarEstadisticas($("estadisticas"), { periodo: "mes", ref,
+                                                      alTitulo: (t) => { $("titulo-semana").textContent = t; } });
+  pintarSelectorVista();
+}
+
+function salirEstadisticas() {
+  document.body.classList.remove("modo-estad");
+  $("estadisticas").hidden = true;
+  $("estadisticas").replaceChildren();
+  st.estad = null;
 }
 
 async function cambiarVista(vista) {
@@ -1472,6 +1499,7 @@ function enCampo(e) {
 }
 
 function navegar(delta) {
+  if (st.estad) { st.estad.mover(delta); return; }
   if (st.vista === "mes") {
     if (delta === 0) st.mesSel = mesDe(hoyIso());
     else {
@@ -1494,9 +1522,8 @@ function irADia(iso) {
 $("b-ant").onclick = () => navegar(-1);
 $("b-sig").onclick = () => navegar(1);
 $("b-hoy").onclick = () => navegar(0);
-$("b-recargar").onclick = () => cargarSemana();
+$("b-recargar").onclick = () => (st.estad ? st.estad.cargar() : cargarSemana());
 $("b-resumen").onclick = () => dlgResumen();
-$("b-estad").onclick = () => dlgEstadisticas();
 $("b-exportar").onclick = () => dlgExportar();
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
@@ -1516,7 +1543,15 @@ $("toda-semana").addEventListener("change", (e) => {
   pintarMarcados();
 });
 for (const b of document.querySelectorAll(".selector-vista button")) {
-  b.addEventListener("click", () => cambiarVista(b.dataset.vista));
+  b.addEventListener("click", async () => {
+    const v = b.dataset.vista;
+    if (v === "estad") { entrarEstadisticas(); return; }
+    if (st.estad) {
+      salirEstadisticas();
+      if (v === st.vista) { pintarSelectorVista(); await cargarSemana(); return; }
+    }
+    cambiarVista(v);
+  });
 }
 for (const b of document.querySelectorAll(".menubar button")) {
   b.addEventListener("click", (e) => { e.stopPropagation(); menuBajo(b, MENUS[b.dataset.menu]()); });

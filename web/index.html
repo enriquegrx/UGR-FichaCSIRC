@@ -39,6 +39,7 @@
     <div class="selector-vista" role="group" aria-label="Vista">
       <button data-vista="semana" aria-pressed="true">Semana</button>
       <button data-vista="mes" aria-pressed="false">Mes</button>
+      <button data-vista="estad" aria-pressed="false">Estadísticas</button>
     </div>
     <div class="titulo-semana">
       <strong id="titulo-semana">Cargando…</strong>
@@ -47,12 +48,15 @@
       <span id="estado-vista" class="chip-estado" hidden></span>
     </div>
     <button id="b-resumen" title="Horas del mes: registradas, objetivo y días incompletos">Resumen</button>
-    <button id="b-estad" title="Tareas más hechas, jornada cumplida y el año mes a mes">Estadísticas</button>
     <button id="b-exportar" title="Exporta tus apuntes a CSV por rango de fechas">Exportar CSV…</button>
     <button id="b-recargar" title="Recargar (F5)">⟳</button>
   </section>
 
-  <section class="panel">
+  <!-- Estadisticas: en la propia ventana, en lugar de las fichas (pestaña
+       "Estadísticas"; las flechas y "Hoy" de arriba mueven el periodo) -->
+  <section id="estadisticas" class="panel panel-estad" hidden></section>
+
+  <section id="seccion-dias" class="panel">
     <div class="cabeza-seccion cabeza-dias">
       <h2>Días</h2>
       <!-- en el centro y a la vista (en el pie no se veia); solo si hay algo que deshacer -->

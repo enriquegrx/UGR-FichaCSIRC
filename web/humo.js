@@ -329,6 +329,16 @@
       ok(getComputedStyle(document.body).backgroundColor !== claro, "el tema oscuro no cambia el fondo");
       aplicarTema("claro");
     });
+    await prueba("estadísticas en la propia ventana", async () => {
+      document.querySelector('.selector-vista [data-vista="estad"]').click();
+      ok(await hasta(() => !$("estadisticas").hidden && $("estadisticas").textContent.includes("Tareas más realizadas")), "no se ve el panel");
+      ok(getComputedStyle($("seccion-dias")).display === "none", "las fichas siguen a la vista");
+      ok(!dlg(), "salió en una ventana flotante");
+      $("b-sig").click();
+      ok(await hasta(() => $("titulo-semana").textContent.length > 0), "las flechas no mueven el periodo");
+      document.querySelector('.selector-vista [data-vista="semana"]').click();
+      ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "no vuelve a la semana");
+    });
     await prueba("vista mensual", async () => {
       document.querySelector('.selector-vista [data-vista="mes"]').click();
       ok(await hasta(() => document.querySelectorAll(".celda").length >= 20), "sin celdas");
@@ -336,7 +346,7 @@
       document.querySelector('.selector-vista [data-vista="semana"]').click();
       ok(await hasta(() => dias().length === 5), "no vuelve a la semana");
     });
-    const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["diagnóstico", dlgDiagnostico], ["estadísticas", dlgEstadisticas], ["resumen del mes", dlgResumen],
+    const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["diagnóstico", dlgDiagnostico], ["resumen del mes", dlgResumen],
       ["exportar", dlgExportar], ["festivos", dlgFestivos], ["ajustes de días", dlgAjustesDias],
       ["INARI", dlgInari], ["buscar tarea", dlgBuscar], ["PIN", dlgPin], ["bandeja", dlgBandeja], ["copias", dlgCopias],
       ["novedades", dlgNovedades], ["tecnología", dlgTecnologia], ["atajos", dlgAtajos], ["acerca de", dlgAcerca]];

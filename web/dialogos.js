@@ -392,30 +392,28 @@ async function confirmarLocal(d, motivo) {
 
 // ================================================================ estadisticas
 
-// Semana, mes o año: horas, jornada cumplida, media, horas de mas, tareas y
+// Pestaña Estadisticas. Semana, mes o año: horas, jornada cumplida, media, horas de mas, tareas y
 // actividades mas hechas (con los colores de las fichas: por horas), el año
 // mes a mes con los colores del calendario de calor y unos detalles.
 const PERIODOS_ESTAD = [["semana", "Semana"], ["mes", "Mes"], ["anio", "Año"]];
 const COLORES_ACTIVIDAD = ["--t5", "--t6", "--t7", "--t2", "--t3", "--t4", "--t0", "--t1"];
 
-function dlgEstadisticas(periodo = "mes") {
-  let ref = hoyIso(), seq = 0;
-  const titulo = el("strong", { class: "estad-titulo" });
+// Monta el panel en 'cont' (la seccion #estadisticas de la ventana). Devuelve
+// {mover(n), cargar()}: las flechas y "Hoy" de arriba lo mueven (0 = hoy).
+function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = () => {} } = {}) {
+  let seq = 0;
   const cuerpo = el("div", { class: "estad" });
   const botones = PERIODOS_ESTAD.map(([p, t]) => el("button", { text: t, onclick: () => { periodo = p; cargar(); } }));
-  const d = dialogo({ titulo: "Estadísticas", ancho: 800, botones: [cerrarBoton] });
-  d.cuerpo.append(
-    el("div", { class: "fila estad-nav" },
-      el("button", { text: "←", title: "Periodo anterior", "aria-label": "Periodo anterior", onclick: () => mover(-1) }),
-      titulo,
-      el("button", { text: "→", title: "Periodo siguiente", "aria-label": "Periodo siguiente", onclick: () => mover(1) }),
-      el("span", { class: "crece" }),
+  cont.replaceChildren(
+    el("div", { class: "cabeza-seccion" },
+      el("h2", { text: "Estadísticas" }),
       el("div", { class: "pills-periodo" }, ...botones)),
     cuerpo);
 
   function mover(n) {
     const [a, m] = ref.split("-").map(Number);
-    if (periodo === "semana") ref = sumarDias(ref, 7 * n);
+    if (n === 0) ref = hoyIso();
+    else if (periodo === "semana") ref = sumarDias(ref, 7 * n);
     else if (periodo === "anio") ref = `${a + n}-${String(m).padStart(2, "0")}-01`;
     else ref = new Date(Date.UTC(a, m - 1 + n, 1)).toISOString().slice(0, 10);
     cargar();
@@ -429,7 +427,7 @@ function dlgEstadisticas(periodo = "mes") {
     try { r = await llamar("estadisticas", periodo, ref); } catch (_e) { return; }
     if (mio !== seq) return;
     if (r.error) { cuerpo.replaceChildren(nota(r.error, "rojo")); return; }
-    titulo.textContent = r.titulo;
+    alTitulo(r.titulo);
     pintar(r);
   }
 
@@ -478,6 +476,7 @@ function dlgEstadisticas(periodo = "mes") {
     cuerpo.replaceChildren(...nodos);
   }
   cargar();
+  return { mover, cargar };
 }
 
 // ================================================================ diagnostico
