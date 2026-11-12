@@ -326,22 +326,28 @@ async function dlgCopias() {
 
 // ================================================================ marcas solo en este equipo
 
-// Antes de marcar festivo, vacaciones, baja o permiso por horas: dejar claro
+// Antes de marcar festivo, vacaciones, baja, permiso por horas, guardia o
+// teletrabajo: dejar claro
 // que se guarda SOLO en este equipo (no va a ProyectosTic) y, si hay una tarea
 // de ausencias en ProyectosTic, ofrecer imputar ahi. Devuelve "local"
 // (marcar), "imputar" (ya se abrio Editar dia) o null (cancelado).
 // "No volver a preguntarme" lo calla para ese motivo (Herramientas lo repone).
-const CON_TAREA = ["baja", "vacaciones", "permiso"];
+const CON_TAREA = ["baja", "vacaciones", "permiso", "guardia", "teletrabajo"];
+// como se dice cada motivo en el aviso
+const LOCAL_COMO = { guardia: " como día de guardia" };
+const LOCAL_NOMBRE = { permiso: "permiso por horas", guardia: "día de guardia" };
+const LOCAL_PLURAL = { permiso: "los permisos", baja: "las bajas", vacaciones: "las vacaciones",
+                       guardia: "las guardias", teletrabajo: "los días de teletrabajo" };
 async function confirmarLocal(d, motivo) {
   if ((st.ini?.avisos_local_no || []).includes(motivo)) return "local";
   let tarea = null;
   if (CON_TAREA.includes(motivo)) {
-    estado("Comprobando si tienes una tarea de ausencias en ProyectosTIC…");
+    estado(`Comprobando si tienes en ProyectosTIC una tarea de ${LOCAL_PLURAL[motivo]}…`);
     tarea = await llamar("tarea_ausencia", motivo, st.habituales?.filas || []).catch(() => null);
     estado("");
   }
   const que = motivo === "permiso" ? "Añadir un permiso por horas el" : "Marcar el";
-  const como = motivo === "permiso" ? "" : ` como ${motivo}`;
+  const como = motivo === "permiso" ? "" : (LOCAL_COMO[motivo] || ` como ${motivo}`);
   return new Promise((resolver) => {
     let resuelto = false, cerrarDialogo = null;
     const fin = (v) => { if (!resuelto) { resuelto = true; resolver(v); } };
@@ -377,10 +383,10 @@ async function confirmarLocal(d, motivo) {
       tarea ? el("div", { class: "aviso-local" },
         el("p", {}, "⚠ Tienes en ProyectosTIC la tarea ", el("b", { text: `«${tarea.nombre}»` }),
           tarea.proyecto || tarea.padre ? ` (${[tarea.proyecto, tarea.padre].filter(Boolean).join(" › ")})` : "", "."),
-        el("p", { text: `Si en tu servicio ${motivo === "permiso" ? "los permisos" : motivo === "baja" ? "las bajas" : "las vacaciones"} `
+        el("p", { text: `Si en tu servicio ${LOCAL_PLURAL[motivo]} `
                         + "se imputan ahí, impútalo en esa tarea en vez de (o además de) marcarlo aquí." }))
         : null,
-      el("label", { class: "check" }, nomas, ` No volver a preguntarme para «${motivo === "permiso" ? "permiso por horas" : motivo}»`));
+      el("label", { class: "check" }, nomas, ` No volver a preguntarme para «${LOCAL_NOMBRE[motivo] || motivo}»`));
   });
 }
 

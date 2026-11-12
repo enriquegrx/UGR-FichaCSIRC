@@ -495,6 +495,11 @@ class TestBorrarYMarcas(Base):
             self.assertEqual(t["id"], 12154)                     # por nombre, entre favoritas
             self.assertEqual(self.api.tarea_ausencia("vacaciones")["id"], 12154)
             self.assertIsNone(self.api.tarea_ausencia("festivo"))    # festivo: no se busca
+            # 3.2.2: guardia y teletrabajo tambien buscan su tarea
+            favs.append({"id": 9001, "nombre": "[CSIRC] Guardias de fin de semana"})
+            favs.append({"id": 9002, "nombre": "Teletrabajo"})
+            self.assertEqual(self.api.tarea_ausencia("guardia")["id"], 9001)
+            self.assertEqual(self.api.tarea_ausencia("teletrabajo")["id"], 9002)
             # asociada a mano gana, aunque el nombre no diga nada
             guardado["tareas_actividad"] = {"Bajas médicas": 777}
             self.assertEqual(self.api.tarea_ausencia("baja")["id"], 777)

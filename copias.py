@@ -33,6 +33,7 @@ import json
 import os
 import re
 import threading
+import time
 
 MAX_RECIENTES = 10
 DIAS_DIARIAS = 7
@@ -81,7 +82,19 @@ def _escribir(ruta, datos):
     tmp = f"{ruta}.{os.getpid()}-{threading.get_ident()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(datos, f, ensure_ascii=False, indent=2)
-    os.replace(tmp, ruta)
+    for intento in (1, 2, 3, 4):
+        try:
+            os.replace(tmp, ruta)
+            return
+        except PermissionError:
+            # Windows: el antivirus o el indexador lo tienen abierto un instante
+            if intento == 4:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                raise
+            time.sleep(0.2)
 
 
 def quizas_copiar(ruta_config, cfg, ahora=None):

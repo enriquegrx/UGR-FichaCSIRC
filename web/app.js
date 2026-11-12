@@ -949,8 +949,11 @@ function menuDia(x, y, d) {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
         && !(await preguntar("Teletrabajo",
               "Ya tienes cubierto el cupo de teletrabajo de esta semana.\n¿Marcar otro igualmente?"))) return;
-    // festivo, vacaciones, baja...: solo en este equipo (avisar antes)
-    if (accion === "no_laborable" && (await confirmarLocal(d, motivo)) !== "local") return;
+    // festivo, vacaciones, baja, guardia, teletrabajo...: solo en este equipo
+    // (avisar antes). Quitar una marca no pregunta.
+    const local = accion === "no_laborable" ? motivo
+      : accion === "guardia" || accion === "teletrabajo" ? accion : "";
+    if (local && (await confirmarLocal(d, local)) !== "local") return;
     await llamar("accion_dia", d.iso, accion, motivo);
     await repintarLocal();
   };
@@ -969,9 +972,9 @@ function menuDia(x, y, d) {
     });
   }
   items.push("-",
-    { texto: d.guardia ? "Quitar guardia" : "Marcar día de guardia",
+    { texto: d.guardia ? "Quitar guardia" : "Marcar día de guardia (local)",
       accion: marca(d.guardia ? "quitar_guardia" : "guardia") },
-    { texto: d.teletrabajo ? "Quitar teletrabajo" : "Marcar teletrabajo",
+    { texto: d.teletrabajo ? "Quitar teletrabajo" : "Marcar teletrabajo (local)",
       accion: marca(d.teletrabajo ? "quitar_teletrabajo" : "teletrabajo") },
     "-",
     { texto: "Guardar este día como plantilla…", desactivado: !d.apuntes.length,

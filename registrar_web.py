@@ -1261,7 +1261,8 @@ class Api:
                 "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
 
     # ---- marcas que SOLO viven en este equipo (no van a ProyectosTic) ----
-    # Por que: festivo, vacaciones, baja y permiso por horas pintan el dia y
+    # Por que: festivo, vacaciones, baja, permiso por horas, guardia y
+    # teletrabajo (estos dos desde la 3.2.2) pintan el dia y
     # ajustan lo que falta, pero no envian nada; en algunos servicios eso se
     # imputa en una tarea de permisos/bajas y alguien podia creer que ya lo
     # habia comunicado. Antes de marcar se avisa y, si hay una tarea de
@@ -1270,6 +1271,8 @@ class Api:
         "baja": ("baja", "permiso", "ausencia", "licencia", "incapacidad"),
         "vacaciones": ("vacacion", "permiso", "ausencia"),
         "permiso": ("permiso", "asuntos", "ausencia", "licencia", "conciliac"),
+        "guardia": ("guardia",),   # "disponibilidad", "reten"...: falsos positivos (alta disponibilidad, retencion de logs)
+        "teletrabajo": ("teletrabajo", "trabajo a distancia", "no presencial"),
     }
 
     def avisos_local_no(self):
@@ -1289,7 +1292,7 @@ class Api:
 
     def tarea_ausencia(self, motivo, habituales=None):
         """La tarea de ProyectosTic donde este usuario imputaria ese motivo
-        (baja, vacaciones, permiso), o None. De mas fiable a menos:
+        (baja, vacaciones, permiso, guardia, teletrabajo), o None. De mas fiable a menos:
         1) la tarea asociada a mano a una actividad de ausencias o la de un
            permiso enlazado a su actividad; 2) habituales, favoritas y buscadas
            cuyo nombre lo diga; 3) una busqueda en ProyectosTic (sin red: nada)."""

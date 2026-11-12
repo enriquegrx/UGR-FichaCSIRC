@@ -179,6 +179,32 @@
       menuDe(3); pulsarMenu("Quitar marca");
       await hasta(() => !cifra(3).toLowerCase().includes("baja"));
     });
+    await prueba("guardia y teletrabajo también son «(local)» y avisan", async () => {
+      const b = menuDe(3);
+      ok(b.some((x) => x.textContent === "Marcar día de guardia (local)"), "guardia sin «(local)»");
+      ok(b.some((x) => x.textContent === "Quitar teletrabajo"), "quitar teletrabajo no debe ser «(local)»");
+      pulsarMenu("Marcar día de guardia (local)");
+      ok(await hasta(() => dlg()?.textContent.includes("solo en tu FichaCSIRC")), "guardia no avisa");
+      ok(dlg().textContent.includes("[ATE] Guardias"), "no ofrece la tarea de guardias");
+      ok(dlg().textContent.includes("como día de guardia"), "título raro");
+      ok(!/null|undefined/.test(dlg().textContent), "escribe null/undefined");
+      botonDlg("Marcar solo aquí");
+      ok(await hasta(() => dias()[3].textContent.includes("Guardia")), "no marcó la guardia");
+      menuDe(3); pulsarMenu("Quitar guardia");                  // quitar no pregunta
+      ok(await hasta(() => !dias()[3].textContent.includes("Guardia")), "no quitó la guardia");
+      ok(!dlg(), "quitar la guardia preguntó");
+      // el jueves de la demo ya tiene teletrabajo: el viernes
+      ok(menuDe(4).some((x) => x.textContent === "Marcar teletrabajo (local)"), "teletrabajo sin «(local)»");
+      pulsarMenu("Marcar teletrabajo (local)");
+      // en la demo el cupo semanal ya esta cubierto: primero esa pregunta
+      ok(await hasta(() => !document.getElementById("modal").hidden), "no pregunta por el cupo");
+      document.getElementById("modal-si").click();
+      ok(await hasta(() => dlg()), "teletrabajo no avisa");
+      ok(!dlg().textContent.includes("Tienes en ProyectosTIC"), "sin tarea de teletrabajo no debe ofrecer ninguna");
+      botonDlg("Cancelar");
+      ok(await hasta(() => !dlg()), "Cancelar no cierra");
+      ok(!dias()[4].textContent.includes("Teletrabajo"), "Cancelar marcó el teletrabajo");
+    });
     await prueba("aviso local de un festivo: sin «null»", async () => {
       menuDe(3); pulsarMenu("Marcar como festivo (local)");
       ok(await hasta(() => dlg()), "no avisa");

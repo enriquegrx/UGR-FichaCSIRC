@@ -220,7 +220,8 @@
     pin_bloquear: () => { if (pinActivo) pinOk = false; return espera({ bloqueada: !pinOk }); },
     guardar_zoom: (z) => espera({ ok: true, zoom: z }),
     guardar_tema: () => espera({ ok: true }),
-    tarea_ausencia: (motivo) => espera(motivo === "festivo" ? null
+    tarea_ausencia: (motivo) => espera(motivo === "festivo" || motivo === "teletrabajo" ? null
+      : motivo === "guardia" ? { id: 13002, nombre: "[ATE] Guardias", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "" }
       : { id: 13001, nombre: "[ATE] Permisos", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "Asuntos propios" }),
     no_avisar_local: (m) => { avisosLocalNo.push(m); return espera({ ok: true, avisos_local_no: [...avisosLocalNo] }); },
     volver_a_avisar_local: () => { avisosLocalNo.length = 0; return espera({ ok: true }); },

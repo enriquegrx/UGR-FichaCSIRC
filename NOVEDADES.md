@@ -20,6 +20,12 @@ instalada aparece en el pie de la ventana.
 - La última copia de seguridad buena **ya no se borra** aunque después se hagan
   muchas copias.
 
+**Mejoras**
+- **Guardia y teletrabajo** también dicen **(local)** en el menú del día y,
+  como festivos, vacaciones o bajas, avisan antes de marcar que solo se guarda
+  en tu FichaCSIRC. Si tienes en ProyectosTIC una tarea de guardias o de
+  teletrabajo, te ofrecen imputar ahí.
+
 ---
 
 ## 3.2.1

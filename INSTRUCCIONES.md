@@ -205,9 +205,10 @@ La app recuerda la vista que dejaste.
   **Deshacer** (o Ctrl+Z). **Ctrl+Z otra vez** deshace lo anterior, hasta 20
   acciones; si falla la conexión, vuelve a pulsarlo para reintentar.
 - 🖥 Lo que lleva **«(local)»** en el botón derecho de un día (festivo,
-  vacaciones, apertura de curso, baja, permiso por horas) se guarda **solo en
-  tu FichaCSIRC**: no va a ProyectosTIC. Si tienes una tarea de permisos o
-  bajas, la app te ofrece imputarlo ahí.
+  vacaciones, apertura de curso, baja, permiso por horas, guardia,
+  teletrabajo) se guarda **solo en tu FichaCSIRC**: no va a ProyectosTIC. Si
+  tienes una tarea de permisos, bajas, guardias o teletrabajo, la app te
+  ofrece imputarlo ahí.
 - 💾 **Copias de seguridad** (*Herramientas*): tu configuración se copia sola
   cuando cambias favoritas, plantillas, permisos o festivos. Desde ahí vuelves
   a una copia anterior, o **exportas** la configuración para llevártela a otro
