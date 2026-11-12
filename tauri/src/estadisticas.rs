@@ -64,6 +64,8 @@ pub fn calcular(reglas: &Reglas, aps: &[Apunte], periodo: &str, r: NaiveDate, ho
     }
     let acts = reglas.actividades_de_permiso();
     let (mut obj_total, mut reg_hoy, mut exceso, mut faltan, mut permisos) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    let mut obj_periodo = 0.0;
+    let mut lista_incompletos: Vec<Value> = Vec::new();
     let (mut dias_lab, mut incompletos, mut racha, mut tele, mut guardias) = (0, 0, 0, 0, 0);
     let (mut obj_mes, mut reg_mes) = ([0.0f64; 13], [0.0f64; 13]);
     let mut d = desde;
@@ -72,6 +74,10 @@ pub fn calcular(reglas: &Reglas, aps: &[Apunte], periodo: &str, r: NaiveDate, ho
         let ap = por_dia.get(&iso).cloned().unwrap_or_default();
         let reg: f64 = ap.iter().map(|a| a.horas).sum();
         reg_mes[d.month() as usize] += reg;
+        // objetivo del periodo entero (tambien lo que queda por venir)
+        if d.weekday().num_days_from_monday() < 5 && !(con_inari && reglas.es_teletrabajo(&iso)) {
+            obj_periodo += reglas.objetivo_dia(d, Some(&ap), &acts);
+        }
         if d.weekday().num_days_from_monday() < 5 && d <= hoy {
             tele += reglas.es_teletrabajo(&iso) as i64;
             guardias += reglas.es_guardia(&iso) as i64;
@@ -91,6 +97,10 @@ pub fn calcular(reglas: &Reglas, aps: &[Apunte], periodo: &str, r: NaiveDate, ho
                         incompletos += 1;
                         faltan += obj - reg;
                         racha = 0;
+                        lista_incompletos.push(json!({
+                            "iso": iso,
+                            "dia": format!("{} {}", crate::reglas::DIAS_ES[d.weekday().num_days_from_monday() as usize], d.format("%d/%m")),
+                            "horas": format!("{} / {}", fmt_horas(reg), fmt_horas(obj))}));
                     } else {
                         racha += 1;
                     }
@@ -132,7 +142,14 @@ pub fn calcular(reglas: &Reglas, aps: &[Apunte], periodo: &str, r: NaiveDate, ho
         }
     }
     permisos += aps.iter().filter(|a| acts.contains(&a.actividad.trim().to_lowercase())).map(|a| a.horas).sum::<f64>();
+    // "Como va" (lo que era el Resumen del mes)
+    let al_dia = total >= obj_total - 0.001;
+    let frac = if obj_periodo > 0.0 { (total / obj_periodo).clamp(0.0, 1.0) } else { 0.0 };
     json!({
+        "como_va": {"al_dia": al_dia, "objetivo_hoy": fmt_horas(obj_total), "objetivo_periodo": fmt_horas(obj_periodo),
+                    "frac": crate::reglas::redondear(frac, 3),
+                    "estado": if al_dia { "Al día ✔".to_string() } else { format!("Te faltan {} para estar al día", fmt_horas(obj_total - total)) },
+                    "incompletos": lista_incompletos},
         "periodo": periodo, "titulo": titulo, "desde": desde.to_string(), "hasta": hasta.to_string(),
         "total": fmt_horas(total),
         "cumplida": if obj_total > 0.0 { json!(redondo(100.0 * reg_hoy / obj_total)) } else { Value::Null },
@@ -211,5 +228,9 @@ mod tests {
         assert_eq!(r["tareas"][0]["nombre"], "T10");
         assert_eq!(r["tareas"][0]["horas_txt"], "16h");
         assert_eq!(redondo(12.5), 12);
+        let c = &r["como_va"];
+        assert_eq!((c["objetivo_hoy"].as_str(), c["objetivo_periodo"].as_str()), (Some("35h"), Some("35h")));
+        assert_eq!(c["estado"], "Te faltan 2h para estar al día");
+        assert_eq!(c["incompletos"][0]["dia"], "Jueves 05/11");
     }
 }

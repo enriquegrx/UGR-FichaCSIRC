@@ -244,7 +244,7 @@ function menuBajo(boton, items) {
 const MENUS = {
   archivo: () => [
     { texto: "Exportar a CSV…", accion: dlgExportar },
-    { texto: "Resumen del mes", accion: dlgResumen },
+    { texto: "Resumen del mes", accion: () => entrarEstadisticas("mes") },
     { texto: "Estadísticas", accion: () => entrarEstadisticas() },
   ],
   ver: () => [
@@ -1049,14 +1049,18 @@ function pintarSelectorVista() {
 // La pestaña Estadisticas ocupa el sitio de las fichas, la franja y los
 // paneles de abajo (los esconde el CSS con body.modo-estad); el titulo de
 // arriba dice el periodo y las flechas / "Hoy" lo mueven.
-function entrarEstadisticas() {
+function entrarEstadisticas(periodo = "anio") {
   if (st.estad) return;
   const ref = st.vista === "mes" ? `${st.mesSel.anio}-${String(st.mesSel.mes).padStart(2, "0")}-01` : st.lunes;
   document.body.classList.add("modo-estad");
   $("estadisticas").hidden = false;
   // se abre en el año: la vista de conjunto; Semanal y Mensual, a un clic
-  st.estad = montarEstadisticas($("estadisticas"), { periodo: "anio", ref,
-                                                      alTitulo: (t) => { $("titulo-semana").textContent = t; } });
+  st.estad = montarEstadisticas($("estadisticas"), {
+    periodo, ref,
+    alTitulo: (t) => { $("titulo-semana").textContent = t; },
+    // un dia por completar: a su semana (o su mes), con el dia marcado
+    alIrADia: (iso) => { salirEstadisticas(); pintarSelectorVista(); irADia(iso); },
+  });
   pintarSelectorVista();
 }
 
@@ -1533,7 +1537,6 @@ $("b-ant").onclick = () => navegar(-1);
 $("b-sig").onclick = () => navegar(1);
 $("b-hoy").onclick = () => navegar(0);
 $("b-recargar").onclick = () => (st.estad ? st.estad.cargar() : cargarSemana());
-$("b-resumen").onclick = () => dlgResumen();
 // Estadisticas: entra en el panel; pulsado otra vez, vuelve a las fichas
 $("b-estad").onclick = async () => {
   if (!st.estad) { entrarEstadisticas(); return; }

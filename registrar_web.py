@@ -1837,8 +1837,9 @@ class Api:
             por_dia.setdefault(a["fecha"], []).append(a)
         acts = actividades_de_permiso()
         con_inari = destinos.configurado()
-        obj_total = reg_hoy = exceso = faltan = permisos = 0.0
+        obj_total = obj_periodo = reg_hoy = exceso = faltan = permisos = 0.0
         dias_lab = incompletos = racha = tele = guardias = 0
+        lista_incompletos = []
         obj_mes, reg_mes = collections.Counter(), collections.Counter()
         d = desde
         while d <= hasta:
@@ -1846,6 +1847,9 @@ class Api:
             ap = por_dia.get(iso, [])
             reg = sum(a["horas"] for a in ap)
             reg_mes[d.month] += reg
+            # objetivo del periodo entero (tambien lo que queda por venir)
+            if d.weekday() < 5 and not (con_inari and core.es_teletrabajo(iso)):
+                obj_periodo += objetivo_dia(d, ap, acts)
             if d.weekday() < 5 and d <= hoy:
                 tele += core.es_teletrabajo(iso)
                 guardias += core.es_guardia(iso)
@@ -1864,6 +1868,9 @@ class Api:
                             incompletos += 1
                             faltan += obj - reg
                             racha = 0
+                            lista_incompletos.append({
+                                "iso": iso, "dia": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
+                                "horas": f"{_horas(reg)} / {_horas(obj)}"})
                         else:
                             racha += 1
             d += dt.timedelta(days=1)
@@ -1898,7 +1905,14 @@ class Api:
                               "texto": f"{_horas(reg_mes[m])} de {_horas(obj_mes[m])}"})
         permisos += sum(a["horas"] for a in apuntes
                         if str(a.get("actividad") or "").strip().lower() in acts)
+        # "Como va" (lo que era el Resumen del mes): lo registrado frente al
+        # objetivo hasta hoy y al del periodo entero
+        al_dia = total >= obj_total - 0.001
         return {
+            "como_va": {"al_dia": al_dia, "objetivo_hoy": _horas(obj_total), "objetivo_periodo": _horas(obj_periodo),
+                        "frac": round(max(0.0, min(total / obj_periodo if obj_periodo else 0.0, 1.0)), 3),
+                        "estado": "Al día ✔" if al_dia else f"Te faltan {_horas(obj_total - total)} para estar al día",
+                        "incompletos": lista_incompletos},
             "periodo": periodo, "titulo": titulo, "desde": desde.isoformat(), "hasta": hasta.isoformat(),
             "total": _horas(total), "cumplida": round(100 * reg_hoy / obj_total) if obj_total else None,
             "media": _horas(reg_hoy / dias_lab) if dias_lab else "—",

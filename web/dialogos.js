@@ -400,7 +400,7 @@ const COLORES_ACTIVIDAD = ["--t5", "--t6", "--t7", "--t2", "--t3", "--t4", "--t0
 
 // Monta el panel en 'cont' (la seccion #estadisticas de la ventana). Devuelve
 // {mover(n), cargar()}: las flechas y "Hoy" de arriba lo mueven (0 = hoy).
-function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = () => {} } = {}) {
+function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = () => {}, alIrADia = () => {} } = {}) {
   let seq = 0;
   const cuerpo = el("div", { class: "estad" });
   const botones = PERIODOS_ESTAD.map(([p, t]) => el("button", { text: t, onclick: () => { periodo = p; cargar(); } }));
@@ -439,7 +439,24 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
   function pintar(r) {
     const kpi = (etiqueta, valor, clase = "") => el("div", { class: "kpi" },
       el("small", { text: etiqueta }), el("b", { class: clase, text: valor }));
-    const nodos = [el("div", { class: "estad-kpis" },
+    // "Como va" (lo que era el Resumen del mes): estado, barra y dias por completar
+    const c = r.como_va;
+    const del = { semana: "de la semana", mes: "del mes", anio: "del año" }[r.periodo];
+    const MAX_DIAS = 24;
+    const comoVa = el("div", { class: `estad-comova ${c.al_dia ? "ok" : "aviso"}` },
+      el("div", { class: "comova-cab" },
+        el("span", { class: "comova-estado", text: c.estado }),
+        el("span", { class: "comova-cifras",
+                     text: `${r.total} registradas · objetivo hasta hoy ${c.objetivo_hoy} · objetivo ${del} ${c.objetivo_periodo}` })),
+      el("div", { class: "comova-barra" }, el("i", { style: `--w:${Math.round(c.frac * 100)}%` })),
+      c.incompletos.length ? el("div", { class: "comova-dias" },
+        el("span", { class: "tenue", text: c.incompletos.length === 1 ? "Día por completar:" : "Días por completar:" }),
+        ...c.incompletos.slice(0, MAX_DIAS).map((x) => el("button", {
+          class: "chip-dia", title: "Ir a ese día", onclick: () => alIrADia(x.iso) },
+          el("b", { text: x.dia }), ` ${x.horas}`)),
+        c.incompletos.length > MAX_DIAS ? el("span", { class: "tenue", text: `y ${c.incompletos.length - MAX_DIAS} más` }) : null)
+        : null);
+    const nodos = [comoVa, el("div", { class: "estad-kpis" },
       kpi("Horas imputadas", r.total),
       kpi("Jornada cumplida", r.cumplida === null ? "—" : `${r.cumplida}%`,
           r.cumplida === null ? "" : r.cumplida >= 100 ? "verde" : "ambar"),
@@ -1010,55 +1027,6 @@ function dlgEliminarDia(dia) {
 
 // ================================================================ resumen del mes
 
-function dlgResumen() {
-  // el mes visible; en la vista semana, el que domina la semana (su jueves)
-  const ref = st.vista === "mes" ? `${st.mesSel.anio}-${String(st.mesSel.mes).padStart(2, "0")}-15`
-                                 : sumarDias(st.lunes, 3);
-  const est = { anio: Number(ref.slice(0, 4)), mes: Number(ref.slice(5, 7)), seq: 0 };
-  const titulo = el("strong", { class: "mes", text: "…" });
-  const barra = el("div", { class: "barra grande" }, el("i"));
-  const cifra = (t) => { const v = el("strong", { text: "…" }); return [el("span", { class: "tenue", text: t }), v]; };
-  const [lr, vr] = cifra("Registrado"), [lh, vh] = cifra("Objetivo hasta hoy"), [lm, vm] = cifra("Objetivo del mes");
-  const est_ = el("p", { class: "estado-mes", text: "Consultando el mes…" });
-  const tt = nota("");
-  const inc = el("div", { class: "incompletos" });
-  const d = dialogo({ titulo: "Resumen del mes", ancho: 440, botones: [cerrarBoton] });
-  d.cuerpo.append(
-    el("div", { class: "nav-mes" },
-      el("button", { text: "←", title: "Mes anterior", onclick: () => mover(-1) }), titulo,
-      el("button", { text: "→", title: "Mes siguiente", onclick: () => mover(1) })),
-    barra, el("div", { class: "cifras" }, lr, vr, lh, vh, lm, vm), est_, tt, inc);
-  const cargar = async () => {
-    const mio = ++est.seq;
-    vr.textContent = vh.textContent = vm.textContent = "…";
-    est_.textContent = "Consultando el mes…";
-    est_.className = "estado-mes";
-    inc.replaceChildren();
-    tt.textContent = "";
-    const r = await llamar("resumen_mes", est.anio, est.mes);
-    if (mio !== est.seq) return;
-    titulo.textContent = r.titulo;
-    vr.textContent = r.registrado; vh.textContent = r.objetivo_hoy; vm.textContent = r.objetivo_mes;
-    est_.textContent = r.estado;
-    est_.className = `estado-mes ${r.al_dia ? "ok" : "aviso"}`;
-    barra.className = `barra grande ${r.al_dia ? "completo" : "parcial"}`;
-    barra.firstChild.style.width = `${r.frac * 100}%`;
-    tt.textContent = r.teletrabajo;
-    if (r.incompletos.length) {
-      inc.append(nota("Días incompletos (clic para ir):"),
-        ...r.incompletos.map((x) => el("button", { class: "fila-dia", onclick: () => { d.cerrar(); irADia(x.iso); } },
-          el("span", { text: x.dia }), el("span", { class: "num", text: x.horas }))));
-    }
-  };
-  const mover = (delta) => {
-    const m = est.mes + delta;
-    est.anio += Math.floor((m - 1) / 12);
-    est.mes = ((m - 1) % 12 + 12) % 12 + 1;
-    titulo.textContent = "…";
-    cargar();
-  };
-  cargar();
-}
 
 // ================================================================ exportar
 

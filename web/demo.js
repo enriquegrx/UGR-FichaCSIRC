@@ -243,7 +243,10 @@
       meses: periodo !== "anio" ? [] : ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"].map((mes, i) => ({
         mes, reg: [140, 145, 130, 147, 150, 120, 90, 40, 138, 142, 58, 0][i], obj: [147, 147, 147, 147, 154, 140, 100, 0, 147, 154, 147, 0][i],
         estado: i === 11 ? "futuro" : i === 7 ? "nolab" : [2, 8, 9, 10].includes(i) ? "parcial" : "completo", texto: "" })),
-      detalles: { racha: 9, teletrabajo: 4, guardias: 2, incompletos: 3, faltan: "6h", permisos: "6h" } }),
+      detalles: { racha: 9, teletrabajo: 4, guardias: 2, incompletos: 3, faltan: "6h", permisos: "6h" },
+      como_va: { al_dia: false, objetivo_hoy: "63h", objetivo_periodo: "147h", frac: 0.4, estado: "Te faltan 4,5h para estar al día",
+                 incompletos: [{ iso: d(2), dia: `Miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)}`, horas: "1h / 7h" },
+                               { iso: d(1), dia: `Martes ${d(1).slice(8)}/${d(1).slice(5, 7)}`, horas: "3,5h / 7h" }] } }),
     diagnostico: () => espera({ texto: "FichaCSIRC demo · Windows 11\n\nConfiguración: demo\n  API key: sí, 40 caracteres\n\nProyectosTIC: responde 200 en 0.2 s (API key aceptada)" }),
     mes_pendiente: () => espera(avisoMesVisto ? null : { anio: 2026, mes: 11, texto: "Noviembre cierra y te faltan 5h en 1 día:",
                                                       dias: [{ iso: d(2), texto: `miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)} (1h de 7h)` }] }),

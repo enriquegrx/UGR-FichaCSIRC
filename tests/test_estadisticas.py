@@ -73,6 +73,13 @@ class TestEstadisticas(unittest.TestCase):
         self.assertEqual(sum(t["pct"] for t in r["tareas"]), 100)
         self.assertEqual(r["actividades"][0]["nombre"], "Actuaciones técnicas")
         self.assertEqual(r["meses"], [])
+        # "como va" (lo que era el Resumen del mes)
+        c = r["como_va"]
+        self.assertFalse(c["al_dia"])
+        self.assertEqual((c["objetivo_hoy"], c["objetivo_periodo"]), ("63h", "147h"))   # 21 laborables x 7
+        self.assertEqual(c["estado"], "Te faltan 7h para estar al día")             # 63 - 56
+        self.assertEqual([x["iso"] for x in c["incompletos"]], ["2026-11-05", "2026-11-12"])
+        self.assertEqual(c["incompletos"][0], {"iso": "2026-11-05", "dia": "Jueves 05/11", "horas": "4h / 7h"})
 
     def test_racha_hasta_ayer(self):
         r = self.api.estadisticas("mes", "2026-11-12", hoy=dt.date(2026, 11, 11))

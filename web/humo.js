@@ -335,6 +335,13 @@
       ok($("b-estad").classList.contains("activo"), "el botón no queda resaltado");
       ok(await hasta(() => !$("estadisticas").hidden && $("estadisticas").textContent.includes("Tareas más realizadas")), "no se ve el panel");
       ok(await hasta(() => $("estadisticas").querySelector(".pills-periodo button.activo")?.textContent === "Anual"), "no se abre en la vista anual");
+      ok(!$("b-resumen"), "sigue el botón Resumen (ahora es el «cómo va» de Estadísticas)");
+      ok(await hasta(() => $("estadisticas").querySelector(".estad-comova .comova-estado")), "no se ve «cómo va»");
+      // un dia por completar: a su semana, con el dia marcado
+      $("estadisticas").querySelector(".chip-dia").click();
+      ok(await hasta(() => $("estadisticas").hidden && document.querySelector(".dia.marcado")), "el día por completar no lleva al día");
+      $("b-estad").click();
+      ok(await hasta(() => !$("estadisticas").hidden), "no vuelve a Estadísticas");
       ok(getComputedStyle($("seccion-dias")).display === "none", "las fichas siguen a la vista");
       ok(!dlg(), "salió en una ventana flotante");
       $("b-sig").click();
@@ -359,7 +366,7 @@
       document.querySelector('.selector-vista [data-vista="semana"]').click();
       ok(await hasta(() => dias().length === 5), "no vuelve a la semana");
     });
-    const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["diagnóstico", dlgDiagnostico], ["resumen del mes", dlgResumen],
+    const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["diagnóstico", dlgDiagnostico],
       ["exportar", dlgExportar], ["festivos", dlgFestivos], ["ajustes de días", dlgAjustesDias],
       ["INARI", dlgInari], ["buscar tarea", dlgBuscar], ["PIN", dlgPin], ["bandeja", dlgBandeja], ["copias", dlgCopias],
       ["novedades", dlgNovedades], ["tecnología", dlgTecnologia], ["atajos", dlgAtajos], ["acerca de", dlgAcerca]];

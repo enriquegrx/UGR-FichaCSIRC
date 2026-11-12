@@ -694,6 +694,22 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 body.modo-estad #seccion-dias, body.modo-estad #franja, body.modo-estad .zona-trabajo,
 body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #estado-vista { display: none !important; }
 .panel-estad .cabeza-seccion { margin-bottom: 2px; }
+/* "Como va" (lo que era el Resumen del mes): estado, barra grande y dias por completar */
+.estad-comova { margin: 12px 0 4px; padding: 14px 16px; border-radius: 12px;
+                background: color-mix(in srgb, var(--aviso) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--aviso) 30%, var(--panel)); }
+.estad-comova.ok { background: color-mix(in srgb, var(--exito) 9%, var(--panel)); border-color: color-mix(in srgb, var(--exito) 30%, var(--panel)); }
+.comova-cab { display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; }
+.comova-estado { font-size: 18px; font-weight: 700; color: var(--aviso); }
+.estad-comova.ok .comova-estado { color: var(--exito); }
+.comova-cifras { font-size: 13px; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.comova-barra { height: 14px; border-radius: 7px; background: var(--barra-fondo); overflow: hidden; margin: 10px 0 4px; }
+.comova-barra > i { display: block; height: 100%; width: var(--w); border-radius: 7px; background: var(--aviso); }
+.estad-comova.ok .comova-barra > i { background: var(--exito); }
+.comova-dias { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 13px; }
+.chip-dia { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--panel);
+            border: 1px solid color-mix(in srgb, var(--aviso) 45%, var(--panel)); }
+.chip-dia:hover { border-color: var(--aviso); background: color-mix(in srgb, var(--aviso) 12%, var(--panel)); }
+.chip-dia b { font-weight: 600; }
 #b-estad.activo { background: var(--seleccion); border-color: var(--primario); color: var(--primario); font-weight: 600; }
 
 .estad-nav { gap: 8px; margin-bottom: 4px; }
