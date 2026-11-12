@@ -13,6 +13,7 @@
 mod api;
 mod apuntes;
 mod config;
+mod herramientas;
 mod openproject;
 mod pin;
 mod reglas;

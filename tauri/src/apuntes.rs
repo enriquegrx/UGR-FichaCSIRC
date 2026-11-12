@@ -69,7 +69,7 @@ fn cliente(cfg: &Cfg) -> Result<Cliente, String> {
 
 impl Estado {
     /// Apuntes cargados de ese dia; None = no se pudieron leer. Sin cargar: [].
-    fn cargados(&self, iso: &str) -> Option<Vec<Apunte>> {
+    pub(crate) fn cargados(&self, iso: &str) -> Option<Vec<Apunte>> {
         candado(&self.cache).get(iso).cloned().unwrap_or(Some(Vec::new()))
     }
 
@@ -82,7 +82,7 @@ impl Estado {
     }
 
     /// Una accion deshacible a la pila (las MAX_DESHACER ultimas).
-    fn apilar(&self, texto: String, pasos: Vec<Paso>) -> bool {
+    pub(crate) fn apilar(&self, texto: String, pasos: Vec<Paso>) -> bool {
         if pasos.is_empty() {
             return false;
         }
@@ -125,7 +125,7 @@ impl Estado {
         Ok(elegir_actividad(&acts, actividad).map(String::from))
     }
 
-    async fn crear(&self, cli: &Cliente, fecha: &str, wp_id: &str, horas: f64, comentario: &str, actividad: &str)
+    pub(crate) async fn crear(&self, cli: &Cliente, fecha: &str, wp_id: &str, horas: f64, comentario: &str, actividad: &str)
                    -> Result<Option<String>, ErrorOp> {
         let href = self.href(cli, wp_id, actividad).await?;
         cli.crear(fecha, wp_id, horas, comentario, href.as_deref()).await

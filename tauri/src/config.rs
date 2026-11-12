@@ -97,6 +97,17 @@ pub fn guardar_valores(valores: Map<String, Value>) -> Result<(), String> {
     escribir(&ruta, &cfg)
 }
 
+/// Leer-cambiar-escribir en un solo turno: f recibe la config entera y la
+/// cambia; nadie escribe en medio. Si no se puede leer, no se escribe.
+pub fn modificar<R>(f: impl FnOnce(&mut Map<String, Value>) -> R) -> Result<R, String> {
+    let _turno = CANDADO.lock().unwrap_or_else(|e| e.into_inner());
+    let ruta = ruta_config();
+    let mut cfg = if ruta.exists() { leer_de(&ruta)? } else { Map::new() };
+    let r = f(&mut cfg);
+    escribir(&ruta, &cfg)?;
+    Ok(r)
+}
+
 fn escribir(ruta: &Path, cfg: &Map<String, Value>) -> Result<(), String> {
     let n = SECUENCIA.fetch_add(1, Ordering::SeqCst);
     let tmp = ruta.with_extension(format!("json.{}-{n}.tmp", std::process::id()));

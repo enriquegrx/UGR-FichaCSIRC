@@ -3,6 +3,7 @@
 //! registrar_web.py. Fase 1: abrir, PIN y ver la semana (solo lectura).
 
 use crate::apuntes;
+use crate::herramientas as herr;
 use crate::resumen;
 use crate::config::{self, Cfg};
 use crate::openproject::{self, Cliente, ErrorOp};
@@ -33,6 +34,10 @@ pub struct Estado {
     pub(crate) usadas_pt: Mutex<Option<HashMap<String, f64>>>,
     /// tareas elegidas con Buscar en esta sesion ({id, nombre})
     extras: Mutex<Vec<Value>>,
+    /// motivo -> tarea de ausencias encontrada buscando (o null)
+    pub(crate) ausencias: Mutex<HashMap<String, Value>>,
+    /// copia preparada (dia/semana anterior): (tipo, [(destino, apuntes)])
+    pub(crate) copia: Mutex<Option<(String, Vec<(String, Vec<Apunte>)>)>>,
     /// acciones deshacibles, la ultima al final (Ctrl+Z repetido)
     pub(crate) pila: Mutex<Vec<crate::apuntes::Accion>>,
     /// id viejo -> id nuevo de los apuntes recreados al deshacer
@@ -182,6 +187,67 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             Ok(resumen::mes_pendiente(e, &cfg, hoy()).await)
         }
         "aviso_mes_visto" => Ok(resumen::guardar_visto("aviso_mes_visto", &hoy().to_string())),
+        // ---- marcas del dia y "solo en este equipo" (fase 4a) ----
+        "accion_dia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::accion_dia(&arg(&args, 0), &arg(&args, 1), &arg(&args, 2))
+        }
+        "teletrabajo_lleno" => Ok(json!(herr::teletrabajo_lleno(&cfg, &arg(&args, 0))?)),
+        "tarea_ausencia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let favs = tareas(e, &cfg).as_array().cloned().unwrap_or_default();
+            Ok(herr::tarea_ausencia(e, &cfg, &arg(&args, 0), &arg_lista(&args, 1), &favs).await)
+        }
+        "avisos_local_no" => Ok(json!(cfg.lista("avisos_local_no"))),
+        "no_avisar_local" => herr::no_avisar_local(&arg(&args, 0)),
+        "volver_a_avisar_local" => guardar("avisos_local_no", json!([])),
+        "tareas_local" => Ok(herr::tareas_local(&cfg)),
+        "fijar_tarea_local" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::fijar_tarea_local(e, &arg(&args, 0), &arg(&args, 1), args.get(2).unwrap_or(&Value::Null), &arg(&args, 3))
+        }
+        // ---- plantillas y copiar ----
+        "plantillas" => Ok(herr::plantillas(&cfg)),
+        "guardar_plantilla_dia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::guardar_plantilla_dia(e, &arg(&args, 0), &arg(&args, 1))
+        }
+        "eliminar_plantilla" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::eliminar_plantilla(&arg(&args, 0))
+        }
+        "aplicar_plantilla" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let dias: Vec<String> = arg_lista(&args, 1).iter().filter_map(|d| d.as_str().map(String::from)).collect();
+            herr::aplicar_plantilla(e, &cfg, &arg(&args, 0), &dias).await
+        }
+        "preparar_copia_dia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let dias: Vec<String> = arg_lista(&args, 0).iter().filter_map(|d| d.as_str().map(String::from)).collect();
+            herr::preparar_copia_dia(e, &cfg, &dias, &arg(&args, 1)).await
+        }
+        "preparar_copia_semana" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::preparar_copia_semana(e, &cfg, &arg(&args, 0)).await
+        }
+        "ejecutar_copia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::ejecutar_copia(e, &cfg).await
+        }
+        "asociar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::asociar(&arg(&args, 0), &arg(&args, 1))
+        }
+        "desasociar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::desasociar(&arg(&args, 0))
+        }
+        "resumen_mes" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let anio = args.first().and_then(Value::as_i64).unwrap_or(0) as i32;
+            let mes = args.get(1).and_then(Value::as_u64).unwrap_or(0) as u32;
+            herr::resumen_mes(e, &cfg, anio, mes, hoy()).await
+        }
         // ---- buscar tareas ----
         "buscar_tareas" => {
             e.exigir_desbloqueo(&cfg)?;
