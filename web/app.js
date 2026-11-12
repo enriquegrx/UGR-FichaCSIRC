@@ -1054,7 +1054,8 @@ function entrarEstadisticas() {
   const ref = st.vista === "mes" ? `${st.mesSel.anio}-${String(st.mesSel.mes).padStart(2, "0")}-01` : st.lunes;
   document.body.classList.add("modo-estad");
   $("estadisticas").hidden = false;
-  st.estad = montarEstadisticas($("estadisticas"), { periodo: "mes", ref,
+  // se abre en el año: la vista de conjunto; Semanal y Mensual, a un clic
+  st.estad = montarEstadisticas($("estadisticas"), { periodo: "anio", ref,
                                                       alTitulo: (t) => { $("titulo-semana").textContent = t; } });
   pintarSelectorVista();
 }

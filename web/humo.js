@@ -334,6 +334,7 @@
       $("b-estad").click();
       ok($("b-estad").classList.contains("activo"), "el botón no queda resaltado");
       ok(await hasta(() => !$("estadisticas").hidden && $("estadisticas").textContent.includes("Tareas más realizadas")), "no se ve el panel");
+      ok(await hasta(() => $("estadisticas").querySelector(".pills-periodo button.activo")?.textContent === "Anual"), "no se abre en la vista anual");
       ok(getComputedStyle($("seccion-dias")).display === "none", "las fichas siguen a la vista");
       ok(!dlg(), "salió en una ventana flotante");
       $("b-sig").click();

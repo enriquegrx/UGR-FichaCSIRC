@@ -698,8 +698,14 @@ body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #esta
 
 .estad-nav { gap: 8px; margin-bottom: 4px; }
 .estad-titulo { font-size: 16px; min-width: 220px; text-align: center; }
-.pills-periodo { display: flex; gap: 4px; }
-.pills-periodo button.activo { background: var(--seleccion); border-color: var(--primario); color: var(--primario); font-weight: 600; }
+/* Semanal | Mensual | Anual: un control segmentado grande junto al titulo, el elegido relleno */
+.estad-cabeza { gap: 18px; }
+.pills-periodo { display: inline-flex; border: 1px solid var(--primario); border-radius: 10px; overflow: hidden; }
+.pills-periodo button { border: 0; border-radius: 0; padding: 7px 22px; font-size: 14px; font-weight: 600;
+                        background: var(--panel); color: var(--primario); }
+.pills-periodo button + button { border-left: 1px solid var(--primario); }
+.pills-periodo button:hover:not(.activo) { background: var(--seleccion); }
+.pills-periodo button.activo { background: var(--primario); color: #fff; }
 .estad-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 6px; }
 .kpi { background: var(--panel-alt); border-radius: 10px; padding: 10px 12px; }
 .kpi small { display: block; font-size: 12px; color: var(--tenue); }

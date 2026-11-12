@@ -395,7 +395,7 @@ async function confirmarLocal(d, motivo) {
 // Pestaña Estadisticas. Semana, mes o año: horas, jornada cumplida, media, horas de mas, tareas y
 // actividades mas hechas (con los colores de las fichas: por horas), el año
 // mes a mes con los colores del calendario de calor y unos detalles.
-const PERIODOS_ESTAD = [["semana", "Semana"], ["mes", "Mes"], ["anio", "Año"]];
+const PERIODOS_ESTAD = [["semana", "Semanal"], ["mes", "Mensual"], ["anio", "Anual"]];
 const COLORES_ACTIVIDAD = ["--t5", "--t6", "--t7", "--t2", "--t3", "--t4", "--t0", "--t1"];
 
 // Monta el panel en 'cont' (la seccion #estadisticas de la ventana). Devuelve
@@ -406,8 +406,10 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
   const botones = PERIODOS_ESTAD.map(([p, t]) => el("button", { text: t, onclick: () => { periodo = p; cargar(); } }));
   cont.replaceChildren(
     el("div", { class: "cabeza-seccion" },
-      el("h2", { text: "Estadísticas" }),
-      el("div", { class: "pills-periodo" }, ...botones)),
+      // el periodo, bien a la vista junto al titulo: Semanal | Mensual | Anual
+      el("div", { class: "fila estad-cabeza" },
+        el("h2", { text: "Estadísticas" }),
+        el("div", { class: "pills-periodo", role: "group", "aria-label": "Periodo de las estadísticas" }, ...botones))),
     cuerpo);
 
   function mover(n) {
@@ -420,7 +422,10 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
   }
 
   async function cargar() {
-    botones.forEach((b, i) => b.classList.toggle("activo", PERIODOS_ESTAD[i][0] === periodo));
+    botones.forEach((b, i) => {
+      b.classList.toggle("activo", PERIODOS_ESTAD[i][0] === periodo);
+      b.setAttribute("aria-pressed", String(PERIODOS_ESTAD[i][0] === periodo));
+    });
     const mio = ++seq;
     cuerpo.replaceChildren(nota("Calculando…"));
     let r;
