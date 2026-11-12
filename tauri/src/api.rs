@@ -3,6 +3,7 @@
 //! registrar_web.py. Fase 1: abrir, PIN y ver la semana (solo lectura).
 
 use crate::apuntes;
+use crate::ayuda;
 use crate::herramientas as herr;
 use crate::permisos as perm;
 use crate::resumen;
@@ -37,6 +38,10 @@ pub struct Estado {
     extras: Mutex<Vec<Value>>,
     /// motivo -> tarea de ausencias encontrada buscando (o null)
     pub(crate) ausencias: Mutex<HashMap<String, Value>>,
+    /// ultimo CSV exportado (el unico que se puede abrir desde la app)
+    pub(crate) ultima_exportacion: Mutex<Option<std::path::PathBuf>>,
+    /// fecha de la copia de la que se recupero la config al arrancar (una vez)
+    recuperada: Mutex<String>,
     /// copia preparada (dia/semana anterior): (tipo, [(destino, apuntes)])
     pub(crate) copia: Mutex<Option<(String, Vec<(String, Vec<Apunte>)>)>>,
     /// acciones deshacibles, la ultima al final (Ctrl+Z repetido)
@@ -52,6 +57,20 @@ pub(crate) fn candado<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Estado {
+    pub fn anotar_recuperada(&self, nombre: &str) {
+        *candado(&self.recuperada) = crate::copias::fecha_de(nombre)
+            .map(|f| f.format("%d/%m/%Y a las %H:%M").to_string()).unwrap_or_else(|| nombre.to_string());
+    }
+
+    /// Tras restaurar o importar: lo leido de ProyectosTIC y la config ya no valen.
+    pub(crate) fn olvidar_lo_leido(&self) {
+        candado(&self.usuario).take();
+        candado(&self.cache).clear();
+        candado(&self.usadas_pt).take();
+        candado(&self.ausencias).clear();
+        candado(&self.actividades).clear();
+    }
+
     fn desbloqueada(&self, cfg: &Cfg) -> bool {
         let mut d = candado(&self.desbloqueada);
         *d.get_or_insert_with(|| pin::guardado(cfg).is_none())
@@ -126,7 +145,7 @@ fn guardar(clave: &str, valor: Value) -> Result<Value, String> {
 }
 
 #[tauri::command]
-pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Estado>) -> Result<Value, String> {
+pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Estado>, app: tauri::AppHandle) -> Result<Value, String> {
     let cfg = config::leer()?;
     let e: &Estado = &estado;
     match metodo.as_str() {
@@ -303,6 +322,46 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         "guardar_ajustes_dias" => {
             e.exigir_desbloqueo(&cfg)?;
             perm::guardar_ajustes_dias(args.first().unwrap_or(&Value::Null), args.get(1).unwrap_or(&Value::Null))
+        }
+        // ---- copias, PIN, CSV y ayuda (fase 4c) ----
+        "copias" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(ayuda::listar_copias())
+        }
+        "restaurar_copia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            ayuda::restaurar_copia(e, &arg(&args, 0))
+        }
+        "exportar_config" => {
+            e.exigir_desbloqueo(&cfg)?;
+            ayuda::exportar_config(&cfg, &app).await
+        }
+        "importar_config" => {
+            e.exigir_desbloqueo(&cfg)?;
+            ayuda::importar_config(e, &app).await
+        }
+        "pin_fijar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            ayuda::pin_fijar(&cfg, &arg(&args, 0), &arg(&args, 1), &arg(&args, 2))
+        }
+        "pin_quitar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            ayuda::pin_quitar(&cfg, &arg(&args, 0))
+        }
+        "pin_auto" => ayuda::pin_auto(args.first().unwrap_or(&Value::Null)),
+        "pin_no_sugerir" => Ok(ayuda::pin_no_sugerir()),
+        "pin_olvidado" => Ok(json!({"error": "En la versión Rust en pruebas, «He olvidado el PIN» se hace desde FichaCSIRC normal."})),
+        "exportar_csv" => {
+            e.exigir_desbloqueo(&cfg)?;
+            ayuda::exportar_csv(e, &cfg, &app, &arg(&args, 0), &arg(&args, 1)).await
+        }
+        "abrir_exportacion" => Ok(ayuda::abrir_exportacion(e, &app)),
+        "abrir_github" => Ok(ayuda::abrir_github(&app, &arg(&args, 0))),
+        "novedades" => Ok(ayuda::novedades()),
+        "tecnologia" => Ok(ayuda::tecnologia()),
+        "diagnostico" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(ayuda::diagnostico().await)
         }
         // ---- buscar tareas ----
         "buscar_tareas" => {
@@ -583,7 +642,7 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "asociaciones": asociaciones,
         "toca_permisos_anio": perm::toca_permisos_anio(cfg),
         "novedades_tras_actualizar": null,
-        "recuperada": "",
+        "recuperada": std::mem::take(&mut *candado(&e.recuperada)),
         "sugerir_pin": false,
         "avisos_local_no": cfg.lista("avisos_local_no"),
         "pin": pin_estado(e, cfg),

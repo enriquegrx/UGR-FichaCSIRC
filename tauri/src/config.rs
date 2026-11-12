@@ -121,7 +121,11 @@ fn escribir(ruta: &Path, cfg: &Map<String, Value>) -> Result<(), String> {
         let mut intento = 0;
         loop {
             match std::fs::rename(&tmp, ruta) {
-                Ok(()) => return Ok(()),
+                Ok(()) => {
+                    // copia de seguridad si cambio algo que importa (nunca impide guardar)
+                    let _ = crate::copias::quizas_copiar(ruta, cfg);
+                    return Ok(());
+                }
                 // Windows: otro proceso (antivirus, el aviso) lo tiene abierto un instante
                 Err(e) if intento < 3 && e.kind() == std::io::ErrorKind::PermissionDenied => {
                     intento += 1;
@@ -135,6 +139,35 @@ fn escribir(ruta: &Path, cfg: &Map<String, Value>) -> Result<(), String> {
         let _ = std::fs::remove_file(&tmp);
     }
     resultado.map_err(|e| format!("No se pudo guardar la configuración: {e}"))
+}
+
+/// Al arrancar: si config.json se ha quedado sin URL o API key (o roto) y hay
+/// una copia que si las tiene, se rehace desde ella; lo que haya en el fichero
+/// actual manda (es mas nuevo) y el fichero tal como estaba se deja al lado.
+/// Devuelve el nombre de la copia usada.
+pub fn recuperar_si_hace_falta() -> Option<String> {
+    let ruta = ruta_config();
+    let _turno = CANDADO.lock().unwrap_or_else(|e| e.into_inner());
+    let texto = std::fs::read_to_string(&ruta).ok()?; // sin fichero o bloqueado: nada
+    let actual = match serde_json::from_str::<Value>(texto.trim_start_matches('\u{feff}')) {
+        Ok(Value::Object(m)) => Some(m),
+        _ => None, // roto
+    };
+    if actual.as_ref().is_some_and(crate::copias::completa) {
+        return None;
+    }
+    let (nombre, mut nueva) = crate::copias::ultima_completa(&ruta)?;
+    let motivo = if actual.is_some() { "incompleto" } else { "danado" };
+    for (k, v) in actual.unwrap_or_default() {
+        let vacio = v.is_null() || v.as_str() == Some("");
+        if !(vacio && crate::copias::CONEXION.contains(&k.as_str())) {
+            nueva.insert(k, v);
+        }
+    }
+    let sello = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let _ = std::fs::copy(&ruta, ruta.with_extension(format!("json.{motivo}-{sello}")));
+    escribir(&ruta, &nueva).ok()?;
+    Some(nombre)
 }
 
 /// La config leida, con ayudas para sacar valores.

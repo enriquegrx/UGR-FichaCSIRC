@@ -10,6 +10,12 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# Guardar como / Abrir (CSV, exportar e importar la configuracion)
+tauri-plugin-dialog = "2"
+# abrir un enlace o un archivo con su programa (GitHub, el CSV en Excel)
+tauri-plugin-opener = "2"
+# sal aleatoria del PIN
+getrandom = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # rustls: sin depender de OpenSSL del sistema (en Windows y Linux, igual)

@@ -12,7 +12,9 @@
 
 mod api;
 mod apuntes;
+mod ayuda;
 mod config;
+mod copias;
 mod herramientas;
 mod openproject;
 mod permisos;
@@ -21,8 +23,16 @@ mod reglas;
 mod resumen;
 
 fn main() {
+    // config.json sin URL/API key (o roto) y una copia buena: se recupera sola
+    // ANTES de nada (como la 3.2.2), y se avisa al abrir.
+    let estado = api::Estado::default();
+    if let Some(nombre) = config::recuperar_si_hace_falta() {
+        estado.anotar_recuperada(&nombre);
+    }
     tauri::Builder::default()
-        .manage(api::Estado::default())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .manage(estado)
         .invoke_handler(tauri::generate_handler![api::api])
         .run(tauri::generate_context!())
         .expect("no se pudo arrancar FichaCSIRC");
