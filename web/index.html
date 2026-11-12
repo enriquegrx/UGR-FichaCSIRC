@@ -52,14 +52,18 @@
   </section>
 
   <section class="panel">
-    <div class="cabeza-seccion">
+    <div class="cabeza-seccion cabeza-dias">
       <h2>Días</h2>
+      <!-- en el centro y a la vista (en el pie no se veia); solo si hay algo que deshacer -->
+      <button id="b-deshacer" class="b-deshacer" hidden title="Deshacer el último cambio (Ctrl+Z)">↶ Deshacer cambios realizados<span class="n-deshacer"></span></button>
       <div class="fila">
         <label class="check"><input type="checkbox" id="toda-semana"><span id="lbl-todo"> Toda la semana</span></label>
         <button id="b-copiar" title="Repetir apuntes: el último día con horas, la semana pasada o una plantilla">Copiar / Plantillas ▾</button>
       </div>
     </div>
+    <div id="aviso-conexion" class="aviso-conexion" role="alert" hidden></div>
     <div id="aviso-semana" class="aviso-semana" role="status" hidden></div>
+    <div id="aviso-mes" class="aviso-semana aviso-mes" role="status" hidden></div>
     <div id="dias" class="dias"></div>
     <div class="leyenda" data-panel="leyenda">
       <span><i class="muestra completo"></i>Completo</span>
@@ -67,9 +71,10 @@
       <span><i class="muestra pasado"></i>Más horas</span>
       <span><i class="muestra nolab"></i>Festivo / cierre</span>
       <span><i class="muestra vacaciones"></i>Vacaciones</span>
-      <span class="chip chip-guardia">⚙ Guardia</span>
-      <span class="chip chip-tele">⌂ Teletrabajo</span>
-      <span class="chip chip-permiso">🕐 Permiso</span>
+      <span class="chip chip-guardia" title="Relleno: imputado en ProyectosTIC">⚙ Guardia</span>
+      <span class="chip chip-tele" title="Relleno: imputado en ProyectosTIC">⌂ Teletrabajo</span>
+      <span class="chip chip-permiso" title="Relleno: imputado en ProyectosTIC">🕐 Permiso</span>
+      <span class="chip chip-guardia local" title="Con borde: marcado solo en este equipo">⚙ · local</span>
       <span class="ayuda">Botón derecho sobre un día: más opciones</span>
     </div>
   </section>
@@ -132,7 +137,6 @@
 
 <footer class="pie">
   <span id="estado" class="estado"></span>
-  <button id="b-deshacer" class="enlace" hidden>Deshacer</button>
   <span id="conn-inari" class="conn" hidden>● INARI</span>
   <span id="conn" class="conn">● ProyectosTIC</span>
   <span id="version" class="version"></span>

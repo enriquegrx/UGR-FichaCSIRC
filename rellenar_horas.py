@@ -388,6 +388,8 @@ def _get(path, params=None):
                 LOG.warning("GET %s fallo tras reintentar: %s", path, e)
                 raise
             time.sleep(0.8)
+    if r.status_code >= 400:
+        LOG.warning("GET %s -> %s", path, r.status_code)
     if r.status_code == 401:
         raise RuntimeError("Acceso denegado (401): la API key no es válida o ha caducado. "
                            + _msg_configurar())

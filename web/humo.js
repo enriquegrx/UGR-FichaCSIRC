@@ -150,6 +150,7 @@
       teclado("z", { ctrlKey: true });
       ok(await hasta(() => cifra(2).startsWith("2h")), "el primer Ctrl+Z no volvió a 2h");
       ok(!$("b-deshacer").hidden, "tras el primero ya no se puede seguir deshaciendo");
+      ok($("b-deshacer").closest(".cabeza-dias"), "Deshacer no está arriba, en la caja Días");
       teclado("z", { ctrlKey: true });
       ok(await hasta(() => cifra(2) === antes), "el segundo Ctrl+Z no volvió al principio");
     });
@@ -213,6 +214,29 @@
       sel.value = "ninguna"; sel.dispatchEvent(new Event("change"));
       ok(await hasta(() => fila().querySelector("select").value === "ninguna"), "no guarda «Ninguna»");
       cerrarTodo();
+    });
+    await prueba("sin conexión: dice por qué y qué hacer", async () => {
+      pintarAvisoConexion({ conexion: "error", conexion_detalle: { tipo: "clave", titulo: "ProyectosTIC no acepta tu API key", texto: "Ha caducado." } });
+      const a = document.getElementById("aviso-conexion");
+      ok(!a.hidden && a.textContent.includes("no acepta tu API key"), "no se ve el motivo");
+      ok([...a.querySelectorAll("button")].some((b) => b.textContent === "Abrir el asistente"), "sin botón al asistente");
+      pintarAvisoConexion({ conexion: "ok" });
+      ok(a.hidden, "con conexión no se esconde");
+    });
+    await prueba("cierre de mes: avisa y la X lo calla", async () => {
+      const a = document.getElementById("aviso-mes");
+      ok(await hasta(() => !a.hidden), "no avisa del cierre de mes");
+      ok(a.querySelector(".dias-mes button"), "sin enlaces a los días");
+      a.querySelector(".cerrar-aviso").click();
+      ok(a.hidden, "la X no lo cierra");
+      await avisarCierreMes();
+      ok(a.hidden, "vuelve a salir tras cerrarlo");
+    });
+    await prueba("etiquetas: «local» con borde, en ProyectosTIC rellena", async () => {
+      const c = chipsMarcas({ guardia: true, guardia_pt: false, teletrabajo: false, teletrabajo_pt: true, permiso: "", permiso_pt: "" });
+      ok(c.length === 2, `salen ${c.length} etiquetas`);
+      ok(c[0].classList.contains("local") && c[0].textContent.includes("local"), "la guardia local no se distingue");
+      ok(!c[1].classList.contains("local"), "el teletrabajo imputado sale como local");
     });
     await prueba("aviso local de un festivo: sin «null»", async () => {
       menuDe(3); pulsarMenu("Marcar como festivo (local)");
@@ -304,7 +328,7 @@
       document.querySelector('.selector-vista [data-vista="semana"]').click();
       ok(await hasta(() => dias().length === 5), "no vuelve a la semana");
     });
-    const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["resumen del mes", dlgResumen],
+    const dialogos = [["plantillas", dlgPlantillas], ["permisos", dlgPermisos], ["diagnóstico", dlgDiagnostico], ["resumen del mes", dlgResumen],
       ["exportar", dlgExportar], ["festivos", dlgFestivos], ["ajustes de días", dlgAjustesDias],
       ["INARI", dlgInari], ["buscar tarea", dlgBuscar], ["PIN", dlgPin], ["bandeja", dlgBandeja], ["copias", dlgCopias],
       ["novedades", dlgNovedades], ["tecnología", dlgTecnologia], ["atajos", dlgAtajos], ["acerca de", dlgAcerca]];

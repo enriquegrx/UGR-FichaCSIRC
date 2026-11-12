@@ -201,9 +201,22 @@ La app recuerda la vista que dejaste.
   mueve). Arrastrar una de tus tareas habituales a un día la añade.
 - 📋 **Ctrl+C** sobre un día y **Ctrl+V** en los marcados: copia ese día tal
   cual (también con botón derecho → *Copiar este día* / *Pegar aquí*).
-- ↩️ Después de borrar, editar, mover o añadir, abajo sale un aviso con
-  **Deshacer** (o Ctrl+Z). **Ctrl+Z otra vez** deshace lo anterior, hasta 20
-  acciones; si falla la conexión, vuelve a pulsarlo para reintentar.
+- ↩️ Después de borrar, editar, mover o añadir, arriba, en el centro de la
+  caja *Días*, sale el botón **↶ Deshacer cambios realizados** (con cuántos
+  quedan), y también un aviso abajo; o pulsa **Ctrl+Z**. **Otra vez** deshace
+  lo anterior, hasta 20 acciones; si falla la conexión, vuelve a pulsarlo para
+  reintentar.
+- 🔴 **Si sale «sin conexión»**, una franja roja arriba dice **por qué** y qué
+  hacer: fuera de la UGR sin la VPN, la API key caducada (con el botón al
+  asistente), ProyectosTIC caído o sin Internet.
+- 🩺 **Ayuda → Copiar diagnóstico**: si algo no va, copia ese texto y pégalo
+  en un correo a quien te ayude. No lleva tu API key ni tu PIN.
+- 📅 **Cierre de mes**: en los últimos días del mes (y los primeros del
+  siguiente) te avisa de los días del mes con horas pendientes, con un enlace
+  a cada uno.
+- 🏷️ **Guardia, teletrabajo y permiso**: la etiqueta **rellena** es que está
+  imputado en ProyectosTIC; **con borde y «· local»**, que solo está marcado
+  en este equipo.
 - 🖥 Lo que lleva **«(local)»** en el botón derecho de un día (festivo,
   vacaciones, apertura de curso, baja, permiso por horas, guardia,
   teletrabajo) se guarda **solo en tu FichaCSIRC**: no va a ProyectosTIC. Si

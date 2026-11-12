@@ -390,6 +390,30 @@ async function confirmarLocal(d, motivo) {
   });
 }
 
+// ================================================================ diagnostico
+
+// Ayuda > Copiar diagnostico: para pegar en un correo cuando algo no va. Sin
+// API key ni PIN (lo garantiza el Python).
+async function dlgDiagnostico() {
+  const caja = el("textarea", { class: "diagnostico", rows: "16", spellcheck: "false" });
+  caja.readOnly = true;
+  caja.value = "Preparando el diagnóstico (comprobando la conexión)…";
+  const d = dialogo({ titulo: "Diagnóstico", ancho: 700, botones: [
+    { texto: "Copiar", clase: "primario", izquierda: true, accion: async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(caja.value); ok = true; } catch (_e) {
+        caja.focus(); caja.select();
+        try { ok = document.execCommand("copy"); } catch (_e2) { ok = false; }
+      }
+      estado(ok ? "Diagnóstico copiado: pégalo en un correo a quien te ayude."
+                : "No se pudo copiar solo: selecciona el texto y pulsa Ctrl+C.");
+    } },
+    cerrarBoton] });
+  d.cuerpo.append(nota("Copia este texto y pégalo en un correo a quien te ayude. No lleva tu API key "
+                       + "ni tu PIN."), caja);
+  try { caja.value = (await llamar("diagnostico")).texto; } catch (e) { caja.value = `No se pudo preparar: ${e.message || e}`; }
+}
+
 // ================================================================ bandeja del sistema
 
 // Icono junto al reloj (cerrar = esconder) e iniciar con Windows escondida.

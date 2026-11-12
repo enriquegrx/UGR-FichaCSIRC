@@ -100,6 +100,52 @@ async function avisarSemanaAnterior() {
   a.hidden = false;
 }
 
+// ---------------------------------------------------------------- sin conexion: por que
+
+// No es lo mismo estar fuera de la UGR sin VPN, tener la API key caducada o
+// que ProyectosTIC este caido: se dice cual y que hacer (antes, todo "sin
+// conexion" en rojo).
+function pintarAvisoConexion(datos) {
+  const a = $("aviso-conexion");
+  const dg = datos.conexion !== "ok" ? datos.conexion_detalle : null;
+  if (!dg) { a.hidden = true; return; }
+  const boton = (texto, accion) => el("button", { class: "enlace", text: texto, onclick: accion });
+  const botones = [];
+  if (dg.tipo === "clave" || dg.tipo === "config") {
+    botones.push(boton("Abrir el asistente", () => { location.href = "configurar.html"; }));
+  }
+  if (dg.tipo === "config") botones.push(boton("Copias de seguridad…", dlgCopias));
+  botones.push(boton("Reintentar", () => cargarSemana()), boton("Copiar diagnóstico", dlgDiagnostico));
+  a.replaceChildren(el("div", { class: "aviso-conexion-texto" },
+    el("b", { text: dg.titulo }), el("span", { text: `. ${dg.texto}` })), ...botones);
+  a.hidden = false;
+}
+
+// ---------------------------------------------------------------- cierre de mes
+
+// Ultimos dias del mes (y primeros del siguiente): los dias del mes que
+// quedan con huecos, cada uno con su enlace. La X lo calla hasta manana.
+async function avisarCierreMes() {
+  let r;
+  try { r = await api().mes_pendiente(); } catch (_e) { return; }
+  const a = $("aviso-mes");
+  if (!r) { a.hidden = true; return; }
+  const ir = (iso) => {
+    if (st.vista !== "semana") { st.vista = "semana"; pintarSelectorVista(); llamar("guardar_vista", "semana").catch(() => {}); }
+    st.lunes = lunesDe(iso);
+    cargarSemana({ marcar: r.dias.map((x) => x.iso).filter((i) => lunesDe(i) === st.lunes) });
+  };
+  const max = 8;
+  const enlaces = r.dias.slice(0, max).map((x) => el("button", { class: "enlace", text: x.texto, onclick: () => ir(x.iso) }));
+  if (r.dias.length > max) enlaces.push(el("span", { text: `y ${r.dias.length - max} más` }));
+  a.replaceChildren(
+    el("span", { class: "aviso-semana-texto", text: `📅 ${r.texto}` }),
+    el("button", { class: "cerrar-aviso", text: "×", title: "No volver a avisar hasta mañana", "aria-label": "Cerrar",
+                   onclick: () => { a.hidden = true; llamar("aviso_mes_visto").catch(() => {}); } }),
+    el("div", { class: "dias-mes" }, ...enlaces));
+  a.hidden = false;
+}
+
 // ---------------------------------------------------------------- utilidades
 
 function sumarDias(iso, n) {
@@ -140,11 +186,19 @@ async function informarLote(r, { hecho, nada }) {
 // Tras borrar, editar, mover o anadir: un aviso abajo con su "Deshacer" (mas a
 // la vista que el boton del panel, que sigue ahi, igual que Ctrl+Z).
 let avisoT = null;
+// El boton grande de arriba (caja Dias): visible solo si hay algo que
+// deshacer, con cuantos cambios quedan y cual sera el siguiente.
+function ponerDeshacer(quedan, siguiente = "") {
+  const b = $("b-deshacer");
+  b.hidden = !quedan;
+  b.querySelector(".n-deshacer").textContent = quedan > 1 ? String(quedan) : "";
+  b.title = siguiente ? `Deshacer: ${siguiente} (Ctrl+Z)` : "Deshacer el último cambio (Ctrl+Z)";
+}
 function trasCambio(r, texto) {
   estado(texto);
-  if (r.quedan !== undefined) $("b-deshacer").hidden = !r.quedan;   // la pila sigue aunque esta accion no entre
+  if (r.quedan !== undefined) ponerDeshacer(r.quedan, r.siguiente);   // la pila sigue aunque esta accion no entre
   if (!r.puede_deshacer) { ocultarAviso(); return; }
-  $("b-deshacer").hidden = false;
+  if (r.quedan === undefined) ponerDeshacer(1);
   const a = $("aviso-deshacer");
   a.replaceChildren(el("span", { text: texto }),
     el("button", { class: "enlace", text: "Deshacer", onclick: () => deshacer() }),
@@ -232,6 +286,7 @@ const MENUS = {
     { texto: "Atajos de teclado", accion: dlgAtajos },
     { texto: "Novedades (qué hay de nuevo)", accion: dlgNovedades },
     { texto: "Comprobar actualizaciones", accion: () => dlgActualizacion({ forzar: true }) },
+    { texto: "Copiar diagnóstico (si algo no va)…", accion: dlgDiagnostico },
     st.ini?.github ? { texto: "Ver en GitHub", accion: () => llamar("abrir_github", "") } : null,
     "-",
     { texto: "Tecnología utilizada", accion: dlgTecnologia },
@@ -330,6 +385,7 @@ async function arrancar() {
   ponerActividades(ini.actividades, ini.actividad_preferida);
   await cargarSemana({ marcarHoy: true });
   avisarSemanaAnterior();
+  avisarCierreMes();
   refrescarFranja();
   if (st.tareas.size) elegirTarea();
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
@@ -503,8 +559,9 @@ function pintarVista(datos, marcarHoy, marcar = null) {
     $("estado-vista").className = `chip-estado ${datos.al_dia ? "ok" : "aviso"}`;
   }
   $("conn").className = `conn ${datos.conexion}`;
-  $("conn").title = { ok: "Conectado", warn: "Algún día no se pudo leer",
+  $("conn").title = datos.conexion_detalle?.titulo || { ok: "Conectado", warn: "Algún día no se pudo leer",
                       error: "Sin conexión con ProyectosTic" }[datos.conexion];
+  pintarAvisoConexion(datos);
   if (marcar) st.marcados = new Set(marcar);
   else if (marcarHoy) st.marcados = new Set(st.dias.filter((d) => d.es_hoy).map((d) => d.iso));
   st.marcados = new Set([...st.marcados].filter((i) => st.dias.some((d) => d.iso === i)));
@@ -555,12 +612,7 @@ function pintarDiasSemana(s) {
   cont.replaceChildren();
   s.dias.forEach((d, i) => {
     const chips = el("div", { class: "chips" });
-    if (d.guardia) chips.append(el("span", { class: "chip chip-guardia", text: "⚙ Guardia" }));
-    if (d.teletrabajo) chips.append(el("span", { class: "chip chip-tele", text: "⌂ Teletrabajo" }));
-    if (d.permiso) {
-      chips.append(el("span", { class: "chip chip-permiso", text: `🕐 Permiso ${d.permiso}`,
-                                title: d.permiso_detalle.join("\n") }));
-    }
+    for (const c of chipsMarcas(d)) chips.append(c);
     const barra = el("div", { class: "barra" }, el("i"));
     const tarjeta = el("div", {
       class: `dia ${d.estado}${d.es_hoy ? " hoy" : ""}`,
@@ -834,6 +886,27 @@ function accionesTarjeta(d, a) {
           () => borrarItems([{ fecha: d.iso, id: a.id, destino: a.destino || "op" }])));
 }
 
+// Guardia, teletrabajo y permiso: rellena si esta IMPUTADO en ProyectosTIC
+// (su tarea de Herramientas > Permisos, el comentario de guardia o una
+// actividad de permiso); con borde y "· local" si solo esta marcado aqui.
+function chipsMarcas(d) {
+  const out = [];
+  const chip = (clase, texto, pt, local, titulo = "") => {
+    if (pt) {
+      out.push(el("span", { class: `chip ${clase}`, text: texto,
+                            title: `Imputado en ProyectosTIC${local ? " (y marcado aquí)" : ""}${titulo ? `\n${titulo}` : ""}` }));
+    } else if (local) {
+      out.push(el("span", { class: `chip ${clase} local`, text: `${texto} · local`,
+                            title: `Marcado solo en este equipo: no está en ProyectosTIC${titulo ? `\n${titulo}` : ""}` }));
+    }
+  };
+  chip("chip-guardia", "⚙ Guardia", d.guardia_pt, d.guardia);
+  chip("chip-tele", "⌂ Teletrabajo", d.teletrabajo_pt, d.teletrabajo);
+  if (d.permiso_pt) chip("chip-permiso", `🕐 Permiso ${d.permiso_pt}`, true, false);
+  if (d.permiso) chip("chip-permiso", `🕐 Permiso ${d.permiso}`, false, true, (d.permiso_detalle || []).join("\n"));
+  return out;
+}
+
 // Texto corto de una celda del mes (la tarjeta de la semana tiene sitio para
 // mas; aqui caben unas pocas letras).
 function cifraMes(d) {
@@ -857,7 +930,8 @@ function pintarMes(m) {
   cont.className = "dias mes";
   cont.replaceChildren();
   for (const d of m.semanas.flat()) {
-    const iconos = [d.guardia ? "⚙" : "", d.teletrabajo ? "⌂" : "", d.permiso ? "🕐" : ""].join(" ").trim();
+    const iconos = [d.guardia || d.guardia_pt ? "⚙" : "", d.teletrabajo || d.teletrabajo_pt ? "⌂" : "",
+                    d.permiso || d.permiso_pt ? "🕐" : ""].join(" ").trim();
     const barra = el("div", { class: "barra" }, el("i"));
     const lineas = d.apuntes.slice(0, MAX_APUNTES_CELDA).map((a) => {
       const n = el("div", { class: "linea-ap" },
@@ -871,7 +945,9 @@ function pintarMes(m) {
       class: `celda ${d.estado}${d.es_hoy ? " hoy" : ""}${d.del_mes ? "" : " fuera"}${d.futuro ? " futuro" : ""}`,
       title: [`${d.nombre} ${d.fecha}`, d.texto,
               ...d.apuntes.map((a) => `${a.horas_txt}  ${a.tarea}${a.actividad ? ` · ${a.actividad}` : ""}`),
-              d.guardia ? "Guardia" : "", d.teletrabajo ? "Teletrabajo" : "",
+              d.guardia_pt ? "Guardia (en ProyectosTIC)" : d.guardia ? "Guardia (local)" : "",
+              d.teletrabajo_pt ? "Teletrabajo (en ProyectosTIC)" : d.teletrabajo ? "Teletrabajo (local)" : "",
+              d.permiso_pt ? `Permiso ${d.permiso_pt} (en ProyectosTIC)` : "",
               ...(d.permiso_detalle || [])].filter(Boolean).join("\n")
              + "\nMayús+clic: rango · botón derecho: más opciones",
     },
@@ -1334,8 +1410,7 @@ async function deshacer() {
   estado("Deshaciendo…");
   try {
     const r = await llamar("deshacer");
-    $("b-deshacer").hidden = !r.quedan;
-    $("b-deshacer").title = r.siguiente ? `Deshacer: ${r.siguiente} (Ctrl+Z)` : "Deshacer (Ctrl+Z)";
+    ponerDeshacer(r.quedan, r.siguiente);
     await cargarSemana();
     if (r.pendiente) {
       estado(`No se pudo deshacer todo «${r.texto}» (${r.ultimo || "sin conexión"}). Pulsa Ctrl+Z para reintentarlo.`);

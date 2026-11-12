@@ -24,6 +24,7 @@
   const avisosLocalNo = [];
   const marcas = { nolab: {}, guardia: new Set(), tele: new Set() };
   const destinosDemo = {};
+  let avisoMesVisto = false;
   const tareasLocalDemo = () => Object.entries({ permiso: "Permisos por horas", baja: "Bajas",
     vacaciones: "Vacaciones", guardia: "Guardias", teletrabajo: "Teletrabajo" }).map(([m, titulo]) => {
     const g = destinosDemo[m] || {};
@@ -230,6 +231,10 @@
       : motivo === "guardia" ? { id: 13002, nombre: "[ATE] Guardias", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "" }
       : { id: 13001, nombre: "[ATE] Permisos", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "Asuntos propios" }),
     tareas_local: () => espera(tareasLocalDemo()),
+    diagnostico: () => espera({ texto: "FichaCSIRC demo · Windows 11\n\nConfiguración: demo\n  API key: sí, 40 caracteres\n\nProyectosTIC: responde 200 en 0.2 s (API key aceptada)" }),
+    mes_pendiente: () => espera(avisoMesVisto ? null : { anio: 2026, mes: 11, texto: "Noviembre cierra y te faltan 5h en 1 día:",
+                                                      dias: [{ iso: d(2), texto: `miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)} (1h de 7h)` }] }),
+    aviso_mes_visto: () => { avisoMesVisto = true; return espera({ ok: true }); },
     fijar_tarea_local: (m, modo, id, nombre) => {
       if (modo === "auto") delete destinosDemo[m];
       else destinosDemo[m] = modo === "ninguna" ? { ninguna: true } : { id, nombre };

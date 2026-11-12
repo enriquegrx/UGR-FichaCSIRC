@@ -36,6 +36,7 @@ import json
 import hashlib
 import hmac
 import secrets
+import socket
 import calendar
 import collections
 import subprocess
@@ -205,6 +206,19 @@ def estado_dia(d, apuntes, hoy=None, acts_permiso=None):
     h_permiso_pt = sum(a["horas"] for a in (apuntes or [])
                        if str(a.get("actividad") or "").strip().lower() in acts_permiso)
     dia_permiso_pt = bool(h_permiso_pt) and h_permiso_pt >= core.horas_dia_permiso() - 0.01
+    # Guardia, teletrabajo y permiso IMPUTADOS en ProyectosTic (no solo
+    # marcados aqui): su tarea elegida en Herramientas > Permisos; la guardia,
+    # tambien por el comentario de guardia; el permiso, tambien por actividad.
+    elegidas = core.config_valor("tareas_local") or {}
+    wp_de = lambda m: str((elegidas.get(m) or {}).get("id") or "")
+    en_tarea = lambda m, a: bool(wp_de(m)) and str(a.get("wp_id") or "") == wp_de(m)
+    com_guardia = core.comentario_guardia() or ""
+    guardia_pt = any(en_tarea("guardia", a) or (com_guardia and (a.get("comentario") or "").strip() == com_guardia)
+                     for a in (apuntes or []))
+    tele_pt = any(en_tarea("teletrabajo", a) for a in (apuntes or []))
+    h_permiso_pt_tarea = h_permiso_pt + sum(
+        a["horas"] for a in (apuntes or []) if en_tarea("permiso", a)
+        and str(a.get("actividad") or "").strip().lower() not in acts_permiso)
     if nolab:
         estado = "vacaciones" if core.es_vacaciones(iso) else "nolab"
         frac = 1.0
@@ -246,6 +260,10 @@ def estado_dia(d, apuntes, hoy=None, acts_permiso=None):
         "guardia": core.es_guardia(iso),
         "teletrabajo": core.es_teletrabajo(iso),
         "permiso": core.fmt_horas_hhmm(h_permiso) if h_permiso else "",
+        # lo mismo, pero imputado en ProyectosTic (etiqueta rellena; la local, con borde)
+        "guardia_pt": guardia_pt,
+        "teletrabajo_pt": tele_pt,
+        "permiso_pt": core.fmt_horas_hhmm(h_permiso_pt_tarea) if h_permiso_pt_tarea else "",
         "permiso_detalle": [
             f"{(core.tipo_permiso(p.get('tipo')) or {}).get('nombre', p.get('tipo'))}: "
             f"{core.fmt_horas_hhmm(p.get('horas') or 0)}" for p in core.permisos_dia(iso)],
@@ -305,6 +323,49 @@ def _motivo_conexion(e):
                               "ConnectTimeout", "ConnectionError", "timed out")):
         return "No se pudo conectar. Revisa la URL y tu red (o la VPN)."
     return f"No se pudo conectar: {txt[:160]}"
+
+
+def _hay_internet(timeout=3):
+    """Responde la web publica de la UGR? Distingue "sin Internet" de "fuera
+    de la red de la UGR" (ProyectosTic tiene direccion interna: desde casa
+    solo con la VPN)."""
+    try:
+        socket.create_connection(("www.ugr.es", 443), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
+
+def diagnostico_conexion(e):
+    """Por que no se pudo leer ProyectosTic, dicho para el usuario y con que
+    hacer: {tipo, titulo, texto}. tipo: config, clave, permiso, servidor, vpn,
+    internet u otro. (Nov 2026: "ProyectosTic esta caido" era la config sin
+    URL ni API key; todo salia igual, "sin conexion".)"""
+    if core is None or not (core.BASE_URL and core.API_KEY):
+        return {"tipo": "config", "titulo": "Falta la conexión con ProyectosTIC",
+                "texto": "La configuración no tiene la dirección o la API key. Ponlas en el "
+                         "asistente o restaura una copia de seguridad."}
+    codigo = getattr(getattr(e, "response", None), "status_code", None)
+    txt = str(e)
+    if codigo == 401 or "(401)" in txt:
+        return {"tipo": "clave", "titulo": "ProyectosTIC no acepta tu API key",
+                "texto": "Ha caducado o se ha revocado. Genera una nueva en ProyectosTIC (tu avatar → "
+                         "Mi cuenta → Tokens de acceso → API) y ponla en el asistente."}
+    if codigo == 403:
+        return {"tipo": "permiso", "titulo": "ProyectosTIC no te deja ver tus horas (403)",
+                "texto": "Tu usuario no tiene permiso. Consúltalo con quien administra ProyectosTIC."}
+    if codigo and codigo >= 500:
+        return {"tipo": "servidor", "titulo": f"ProyectosTIC no responde bien (error {codigo})",
+                "texto": "Es un problema del servidor, no de tu equipo. Prueba de nuevo en un rato."}
+    if core is not None and isinstance(e, (core.requests.ConnectionError, core.requests.Timeout)):
+        if _hay_internet():
+            return {"tipo": "vpn", "titulo": "No llego a ProyectosTIC",
+                    "texto": "La web de la UGR sí responde, pero ProyectosTIC no. Si estás fuera de la "
+                             "UGR, conecta la VPN; si ya estás dentro, ProyectosTIC puede estar caído: "
+                             "prueba en un rato."}
+        return {"tipo": "internet", "titulo": "Sin conexión a Internet",
+                "texto": "Este equipo no llega a Internet. Revisa el cable, el wifi o la red."}
+    return {"tipo": "otro", "titulo": "No se pudo leer ProyectosTIC", "texto": txt[:200]}
 
 
 # ---------------- API expuesta al JavaScript ----------------
@@ -626,6 +687,7 @@ class Api:
         dias = [lunes + dt.timedelta(days=i) for i in range(5)]
         inari_cfg = destinos.configurado()
         fallos = 0
+        self._error_lectura = None
         for d in dias:
             iso = d.isoformat()
             try:
@@ -638,15 +700,29 @@ class Api:
                 else:
                     self._cache[iso] = [dict(a, destino="op")
                                         for a in core.entradas_dia(iso)]
-            except Exception:
+            except Exception as e:
                 self._cache[iso] = None
                 fallos += 1
+                self._error_lectura = e
         return self._pintar(dias, fallos)
 
     def repintar(self, lunes_iso):
-        """Sin red: tras marcar festivo/guardia/teletrabajo (cambios locales)."""
+        """Sin red: tras marcar festivo/guardia/teletrabajo (cambios locales).
+        Los dias que no se pudieron leer siguen sin poderse leer."""
         lunes = dt.date.fromisoformat(lunes_iso)
-        return self._pintar([lunes + dt.timedelta(days=i) for i in range(5)], 0)
+        dias = [lunes + dt.timedelta(days=i) for i in range(5)]
+        return self._pintar(dias, sum(self._cache.get(d.isoformat(), []) is None for d in dias))
+
+    def _detalle_conexion(self, fallos):
+        """Si algun dia no se pudo leer: por que (y al log, una vez por motivo)."""
+        e = getattr(self, "_error_lectura", None)
+        if not fallos or e is None:
+            return None
+        d = diagnostico_conexion(e)
+        if d != getattr(self, "_ultimo_diag", None):
+            core.LOG.warning("No se pudo leer ProyectosTic (%s): %s", d["tipo"], str(e)[:300])
+            self._ultimo_diag = d
+        return d
 
     def _pintar(self, dias, fallos):
         acts = actividades_de_permiso()
@@ -662,6 +738,7 @@ class Api:
             "teletrabajo": (f"{core.teletrabajo_en_semana(dias[0])}/{cupo_tt}"
                             if cupo_tt else ""),
             "conexion": "error" if fallos >= len(dias) else ("warn" if fallos else "ok"),
+            "conexion_detalle": self._detalle_conexion(fallos),
             "dias": tarjetas,
         }
 
@@ -693,6 +770,7 @@ class Api:
         dias = [l + dt.timedelta(days=i) for l in semanas for i in range(5)]
         inari_cfg = destinos.configurado()
         fallos = 0
+        self._error_lectura = None
         try:
             por_dia = {}
             for a in core.entradas_rango(dias[0].isoformat(), dias[-1].isoformat()):
@@ -700,10 +778,11 @@ class Api:
             for d in dias:
                 self._cache[d.isoformat()] = [dict(a, destino="op")
                                               for a in por_dia.get(d.isoformat(), [])]
-        except Exception:
+        except Exception as e:
             for d in dias:
                 self._cache[d.isoformat()] = None
             fallos = len(dias)
+            self._error_lectura = e
         if inari_cfg and not fallos:
             # Teletrabajo con INARI: esas horas son las de INARI (cubos disjuntos).
             for d in dias:
@@ -716,15 +795,19 @@ class Api:
                          "actividad": "INARI · Teletrabajo", "comentario": "",
                          "wp_id": None, "destino": "inari"}
                         for s in destinos.slots_dia(iso)]
-                except Exception:
+                except Exception as e:
                     self._cache[iso] = None
                     fallos += 1
+                    self._error_lectura = e
         return self._pintar_mes(anio, mes, semanas, fallos)
 
     def repintar_mes(self, anio, mes):
         """Sin red: tras una marca local (festivo, guardia, permiso...)."""
         anio, mes = int(anio), int(mes)
-        return self._pintar_mes(anio, mes, self._semanas_de(anio, mes), 0)
+        semanas = self._semanas_de(anio, mes)
+        fallos = sum(self._cache.get((l + dt.timedelta(days=i)).isoformat(), []) is None
+                     for l in semanas for i in range(5))
+        return self._pintar_mes(anio, mes, semanas, fallos)
 
     def _pintar_mes(self, anio, mes, semanas, fallos):
         hoy = dt.date.today()
@@ -754,6 +837,7 @@ class Api:
             "estado": "Al día ✔" if al_dia else f"Te faltan {_horas(obj_hoy - reg)}",
             "frac": round(max(0.0, min(reg / obj if obj else 0.0, 1.0)), 3),
             "conexion": "error" if fallos >= total_dias else ("warn" if fallos else "ok"),
+            "conexion_detalle": self._detalle_conexion(fallos),
             "semanas": filas,
         }
 
@@ -940,6 +1024,127 @@ class Api:
             return None
         return {"lunes": lunes.isoformat(), "dias": dias,
                 "texto": f"La semana pasada te faltan {_horas(total)}: " + ", ".join(faltan) + "."}
+
+    DIAS_AVISO_MES = 5        # ultimos dias laborables del mes en que se avisa del cierre
+    DIAS_AVISO_MES_SIGUIENTE = 3   # y primeros del siguiente, por el que acaba de cerrar
+
+    def _laborables(self, anio, mes):
+        return [dt.date(anio, mes, n) for n in range(1, calendar.monthrange(anio, mes)[1] + 1)
+                if dt.date(anio, mes, n).weekday() < 5
+                and not core.es_no_laborable(dt.date(anio, mes, n).isoformat())]
+
+    def mes_pendiente(self, hoy=None):
+        """Cierre de mes: en los ultimos DIAS_AVISO_MES laborables del mes, los
+        dias con huecos de ese mes hasta ayer; en los primeros
+        DIAS_AVISO_MES_SIGUIENTE del siguiente, los del mes que acaba de
+        cerrar. Una vez al dia (la X lo calla hasta manana). {anio, mes,
+        texto, dias:[{iso, texto}]} o None. Sin red, nada."""
+        hoy = hoy or dt.date.today()
+        if core.config_valor("aviso_mes_visto") == hoy.isoformat():
+            return None
+        lab = self._laborables(hoy.year, hoy.month)
+        if len(lab) >= self.DIAS_AVISO_MES and hoy >= lab[-self.DIAS_AVISO_MES]:
+            anio, mes, hasta = hoy.year, hoy.month, hoy - dt.timedelta(days=1)
+        elif lab and hoy <= lab[min(self.DIAS_AVISO_MES_SIGUIENTE, len(lab)) - 1]:
+            fin = hoy.replace(day=1) - dt.timedelta(days=1)
+            anio, mes, hasta = fin.year, fin.month, fin
+        else:
+            return None
+        desde = dt.date(anio, mes, 1)
+        if hasta < desde:
+            return None
+        try:
+            apuntes = core.entradas_rango(desde.isoformat(), hasta.isoformat())
+        except Exception:
+            return None
+        por_dia = {}
+        for a in apuntes:
+            por_dia.setdefault(a["fecha"], []).append(a)
+        acts = actividades_de_permiso()
+        con_inari = destinos.configurado()
+        dias, total = [], 0.0
+        d = desde
+        while d <= hasta:
+            iso = d.isoformat()
+            # teletrabajo con INARI: sus horas no estan en ProyectosTic
+            if d.weekday() < 5 and not (con_inari and core.es_teletrabajo(iso)):
+                ap = por_dia.get(iso, [])
+                obj = objetivo_dia(d, ap, acts)
+                reg = sum(a["horas"] for a in ap)
+                if obj and reg < obj - 0.001:
+                    total += obj - reg
+                    dias.append({"iso": iso, "texto": f"{core.DIAS_ES[d.weekday()].lower()} "
+                                 f"{d.strftime('%d/%m')} ({_horas(reg)} de {_horas(obj)})"})
+            d += dt.timedelta(days=1)
+        if not dias:
+            return None
+        nombre = self.MESES[mes - 1]
+        cierra = "cierra" if mes == hoy.month else "se ha cerrado"
+        return {"anio": anio, "mes": mes, "dias": dias,
+                "texto": f"{nombre.capitalize()} {cierra} y te faltan {_horas(total)} en "
+                         f"{len(dias)} {'día' if len(dias) == 1 else 'días'}:"}
+
+    def aviso_mes_visto(self):
+        try:
+            core.guardar_config_valor("aviso_mes_visto", dt.date.today().isoformat())
+        except Exception:
+            pass
+        return {"ok": True}
+
+    def diagnostico(self):
+        """Ayuda > Copiar diagnostico: texto para pegar en un correo cuando
+        "no me va". Version, equipo, configuracion (resumida), que responde
+        ProyectosTic y el final del log. NUNCA la API key, el token de INARI
+        ni el PIN (y por si acaso, se tachan si aparecieran)."""
+        self._exigir_desbloqueo()
+        import platform
+        import copias
+        lin = [f"FichaCSIRC {getattr(core, 'VERSION', '?')} · {platform.system()} {platform.release()} "
+               f"· {dt.datetime.now():%d/%m/%Y %H:%M}"]
+        try:
+            cfg = ccore.leer_para_cambiar(espera=0.05)
+            leida = "se lee bien"
+        except ccore.ConfigIlegible as e:
+            cfg, leida = {}, f"NO SE PUEDE LEER ({e})"
+        url, key = (cfg.get("base_url") or "").rstrip("/"), cfg.get("api_key") or ""
+        lista = copias.listar(ccore.CONFIG_PATH)
+        buena = copias.ultima_completa(ccore.CONFIG_PATH)
+        lin += ["", f"Configuración: {ccore.CONFIG_PATH} ({leida})",
+                f"  Dirección: {url or '(FALTA)'}",
+                f"  API key: {'sí, ' + str(len(key)) + ' caracteres' if key else '(FALTA)'}",
+                f"  PIN: {'sí' if cfg.get('pin') else 'no'}",
+                f"  Favoritas: {len(cfg.get('favoritos') or [])} · plantillas: {len(cfg.get('plantillas') or [])}"
+                f" · días marcados: {len(cfg.get('no_laborables') or {})}",
+                f"  Copias de seguridad: {len(lista)}"
+                + (f" (última con conexión: {copias._fecha(buena[0]):%d/%m/%Y %H:%M})" if buena else
+                   " (ninguna con conexión)")]
+        lin += ["", f"Internet (web de la UGR): {'responde' if _hay_internet() else 'NO responde'}"]
+        if url and key:
+            import requests
+            cab = {"Authorization": "Basic " + base64.b64encode(f"apikey:{key}".encode()).decode()}
+            t0 = dt.datetime.now()
+            try:
+                r = requests.get(f"{url}/api/v3/users/me", headers=cab, timeout=15)
+                seg = (dt.datetime.now() - t0).total_seconds()
+                lin.append(f"ProyectosTIC: responde {r.status_code} en {seg:.1f} s"
+                           + (" (API key aceptada)" if r.ok else " (API key RECHAZADA)" if r.status_code == 401 else ""))
+            except Exception as e:
+                lin.append(f"ProyectosTIC: no responde ({type(e).__name__}: {str(e)[:150]})")
+        else:
+            lin.append("ProyectosTIC: no se prueba (falta la dirección o la API key)")
+        ruta_log = os.path.join(os.path.dirname(os.path.abspath(ccore.CONFIG_PATH)), "fichacsirc.log")
+        try:
+            with open(ruta_log, encoding="utf-8", errors="replace") as f:
+                cola = f.readlines()[-25:]
+            lin += ["", "Últimas líneas del registro:"] + [c.rstrip() for c in cola]
+        except OSError:
+            lin += ["", "(sin registro)"]
+        texto = "\n".join(lin)
+        pin = cfg.get("pin") if isinstance(cfg.get("pin"), dict) else {}
+        for secreto in (key, cfg.get("inari_token"), pin.get("hash"), pin.get("sal")):
+            if secreto and len(str(secreto)) >= 6:
+                texto = texto.replace(str(secreto), "***")
+        return {"texto": texto}
 
     def aviso_semana_visto(self, lunes_iso):
         try:

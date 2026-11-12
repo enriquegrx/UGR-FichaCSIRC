@@ -109,6 +109,15 @@ main {
 h2 { margin: 0 0 8px; font-size: 15px; }
 .cabeza-seccion { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .cabeza-seccion h2 { margin: 0; }
+/* Dias: titulo a la izquierda, Deshacer en el centro, controles a la derecha */
+.cabeza-dias { display: grid; grid-template-columns: 1fr auto 1fr; }
+.cabeza-dias > .fila { justify-self: end; }
+.b-deshacer { grid-column: 2; background: var(--primario); border-color: var(--primario); color: #fff;
+              font-weight: 600; padding: 6px 16px; border-radius: 999px; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.b-deshacer:hover { background: var(--primario-osc); }
+.b-deshacer[hidden] { display: none; }
+.n-deshacer:not(:empty) { display: inline-block; margin-left: 8px; min-width: 18px; padding: 0 5px; border-radius: 999px;
+                          background: #fff; color: var(--primario); font-size: 12px; line-height: 18px; }
 
 /* ---------- cajas: minimizar / cerrar (menu Ver) ---------- */
 .controles-panel { display: flex; gap: 2px; margin-left: 4px; }
@@ -202,6 +211,8 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--prima
 .chip-guardia { background: var(--guardia-bg); color: var(--guardia-fg); }
 .chip-tele { background: var(--tele-bg); color: var(--tele-fg); }
 .chip-permiso { background: var(--permiso-bg); color: var(--permiso-fg); }
+/* marcado solo en este equipo: con borde y sin relleno (imputado en ProyectosTic: relleno) */
+.chip.local { background: transparent; border: 1px dashed currentColor; padding: 0 6px; }
 
 .leyenda { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 8px; color: var(--tenue); font-size: 12px; }
 .leyenda > span { display: inline-flex; align-items: center; gap: 5px; }
@@ -503,6 +514,16 @@ body.arrastrando .dia, body.arrastrando .celda { transition: none; }
 .aviso-semana-texto { flex: 1; min-width: 0; }
 .aviso-semana .enlace { white-space: nowrap; }
 .aviso-semana .cerrar-aviso { border: 0; background: none; color: inherit; font-size: 17px; padding: 0 4px; }
+.aviso-mes { flex-wrap: wrap; }
+.aviso-mes .dias-mes { display: flex; flex-wrap: wrap; gap: 2px 10px; flex-basis: 100%; }
+/* sin poder leer ProyectosTic: por que y que hacer */
+.aviso-conexion { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 8px 0 2px;
+                  padding: 8px 12px; border-radius: 6px; font-size: 13px; background: var(--peligro-bg);
+                  color: var(--peligro); border: 1px solid var(--peligro-borde); }
+.aviso-conexion-texto { flex: 1 1 320px; min-width: 0; }
+.aviso-conexion .enlace { white-space: nowrap; color: inherit; font-weight: 600; }
+textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, Consolas, monospace;
+                       min-height: 300px; resize: vertical; }
 
 /* asistente: todo es local */
 .titulo-local { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

@@ -489,6 +489,15 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
   PIN", `copias.marcar_de_cero` impide usar copias anteriores; (4) `combinar`
   trae conexion+PIN si la actual no tiene conexion; (5) `purgar` nunca borra
   la copia completa mas reciente. Tests en `test_proteccion_config.py`.
+  Ademas en 3.2.2: `diagnostico_conexion(e)` (config/clave/permiso/servidor/
+  vpn/internet; `_hay_internet` prueba www.ugr.es:443) -> `conexion_detalle`
+  en semana/mes y franja `#aviso-conexion`; `Api.diagnostico()` (tacha
+  api_key, inari_token y PIN); `mes_pendiente()` (ultimos 5 laborables / 3
+  primeros del siguiente, `aviso_mes_visto` volatil); etiquetas `*_pt`
+  (tarea de `tareas_local`, comentario de guardia o actividad de permiso);
+  `tareas_local` (Herramientas > Permisos). OpenProject NO expone la
+  caducidad del token (ni en /api/v3 ni en cabeceras): la 401 la cubre el
+  diagnostico. Tests en `test_diagnostico.py`.
 
 - v3.2.1 (nov 2026): **guardados de config.json a la vez.** pywebview atiende
   cada llamada del JS en su hilo: "No volver a preguntarme" + marcar el día

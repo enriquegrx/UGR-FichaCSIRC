@@ -31,6 +31,18 @@ instalada aparece en el pie de la ventana.
   adivinarla. «Ninguna» deja de ofrecerla.
 - El **+** de cada día trae ahora **Copiar día anterior**, **Pegar** (si has
   copiado un día) y tus **plantillas**, para aplicarlas a ese día con un clic.
+- **«Sin conexión» ahora dice por qué**: una franja arriba distingue si estás
+  fuera de la UGR sin la VPN, si la API key ha caducado (con el botón para
+  poner una nueva), si ProyectosTIC está caído o si no hay Internet.
+- **Ayuda → Copiar diagnóstico**: un texto para pegar en un correo cuando algo
+  no va (versión, configuración resumida, qué responde ProyectosTIC y el
+  registro). Nunca lleva la API key ni el PIN.
+- **Cierre de mes**: los últimos días del mes, un aviso con los días que te
+  quedan por completar, cada uno con su enlace.
+- **Etiquetas de guardia, teletrabajo y permiso**: rellenas si está imputado en
+  ProyectosTIC; con borde y «· local» si solo está marcado en tu equipo.
+- **Deshacer** sale del pie y pasa arriba, en el centro de la caja *Días*:
+  «↶ Deshacer cambios realizados», con cuántos cambios puedes deshacer.
 
 ---
 
