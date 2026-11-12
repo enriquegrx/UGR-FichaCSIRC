@@ -8,6 +8,7 @@ use crate::ayuda;
 use crate::herramientas as herr;
 use crate::permisos as perm;
 use crate::resumen;
+use crate::sistema;
 use crate::config::{self, Cfg};
 use crate::openproject::{self, Cliente, ErrorOp};
 use crate::pin;
@@ -41,6 +42,13 @@ pub struct Estado {
     pub(crate) ausencias: Mutex<HashMap<String, Value>>,
     /// ultimo CSV exportado (el unico que se puede abrir desde la app)
     pub(crate) ultima_exportacion: Mutex<Option<std::path::PathBuf>>,
+    /// pagina de la version nueva (Ayuda > Comprobar actualizaciones)
+    pub(crate) pagina_actualizacion: Mutex<Option<String>>,
+    /// aviso diario: el texto y los dias con huecos (dia, registrado, objetivo)
+    pub(crate) aviso: Mutex<String>,
+    pub(crate) pendientes: Mutex<Vec<(NaiveDate, f64, f64)>>,
+    /// con icono en la bandeja, cerrar la ventana solo la esconde
+    pub(crate) con_bandeja: std::sync::atomic::AtomicBool,
     /// se borro la config por olvidar el PIN (el asistente empieza de cero)
     pub(crate) de_cero: Mutex<bool>,
     /// fecha de la copia de la que se recupero la config al arrancar (una vez)
@@ -60,6 +68,11 @@ pub(crate) fn candado<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Estado {
+    pub fn preparar_aviso(&self, pendientes: Vec<(NaiveDate, f64, f64)>) {
+        *candado(&self.aviso) = sistema::mensaje_pendientes(&pendientes);
+        *candado(&self.pendientes) = pendientes;
+    }
+
     pub fn anotar_recuperada(&self, nombre: &str) {
         *candado(&self.recuperada) = crate::copias::fecha_de(nombre)
             .map(|f| f.format("%d/%m/%Y a las %H:%M").to_string()).unwrap_or_else(|| nombre.to_string());
@@ -515,7 +528,35 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         }
         // ---- avisos que aun no estan: en silencio, sin molestar ----
         "aviso_aplicaciones" => Ok(Value::Null),
-        "comprobar_actualizacion" => Ok(json!({"error": "La versión Rust (en pruebas) aún no se actualiza sola."})),
+        "abrir_aplicaciones" => Ok(json!({"ok": true})),
+        // ---- actualizaciones, aviso diario y bandeja (fase 5b/5c) ----
+        "comprobar_actualizacion" => {
+            let forzar = args.first().and_then(Value::as_bool).unwrap_or(false);
+            Ok(sistema::comprobar_actualizacion(e, &cfg, forzar).await)
+        }
+        "abrir_pagina_actualizacion" => Ok(sistema::abrir_pagina_actualizacion(e, &app)),
+        "instalar_actualizacion" => Ok(json!({"error": "La versión Rust en pruebas aún no se instala sola: descárgala desde la página.", "pagina": true})),
+        "recordatorio_estado" => Ok(sistema::recordatorio_estado()),
+        "recordatorio_activar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(sistema::recordatorio_activar(&arg(&args, 0)))
+        }
+        "recordatorio_desactivar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(sistema::recordatorio_desactivar())
+        }
+        "aviso_datos" => Ok(sistema::aviso_datos(e, &cfg).await),
+        "aviso_fichar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            sistema::aviso_fichar(e, &cfg, &arg(&args, 0), &arg(&args, 1), args.get(2).unwrap_or(&Value::Null), &arg(&args, 3)).await
+        }
+        "aviso_responder" => Ok(sistema::aviso_responder(&app, args.first().and_then(Value::as_bool).unwrap_or(false))),
+        "bandeja_estado" => Ok(sistema::bandeja_estado(&cfg)),
+        "bandeja_guardar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let b = |i: usize| args.get(i).and_then(Value::as_bool).unwrap_or(false);
+            sistema::bandeja_guardar(&app, b(0), b(1))
+        }
         otro => Err(format!("Esto aún no está en la versión Rust (en pruebas): «{otro}». Hazlo desde FichaCSIRC normal.")),
     }
 }

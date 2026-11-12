@@ -9,7 +9,7 @@ publish = false
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 # Guardar como / Abrir (CSV, exportar e importar la configuracion)
 tauri-plugin-dialog = "2"
 # abrir un enlace o un archivo con su programa (GitHub, el CSV en Excel)
