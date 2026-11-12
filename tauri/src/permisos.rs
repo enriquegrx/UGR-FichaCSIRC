@@ -261,6 +261,21 @@ pub fn marcar_anio_revisado() -> Result<Value, String> {
     Ok(json!({"ok": true}))
 }
 
+/// Primer arranque: fija desde cuando se lleva el saldo (1 de enero de este
+/// año) y da por revisado este año (el aviso del 1 de enero es para el año
+/// QUE EMPIEZA). Sin esto, el saldo empezaria de cero cada 1 de enero.
+/// Devuelve true si ha apuntado algo (inicializar_permisos_anuales de Python).
+pub fn inicializar_anuales(cfg: &Cfg, h: NaiveDate) -> bool {
+    let mut m = Map::new();
+    if cfg.texto("permisos_desde").is_empty() {
+        m.insert("permisos_desde".into(), json!(NaiveDate::from_ymd_opt(h.year(), 1, 1).unwrap().to_string()));
+    }
+    if cfg.get("permisos_anio_revisado").and_then(|v| v.as_i64().or_else(|| texto(v).parse().ok())).unwrap_or(0) == 0 {
+        m.insert("permisos_anio_revisado".into(), json!(h.year()));
+    }
+    !m.is_empty() && config::guardar_valores(m).is_ok()
+}
+
 pub fn toca_permisos_anio(cfg: &Cfg) -> bool {
     let h = hoy();
     let revisado = cfg.get("permisos_anio_revisado").and_then(|v| v.as_i64().or_else(|| texto(v).parse().ok())).unwrap_or(h.year() as i64);
@@ -468,6 +483,15 @@ mod tests {
         let u27 = propuesta_dias_ugr(&c, 2027);
         assert_eq!(u27["2027-05-17"], "San Pascual Bailón (UGR)");
         assert_eq!(u27.len(), 13);
+    }
+
+    #[test]
+    fn el_saldo_no_se_reinicia_cada_1_de_enero() {
+        // ya apuntado (instalacion de Python o primer arranque): no se toca
+        let c = cfg(json!({"permisos_desde": "2026-01-01", "permisos_anio_revisado": 2026}));
+        assert!(!inicializar_anuales(&c, NaiveDate::from_ymd_opt(2027, 1, 4).unwrap()));
+        // el 4 de enero de 2027 toca ofrecer los permisos del año nuevo
+        assert!(toca_permisos_anio(&c) || hoy().year() <= 2026);
     }
 
     #[test]

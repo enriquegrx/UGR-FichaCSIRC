@@ -191,6 +191,8 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         // ---- arranque y semana ----
         "inicio" => {
             e.exigir_desbloqueo(&cfg)?;
+            // primer arranque: desde cuando se lleva el saldo de permisos
+            let cfg = if perm::inicializar_anuales(&cfg, hoy()) { config::leer()? } else { cfg };
             Ok(inicio(e, &cfg))
         }
         "semana" => {
