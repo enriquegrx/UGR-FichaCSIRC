@@ -3,6 +3,7 @@
 //! registrar_web.py. Fase 1: abrir, PIN y ver la semana (solo lectura).
 
 use crate::apuntes;
+use crate::resumen;
 use crate::config::{self, Cfg};
 use crate::openproject::{self, Cliente, ErrorOp};
 use crate::pin;
@@ -27,7 +28,11 @@ pub struct Estado {
     desbloqueada: Mutex<Option<bool>>,
     /// iso -> apuntes (None = no se pudo leer)
     pub(crate) cache: Mutex<HashMap<String, Option<Vec<Apunte>>>>,
-    error: Mutex<Option<ErrorOp>>,
+    pub(crate) error: Mutex<Option<ErrorOp>>,
+    /// tipo de permiso -> horas imputadas con su actividad (ultima lectura)
+    pub(crate) usadas_pt: Mutex<Option<HashMap<String, f64>>>,
+    /// tareas elegidas con Buscar en esta sesion ({id, nombre})
+    extras: Mutex<Vec<Value>>,
     /// acciones deshacibles, la ultima al final (Ctrl+Z repetido)
     pub(crate) pila: Mutex<Vec<crate::apuntes::Accion>>,
     /// id viejo -> id nuevo de los apuntes recreados al deshacer
@@ -48,6 +53,19 @@ impl Estado {
     fn exigir_desbloqueo(&self, cfg: &Cfg) -> Result<(), String> {
         if self.desbloqueada(cfg) { Ok(()) } else { Err("FichaCSIRC está bloqueada: escribe tu PIN.".into()) }
     }
+    /// Id del usuario en ProyectosTIC (sin el, no se consulta: veria las horas de otros).
+    pub(crate) async fn uid(&self, cli: &Cliente) -> Result<String, ErrorOp> {
+        let id = match &self.yo(cli).await?["id"] {
+            Value::Number(n) => n.to_string(),
+            Value::String(s) => s.clone(),
+            _ => String::new(),
+        };
+        if id.is_empty() {
+            return Err(ErrorOp::Otro("No se pudo identificar tu usuario en ProyectosTIC.".into()));
+        }
+        Ok(id)
+    }
+
     async fn yo(&self, cli: &Cliente) -> Result<Value, ErrorOp> {
         if let Some(u) = candado(&self.usuario).clone() {
             return Ok(u);
@@ -136,7 +154,84 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             };
             Ok(Value::String(nombre.unwrap_or_default()))
         }
-        "tareas" => Ok(tareas(&cfg)),
+        "tareas" => Ok(tareas(e, &cfg)),
+        // ---- mes, franja y avisos (fase 3) ----
+        "mes" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let anio = args.first().and_then(Value::as_i64).unwrap_or(0) as i32;
+            let mes = args.get(1).and_then(Value::as_u64).unwrap_or(0) as u32;
+            resumen::mes(e, &cfg, anio, mes).await
+        }
+        "repintar_mes" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let anio = args.first().and_then(Value::as_i64).unwrap_or(0) as i32;
+            let mes = args.get(1).and_then(Value::as_u64).unwrap_or(1).clamp(1, 12) as u32;
+            Ok(resumen::pintar_mes(e, &cfg, anio, mes).await)
+        }
+        "resumen_franja" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(resumen::resumen_franja(e, &cfg).await)
+        }
+        "semana_anterior_pendiente" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(resumen::semana_anterior_pendiente(e, &cfg).await)
+        }
+        "aviso_semana_visto" => Ok(resumen::guardar_visto("aviso_semana_vista", &arg(&args, 0))),
+        "mes_pendiente" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(resumen::mes_pendiente(e, &cfg, hoy()).await)
+        }
+        "aviso_mes_visto" => Ok(resumen::guardar_visto("aviso_mes_visto", &hoy().to_string())),
+        // ---- buscar tareas ----
+        "buscar_tareas" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
+            let favs = ids_favoritas(&cfg);
+            let ts = cli.buscar_wp(&arg(&args, 0)).await.map_err(|err| err.to_string())?;
+            Ok(json!({"tareas": ts.into_iter().map(|mut t| {
+                t["favorita"] = json!(t["id"].as_i64().is_some_and(|i| favs.contains(&i)));
+                t
+            }).collect::<Vec<_>>()}))
+        }
+        "proyectos" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
+            Ok(json!(cli.proyectos().await.map_err(|err| err.to_string())?))
+        }
+        "tareas_de_proyecto" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
+            let pid = arg(&args, 0).parse::<i64>().map_err(|_| "Proyecto no válido.".to_string())?;
+            match cli.tareas_proyecto(pid).await {
+                Ok(ts) => Ok(json!({"tareas": ts})),
+                Err(ErrorOp::Http(403)) => Ok(json!({"error": "No tienes permiso para ver las tareas de este proyecto."})),
+                Err(err) => Err(err.to_string()),
+            }
+        }
+        "favorita" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let id = args.first().and_then(id_entero).ok_or("Tarea no válida.")?;
+            let si = args.get(2).and_then(Value::as_bool).unwrap_or(false);
+            favorita(e, &cfg, id, &arg(&args, 1), si)?;
+            Ok(json!({"tareas": tareas(e, &config::leer()?)}))
+        }
+        "elegir_tareas" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let a_favoritas = args.get(1).and_then(Value::as_bool).unwrap_or(false);
+            for t in arg_lista(&args, 0).iter().rev() {
+                let Some(id) = id_entero(&t["id"]) else { continue };
+                let nombre = t["nombre"].as_str().unwrap_or("").to_string();
+                if a_favoritas {
+                    favorita(e, &config::leer()?, id, &nombre, true)?;
+                } else {
+                    let mut ex = candado(&e.extras);
+                    if !ex.iter().any(|x| id_entero(&x["id"]) == Some(id)) {
+                        ex.insert(0, json!({"id": id, "nombre": nombre}));
+                    }
+                }
+            }
+            Ok(tareas(e, &config::leer()?))
+        }
         // ---- fichar (fase 2) ----
         "comprobar" => {
             e.exigir_desbloqueo(&cfg)?;
@@ -194,14 +289,19 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             guardar("zoom", json!(z))
         }
         "guardar_paneles" => {
-            let limpio: Map<String, Value> = args.first().and_then(Value::as_object).map(|m| {
-                m.iter().filter(|(k, v)| estados_panel(k).contains(&v.as_str().unwrap_or("")))
-                    .map(|(k, v)| (k.clone(), v.clone())).collect()
-            }).unwrap_or_default();
-            guardar("paneles", Value::Object(limpio))
+            let mut todos = paneles(&cfg).as_object().cloned().unwrap_or_default();
+            if let Some(m) = args.first().and_then(Value::as_object) {
+                for (k, v) in m {
+                    if estados_panel(k).contains(&v.as_str().unwrap_or("")) {
+                        todos.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+            let _ = guardar("paneles", Value::Object(todos));
+            Ok(paneles(&config::leer()?))
         }
         // ---- avisos que aun no estan: en silencio, sin molestar ----
-        "semana_anterior_pendiente" | "mes_pendiente" | "aviso_aplicaciones" => Ok(Value::Null),
+        "aviso_aplicaciones" => Ok(Value::Null),
         "comprobar_actualizacion" => Ok(json!({"error": "La versión Rust (en pruebas) aún no se actualiza sola."})),
         otro => Err(format!("Esto aún no está en la versión Rust (en pruebas): «{otro}». Hazlo desde FichaCSIRC normal.")),
     }
@@ -289,15 +389,43 @@ fn id_entero(v: &Value) -> Option<i64> {
     v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse().ok()))
 }
 
-fn tareas(cfg: &Cfg) -> Value {
+fn ids_favoritas(cfg: &Cfg) -> std::collections::HashSet<i64> {
+    cfg.lista("favoritos").iter().filter_map(|f| id_entero(&f["id"])).collect()
+}
+
+/// Tareas del desplegable: las buscadas en la sesion y las favoritas.
+fn tareas(e: &Estado, cfg: &Cfg) -> Value {
+    let favs = ids_favoritas(cfg);
     let mut vistas = std::collections::HashSet::new();
-    let out: Vec<Value> = cfg.lista("favoritos").iter().filter_map(|f| {
+    let todas: Vec<Value> = candado(&e.extras).iter().cloned().chain(cfg.lista("favoritos")).collect();
+    let out: Vec<Value> = todas.iter().filter_map(|f| {
         let id = id_entero(&f["id"])?;
         if !vistas.insert(id) { return None }
         let nombre = f["nombre"].as_str().unwrap_or("").to_string();
-        Some(json!({"id": id, "nombre": nombre, "texto": format!("{id} - {nombre}"), "favorita": true}))
+        Some(json!({"id": id, "nombre": nombre, "texto": format!("{id} - {nombre}"), "favorita": favs.contains(&id)}))
     }).collect();
     Value::Array(out)
+}
+
+/// La estrella del buscador: marca o quita una tarea de favoritas.
+fn favorita(e: &Estado, cfg: &Cfg, id: i64, nombre: &str, si: bool) -> Result<(), String> {
+    let mut favs = cfg.lista("favoritos");
+    let esta = favs.iter().any(|f| id_entero(&f["id"]) == Some(id));
+    if si && !esta {
+        favs.push(json!({"id": id, "nombre": nombre}));
+    } else if !si && esta {
+        favs.retain(|f| id_entero(&f["id"]) != Some(id));
+        // sigue en el desplegable de esta sesion, como una buscada
+        let mut ex = candado(&e.extras);
+        if !ex.iter().any(|x| id_entero(&x["id"]) == Some(id)) {
+            ex.insert(0, json!({"id": id, "nombre": nombre}));
+        }
+    } else {
+        return Ok(());
+    }
+    let mut m = Map::new();
+    m.insert("favoritos".into(), Value::Array(favs));
+    config::guardar_valores(m)
 }
 
 async fn actividades(cfg: &Cfg, wp_id: &str) -> Value {
@@ -342,7 +470,7 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "plataforma": format!("{} · Rust (en pruebas)", plataforma()),
         "lunes": lunes.to_string(),
         "logo": logo(),
-        "tareas": tareas(cfg),
+        "tareas": tareas(e, cfg),
         "actividades": ACTIVIDADES,
         "actividad_preferida": actividad_preferida(cfg),
         "comentario_guardia": reglas.comentario_guardia,
@@ -358,11 +486,7 @@ async fn semana(e: &Estado, cfg: &Cfg, lunes_iso: &str) -> Result<Value, String>
     let dias: Vec<NaiveDate> = (0..5).map(|i| lunes + Duration::days(i)).collect();
     let leido: Result<Vec<Apunte>, ErrorOp> = async {
         let cli = Cliente::desde(cfg)?;
-        let uid = match &e.yo(&cli).await?["id"] {
-            Value::Number(n) => n.to_string(),
-            Value::String(s) => s.clone(),
-            _ => String::new(),
-        };
+        let uid = e.uid(&cli).await?;
         cli.entradas_rango(&uid, &dias[0].to_string(), &dias[4].to_string()).await
     }.await;
     {

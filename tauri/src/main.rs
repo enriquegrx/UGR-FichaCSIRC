@@ -16,6 +16,7 @@ mod config;
 mod openproject;
 mod pin;
 mod reglas;
+mod resumen;
 
 fn main() {
     tauri::Builder::default()

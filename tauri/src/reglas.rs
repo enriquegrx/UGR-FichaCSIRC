@@ -86,6 +86,17 @@ pub struct TipoPermiso {
     pub id: String,
     pub nombre: String,
     pub actividad: String,
+    /// horas de cada concesion (bolsa) de este tipo
+    pub concesiones: Vec<f64>,
+}
+
+/// Concesiones de un tipo de la config (tolera el modelo viejo de un "cupo").
+fn concesiones_de(t: &Value) -> Vec<f64> {
+    match t.get("concesiones") {
+        Some(Value::Array(cs)) => cs.iter().filter_map(|c| horas_de_valor(&c["horas"])).filter(|h| *h > 0.0).collect(),
+        Some(Value::Null) | None => t.get("cupo").and_then(horas_de_valor).filter(|h| *h > 0.0).into_iter().collect(),
+        _ => vec![],
+    }
 }
 
 pub struct Reglas {
@@ -104,6 +115,8 @@ pub struct Reglas {
     tareas_local: Map<String, Value>,
     pub comentario_guardia: String,
     pub teletrabajo_por_semana: i64,
+    permisos_desde: Option<NaiveDate>,
+    pub cupo_vacaciones: f64,
 }
 
 fn par(v: Option<&Value>, defecto: (u32, u32)) -> (u32, u32) {
@@ -137,9 +150,9 @@ impl Reglas {
         let tipos_cfg = cfg.lista("permisos_tipos");
         let tipos = if tipos_cfg.is_empty() {
             vec![
-                TipoPermiso { id: "asuntos_particulares".into(), nombre: "Asuntos particulares por horas".into(), actividad: String::new() },
-                TipoPermiso { id: "servicios_minimos".into(), nombre: "Compensación por servicios mínimos".into(), actividad: String::new() },
-                TipoPermiso { id: "conciliacion".into(), nombre: "Conciliación vida laboral y familiar".into(), actividad: String::new() },
+                TipoPermiso { id: "asuntos_particulares".into(), nombre: "Asuntos particulares por horas".into(), actividad: String::new(), concesiones: vec![70.0] },
+                TipoPermiso { id: "servicios_minimos".into(), nombre: "Compensación por servicios mínimos".into(), actividad: String::new(), concesiones: vec![56.0] },
+                TipoPermiso { id: "conciliacion".into(), nombre: "Conciliación vida laboral y familiar".into(), actividad: String::new(), concesiones: vec![30.0] },
             ]
         } else {
             tipos_cfg
@@ -148,6 +161,7 @@ impl Reglas {
                     id: texto(&t["id"]),
                     nombre: texto(&t["nombre"]),
                     actividad: texto(&t["actividad"]).trim().to_string(),
+                    concesiones: concesiones_de(t),
                 })
                 .collect()
         };
@@ -189,6 +203,8 @@ impl Reglas {
                 "Servicio de Guardia".into()
             },
             teletrabajo_por_semana: cfg.get("teletrabajo_por_semana").and_then(|v| v.as_i64()).unwrap_or(1),
+            permisos_desde: NaiveDate::parse_from_str(&cfg.texto("permisos_desde"), "%Y-%m-%d").ok(),
+            cupo_vacaciones: cfg.get("cupo_vacaciones").and_then(Value::as_f64).unwrap_or(22.0),
         }
     }
 
@@ -216,6 +232,26 @@ impl Reglas {
     pub fn horas_permiso(&self, iso: &str) -> f64 {
         redondear(self.permisos.get(iso).map(|ps| ps.iter().map(|p| p.1).sum()).unwrap_or(0.0), 2)
     }
+    /// Desde cuando se lleva el saldo de permisos (por defecto, el 1 de enero).
+    pub fn permisos_desde(&self, hoy: NaiveDate) -> NaiveDate {
+        self.permisos_desde.unwrap_or_else(|| NaiveDate::from_ymd_opt(hoy.year(), 1, 1).unwrap())
+    }
+
+    /// Horas de ese tipo MARCADAS en el dia desde 'desde' (permiso local).
+    pub fn permiso_usadas_local(&self, tipo: &str, desde: NaiveDate) -> f64 {
+        let total: f64 = self.permisos.iter()
+            .filter(|(iso, _)| NaiveDate::parse_from_str(iso, "%Y-%m-%d").map(|d| d >= desde).unwrap_or(false))
+            .flat_map(|(_, ps)| ps.iter().filter(|(t, _)| t == tipo).map(|(_, h)| *h))
+            .sum();
+        redondear(total, 2)
+    }
+
+    /// Dias laborables marcados como vacaciones en ese año.
+    pub fn vacaciones_usadas(&self, anio: i32) -> usize {
+        self.no_laborables.keys().filter(|iso| self.es_vacaciones(iso)).filter_map(|iso| NaiveDate::parse_from_str(iso, "%Y-%m-%d").ok())
+            .filter(|d| d.year() == anio && d.weekday().num_days_from_monday() < 5).count()
+    }
+
     pub fn teletrabajo_en_semana(&self, lunes: NaiveDate) -> usize {
         (0..5).filter(|i| self.es_teletrabajo(&(lunes + chrono::Duration::days(*i)).to_string())).count()
     }
@@ -438,6 +474,7 @@ mod tests {
             }).collect());
             r.estado_dia(dia(d["iso"].as_str().unwrap()), aps.as_deref(), hoy, &acts)
         }).collect();
+        // (la franja la compara resumen::tests::paridad_franja)
         std::fs::write(format!("{ruta}.rust.json"), serde_json::to_string_pretty(&salida).unwrap()).unwrap();
     }
 }

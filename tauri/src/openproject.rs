@@ -90,6 +90,72 @@ impl Cliente {
         self.get("/api/v3/users/me", &[]).await
     }
 
+    /// Todos los elementos de un listado, siguiendo la paginacion.
+    async fn get_todos(&self, ruta: &str, mut consulta: Vec<(&str, String)>) -> Result<Vec<Value>, ErrorOp> {
+        consulta.push(("pageSize", "200".into()));
+        let mut out = Vec::new();
+        let mut pagina = 1;
+        loop {
+            let mut c = consulta.clone();
+            c.push(("offset", pagina.to_string()));
+            let datos = self.get(ruta, &c).await?;
+            let elems = datos["_embedded"]["elements"].as_array().cloned().unwrap_or_default();
+            let total = datos["total"].as_u64().unwrap_or(0) as usize;
+            let vacia = elems.is_empty();
+            out.extend(elems);
+            if vacia || out.len() >= total {
+                return Ok(out);
+            }
+            pagina += 1;
+        }
+    }
+
+    pub async fn proyectos(&self) -> Result<Vec<Value>, ErrorOp> {
+        Ok(self.get_todos("/api/v3/projects", vec![]).await?.iter()
+            .filter_map(|p| Some(json!({"id": p["id"].as_i64()?, "nombre": p["name"].as_str().unwrap_or("?")})))
+            .collect())
+    }
+
+    pub async fn tareas_proyecto(&self, pid: i64) -> Result<Vec<Value>, ErrorOp> {
+        Ok(self.get_todos(&format!("/api/v3/projects/{pid}/work_packages"), vec![]).await?
+            .iter().filter_map(wp_resumen).collect())
+    }
+
+    /// Tareas de TODOS los proyectos visibles: por su NUMERO (la exacta), por
+    /// texto en el nombre o, sin texto, todas las abiertas (hasta MAX_TODAS).
+    pub async fn buscar_wp(&self, texto: &str) -> Result<Vec<Value>, ErrorOp> {
+        let t = texto.trim();
+        if t.is_empty() {
+            let filtros = json!([{"status": {"operator": "o", "values": []}}]).to_string();
+            let mut out = Vec::new();
+            let mut pagina = 1;
+            while out.len() < MAX_TODAS {
+                let datos = self.get("/api/v3/work_packages", &[("filters", filtros.clone()), ("pageSize", "200".into()),
+                    ("offset", pagina.to_string()), ("sortBy", json!([["subject", "asc"]]).to_string())]).await?;
+                let elems = datos["_embedded"]["elements"].as_array().cloned().unwrap_or_default();
+                let total = datos["total"].as_u64().unwrap_or(0) as usize;
+                out.extend(elems.iter().filter_map(wp_resumen));
+                if elems.is_empty() || out.len() >= total {
+                    break;
+                }
+                pagina += 1;
+            }
+            out.truncate(MAX_TODAS);
+            return Ok(out);
+        }
+        if let Ok(n) = t.trim_start_matches('#').parse::<u64>() {
+            return match self.get(&format!("/api/v3/work_packages/{n}"), &[]).await {
+                Ok(w) => Ok(wp_resumen(&w).into_iter().collect()),
+                // no existe, o es de un proyecto en el que no estas
+                Err(ErrorOp::Http(403 | 404)) => Ok(vec![]),
+                Err(e) => Err(e),
+            };
+        }
+        let filtros = json!([{"subject": {"operator": "~", "values": [t]}}]).to_string();
+        let datos = self.get("/api/v3/work_packages", &[("filters", filtros), ("pageSize", "50".into())]).await?;
+        Ok(datos["_embedded"]["elements"].as_array().map(|a| a.iter().filter_map(wp_resumen).collect()).unwrap_or_default())
+    }
+
     /// Los apuntes de ESE usuario entre dos fechas (incluidas), paginando.
     pub async fn entradas_rango(&self, uid: &str, desde: &str, hasta: &str) -> Result<Vec<Apunte>, ErrorOp> {
         if uid.is_empty() {
@@ -184,6 +250,17 @@ impl Cliente {
     pub async fn actividades(&self, wp_id: &str) -> Result<Vec<String>, ErrorOp> {
         Ok(self.actividades_href(wp_id).await?.into_iter().map(|(n, _)| n).collect())
     }
+}
+
+/// "Buscar en todo" sin texto: tope de tareas que se traen.
+pub const MAX_TODAS: usize = 1000;
+
+/// Lo que se enseña de una tarea: id, nombre, su proyecto y su tarea padre.
+pub fn wp_resumen(w: &Value) -> Option<Value> {
+    let id = w["id"].as_i64()?;
+    Some(json!({"id": id, "nombre": w["subject"].as_str().unwrap_or("?"),
+                "proyecto": w["_links"]["project"]["title"].as_str().unwrap_or(""),
+                "padre": w["_links"]["parent"]["title"].as_str().unwrap_or("")}))
 }
 
 /// 3.5 -> "PT3H30M" (como _iso_dur).

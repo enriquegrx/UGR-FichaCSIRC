@@ -19,12 +19,23 @@ import os
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, RAIZ)
 
 import rellenar_horas as core      # noqa: E402
 import registrar_web as web        # noqa: E402
+
+
+def _iguales(a, b):
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and not isinstance(a, bool):
+        return abs(a - b) < 1e-6
+    if isinstance(a, dict) and isinstance(b, dict):
+        return set(a) == set(b) and all(_iguales(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_iguales(x, y) for x, y in zip(a, b))
+    return a == b
 
 
 def main():
@@ -46,6 +57,8 @@ def main():
         cfg = json.load(f)
     entrada = {"config": cfg, "hoy": hoy.isoformat(),
                "dias": [{"iso": x.isoformat(), "apuntes": por_dia.get(x.isoformat(), [])} for x in dias]}
+    # la franja: desde el dia 1 del mes anterior (lo que lee resumen_franja)
+    entrada["franja_apuntes"] = apuntes
     # un dia "sin conexion" para probar ese camino tambien
     entrada["dias"].append({"iso": hoy.isoformat(), "apuntes": None})
     ruta = os.path.join(carpeta, "entrada.json")
@@ -61,6 +74,13 @@ def main():
                    cwd=os.path.join(RAIZ, "tauri"), env=env, check=True, capture_output=True)
     with open(ruta + ".rust.json", encoding="utf-8") as f:
         rust = json.load(f)
+    with open(ruta + ".franja.json", encoding="utf-8") as f:
+        franja_rust = json.load(f)
+    # franja de Python con los mismos apuntes, sin red y sin horas de permiso imputadas
+    api = web.Api()
+    with mock.patch.object(core, "entradas_rango", return_value=apuntes), \
+         mock.patch.dict(core._USADAS_PT, {}, clear=True):
+        franja_py = api.resumen_franja()
 
     difs = 0
     for p, r in zip(python, rust):
@@ -76,7 +96,14 @@ def main():
             if not igual:
                 difs += 1
                 print(f"{p['iso']} {k}: python={vp!r} rust={vr!r}")
-    print(f"{len(python)} días comparados, {difs} diferencias.")
+    franja_py = json.loads(json.dumps(franja_py))
+    for k in sorted(set(franja_py) | set(franja_rust)):
+        if json.dumps(franja_py.get(k), sort_keys=True) != json.dumps(franja_rust.get(k), sort_keys=True):
+            # numeros: 21 y 21.0 son lo mismo
+            if not _iguales(franja_py.get(k), franja_rust.get(k)):
+                difs += 1
+                print(f"franja {k}:\n  python={franja_py.get(k)!r}\n  rust  ={franja_rust.get(k)!r}")
+    print(f"{len(python)} días y la franja comparados, {difs} diferencias.")
     return 1 if difs else 0
 
 
