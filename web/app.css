@@ -635,3 +635,57 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
   /* solo las 3 habituales principales: las que de verdad se usan */
   #lista-habituales .hab-fila:nth-child(n+4) { display: none; }
 }
+
+/* ================================================================ rediseño 4.0
+   Semana: barras por tarea (cada tarea su color, el mismo siempre). Mes:
+   calendario de calor (el color del dia dice como va). CSS moderno del motor
+   de Edge: color-mix(), @starting-style para animar al aparecer. */
+:root {
+  /* sin verde ni ambar: ya dicen "completo" y "a medias" */
+  --t0: #378add; --t1: #1d9e75; --t2: #7f77dd; --t3: #d85a30;
+  --t4: #d4537e; --t5: #5b7a99; --t6: #0e8fa6; --t7: #9a6b45; --t-inari: #0f6e56;
+}
+:root[data-tema="oscuro"], :root:not([data-tema="claro"]).sistema-oscuro {
+  --t0: #6aa9ea; --t1: #4cc39b; --t2: #a29bec; --t3: #ec8a63;
+  --t4: #e888aa; --t5: #8fa9c2; --t6: #4cc0d6; --t7: #c79a72; --t-inari: #3fb592;
+}
+
+/* ---- semana ---- */
+.dia { border-radius: 12px; padding: 12px 14px 12px; }
+.dia .titulo { display: flex; align-items: baseline; gap: 6px; }
+.titulo-dia { font-weight: 600; color: var(--texto-fuerte); }
+.titulo-fecha { color: var(--tenue); font-size: 12px; font-variant-numeric: tabular-nums; }
+.titulo-hoy { margin-left: auto; font-size: 11px; font-weight: 600; padding: 0 7px; border-radius: 999px;
+              background: var(--primario); color: #fff; }
+.dia .cifra { font-size: 17px; margin-top: 4px; }
+.dia .barra { height: 10px; margin: 8px 0 6px; position: relative; overflow: visible; }
+.barra-tareas { display: flex; }
+/* .barra.barra-tareas > i.seg: mas especifico que ".completo .barra > i" (el color del estado) */
+.barra.barra-tareas > i.seg { display: block; flex: 0 0 var(--w); height: 100%; background: var(--c); width: auto;
+                       transition: flex-basis .35s ease; }
+.barra-tareas > .seg:first-child { border-radius: 4px 0 0 4px; }
+.barra-tareas > .seg:last-of-type { border-radius: 0 4px 4px 0; }
+.barra-tareas > .seg:only-of-type { border-radius: 4px; }
+.barra-tareas > .seg + .seg { box-shadow: inset 2px 0 0 var(--panel); }
+@starting-style { .barra-tareas > .seg { flex-basis: 0; } }
+.barra > i.llena { width: var(--w); border-radius: 4px; transition: width .35s ease; }
+@starting-style { .barra > i.llena { width: 0; } }
+.barra-tareas > .meta { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px;
+                        background: var(--texto-fuerte); border-radius: 1px; }
+.dia.marcado .barra-tareas > .seg + .seg { box-shadow: inset 2px 0 0 var(--seleccion); }
+.punto { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--c); align-self: center; }
+.dia .linea-act { padding-left: 54px; }
+
+/* ---- mes: calendario de calor ---- */
+.dias.mes .celda { --tinte: transparent; --fuerza: 18%; border-radius: 10px;
+                   background: color-mix(in srgb, var(--tinte) var(--fuerza), var(--panel)); }
+.dias.mes .celda.completo { --tinte: var(--exito); }
+.dias.mes .celda.parcial { --tinte: var(--aviso); --fuerza: calc(12% + (1 - var(--frac, 0)) * 20%); }
+.dias.mes .celda.pasado { --tinte: var(--primario); }
+.dias.mes .celda.nolab, .dias.mes .celda.permiso { --tinte: var(--tenue); --fuerza: 16%; }
+.dias.mes .celda.vacaciones { --tinte: var(--vacaciones); }
+.dias.mes .celda.vacio:not(.futuro) { --tinte: var(--aviso); --fuerza: 32%; }
+.dias.mes .celda.futuro { border-style: dashed; }
+.dias.mes .celda.marcado { background: var(--seleccion); }
+.dias.mes .celda .linea-ap { color: var(--texto); }
+.dias.mes .celda .linea-h { min-width: 30px; }

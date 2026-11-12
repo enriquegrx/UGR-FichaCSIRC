@@ -610,24 +610,63 @@ function pintarDiasSemana(s) {
   const cont = $("dias");
   cont.className = "dias";
   cont.replaceChildren();
+  repartirColores(s.dias);
   s.dias.forEach((d, i) => {
     const chips = el("div", { class: "chips" });
     for (const c of chipsMarcas(d)) chips.append(c);
-    const barra = el("div", { class: "barra" }, el("i"));
     const tarjeta = el("div", {
       class: `dia ${d.estado}${d.es_hoy ? " hoy" : ""}`,
       title: `${d.nombre} ${d.fecha} · Alt+${i + 1} · Mayús+clic: rango · botón derecho: más opciones`,
     },
-      el("div", { class: "titulo", text: `${d.nombre} ${d.fecha}${d.es_hoy ? "  · hoy" : ""}` }),
-      barra,
+      el("div", { class: "titulo" },
+        el("span", { class: "titulo-dia", text: d.nombre }),
+        el("span", { class: "titulo-fecha", text: d.fecha }),
+        d.es_hoy ? el("span", { class: "titulo-hoy", text: "hoy" }) : null),
       el("div", { class: "cifra", text: d.texto }),
+      barraTareas(d),
       chips.childElementCount ? chips : null,
       ...apuntesTarjeta(d),
       botonMasDia(d));
     eventosDia(tarjeta, d);
     cont.append(tarjeta);
-    requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
   });
+}
+
+// Cada tarea con su color: la barra se reparte por tareas y la lista de abajo
+// lleva el mismo color delante. Se reparten por horas en lo que se ve (la de
+// mas horas, el primero...): en la semana o el mes nunca se repiten, y como
+// las tareas principales suelen ser las mismas, casi siempre conservan color.
+const COLORES_TAREA = 8;
+const claveTarea = (a) => String(a.wp_id || a.tarea);
+function repartirColores(dias) {
+  const horas = new Map();
+  for (const a of dias.flatMap((d) => d.apuntes)) {
+    if (a.destino !== "inari") horas.set(claveTarea(a), (horas.get(claveTarea(a)) || 0) + a.horas);
+  }
+  st.colores = new Map([...horas].sort((x, y) => y[1] - x[1]).map(([k], i) => [k, i % COLORES_TAREA]));
+}
+function colorTarea(a) {
+  if (a.destino === "inari") return "var(--t-inari)";
+  return `var(--t${st.colores?.get(claveTarea(a)) ?? 0})`;
+}
+
+// La barra del dia: un trozo por apunte, de su color y de su tamaño sobre la
+// jornada (lo que falta queda vacio). Si te pasas, una marca donde acaba la
+// jornada. Sin apuntes (festivo, vacaciones, permiso), la barra del estado.
+function barraTareas(d) {
+  const tope = Math.max(d.obj || 0, d.reg || 0);
+  if (!d.apuntes.length || !tope) {
+    return el("div", { class: "barra" }, el("i", { class: "llena", style: `--w:${Math.round(d.frac * 100)}%` }));
+  }
+  const barra = el("div", { class: "barra barra-tareas",
+                            title: d.apuntes.map((a) => `${a.horas_txt}  ${a.tarea}`).join("\n") });
+  for (const a of d.apuntes) {
+    barra.append(el("i", { class: "seg", style: `--c:${colorTarea(a)};--w:${(a.horas / tope) * 100}%` }));
+  }
+  if (d.obj && d.reg > d.obj + 0.001) {
+    barra.append(el("b", { class: "meta", style: `left:${(d.obj / tope) * 100}%`, title: "Aquí acaba tu jornada" }));
+  }
+  return barra;
 }
 
 // Lo que se hizo ese dia, dentro de la tarjeta de la semana: con 1-2 apuntes
@@ -640,6 +679,7 @@ function apuntesTarjeta(d) {
   const out = d.apuntes.slice(0, max).map((a) => {
     const n = el("div", { class: "ap-tarjeta" },
       el("div", { class: "linea-ap" },
+        el("i", { class: "punto", style: `--c:${colorTarea(a)}`, "aria-hidden": "true" }),
         horasEditables(d, a),
         el("span", { class: "linea-t", text: a.tarea })),
       a.actividad ? el("div", { class: "linea-act", text: a.actividad }) : null,
@@ -929,20 +969,24 @@ function pintarMes(m) {
   const cont = $("dias");
   cont.className = "dias mes";
   cont.replaceChildren();
+  repartirColores(m.semanas.flat());
   for (const d of m.semanas.flat()) {
     const iconos = [d.guardia || d.guardia_pt ? "⚙" : "", d.teletrabajo || d.teletrabajo_pt ? "⌂" : "",
                     d.permiso || d.permiso_pt ? "🕐" : ""].join(" ").trim();
-    const barra = el("div", { class: "barra" }, el("i"));
     const lineas = d.apuntes.slice(0, MAX_APUNTES_CELDA).map((a) => {
       const n = el("div", { class: "linea-ap" },
+        el("i", { class: "punto", style: `--c:${colorTarea(a)}`, "aria-hidden": "true" }),
         horasEditables(d, a),
         el("span", { class: "linea-t", text: a.tarea }));
       arrastrableApunte(n, d, a);
       return n;
     });
     const resto = d.apuntes.length - MAX_APUNTES_CELDA;
+    // calendario de calor: el color del dia dice como va (y un dia a medias,
+    // mas intenso cuanto mas le falta)
     const celda = el("div", {
       class: `celda ${d.estado}${d.es_hoy ? " hoy" : ""}${d.del_mes ? "" : " fuera"}${d.futuro ? " futuro" : ""}`,
+      style: `--frac:${d.frac}`,
       title: [`${d.nombre} ${d.fecha}`, d.texto,
               ...d.apuntes.map((a) => `${a.horas_txt}  ${a.tarea}${a.actividad ? ` · ${a.actividad}` : ""}`),
               d.guardia_pt ? "Guardia (en ProyectosTIC)" : d.guardia ? "Guardia (local)" : "",
@@ -955,13 +999,11 @@ function pintarMes(m) {
         el("span", { class: "dia-celda", text: `${d.nombre.slice(0, 3)} ${d.dia}${d.es_hoy ? " · hoy" : ""}` }),
         iconos ? el("span", { class: "iconos", text: iconos }) : null,
         el("span", { class: "cifra", text: cifraMes(d) })),
-      barra,
       ...lineas,
       resto > 0 ? botonMas(`+${resto} más`, () => dlgEditarDia(d)) : null,
       botonMasDia(d));
     eventosDia(celda, d);
     cont.append(celda);
-    requestAnimationFrame(() => { barra.firstChild.style.width = `${d.frac * 100}%`; });
   }
 }
 
