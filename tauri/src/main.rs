@@ -16,6 +16,7 @@ mod asistente;
 mod ayuda;
 mod config;
 mod copias;
+mod estadisticas;
 mod herramientas;
 mod modo;
 mod inari;

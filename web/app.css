@@ -689,3 +689,35 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .dias.mes .celda.marcado { background: var(--seleccion); }
 .dias.mes .celda .linea-ap { color: var(--texto); }
 .dias.mes .celda .linea-h { min-width: 30px; }
+
+/* ---- estadisticas ---- */
+.estad-nav { gap: 8px; margin-bottom: 4px; }
+.estad-titulo { font-size: 16px; min-width: 220px; text-align: center; }
+.pills-periodo { display: flex; gap: 4px; }
+.pills-periodo button.activo { background: var(--seleccion); border-color: var(--primario); color: var(--primario); font-weight: 600; }
+.estad-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 6px; }
+.kpi { background: var(--panel-alt); border-radius: 10px; padding: 10px 12px; }
+.kpi small { display: block; font-size: 12px; color: var(--tenue); }
+.kpi b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kpi b.azul { color: var(--primario); }
+.estad-sec { font-size: 14px; margin: 16px 0 6px; color: var(--texto-fuerte); }
+.estad-fila { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr) 110px; gap: 10px; align-items: center;
+              font-size: 13px; margin: 5px 0; }
+.estad-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.estad-cifra { text-align: right; font-variant-numeric: tabular-nums; color: var(--tenue); }
+.estad-barra { height: 10px; border-radius: 4px; background: var(--barra-fondo); overflow: hidden; }
+.estad-barra > i { display: block; height: 100%; width: var(--w); background: var(--c); border-radius: 4px; }
+.estad-mezcla { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--barra-fondo); }
+.estad-mezcla > i { flex: 0 0 var(--w); background: var(--c); }
+.estad-mezcla > i + i { box-shadow: inset 2px 0 0 var(--panel); }
+.estad-leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--tenue); margin-top: 6px; }
+.estad-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.estad-anio { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; }
+.estad-anio > div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--tenue); }
+/* columna de altura fija y la barra crece desde abajo (la altura en % necesita un alto definido) */
+.mes-col { height: 110px; width: 70%; display: flex; align-items: flex-end; }
+.mes-barra { width: 100%; height: var(--h); min-height: 3px; border-radius: 3px 3px 0 0; background: var(--barra-fondo); }
+.mes-barra.completo { background: var(--exito); }
+.mes-barra.parcial { background: var(--aviso); }
+.mes-barra.nolab { background: var(--tenue); }
+.estad-detalles { list-style: none; padding: 0; margin: 0; font-size: 13px; display: grid; gap: 4px; }

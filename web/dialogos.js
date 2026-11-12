@@ -390,6 +390,96 @@ async function confirmarLocal(d, motivo) {
   });
 }
 
+// ================================================================ estadisticas
+
+// Semana, mes o año: horas, jornada cumplida, media, horas de mas, tareas y
+// actividades mas hechas (con los colores de las fichas: por horas), el año
+// mes a mes con los colores del calendario de calor y unos detalles.
+const PERIODOS_ESTAD = [["semana", "Semana"], ["mes", "Mes"], ["anio", "Año"]];
+const COLORES_ACTIVIDAD = ["--t5", "--t6", "--t7", "--t2", "--t3", "--t4", "--t0", "--t1"];
+
+function dlgEstadisticas(periodo = "mes") {
+  let ref = hoyIso(), seq = 0;
+  const titulo = el("strong", { class: "estad-titulo" });
+  const cuerpo = el("div", { class: "estad" });
+  const botones = PERIODOS_ESTAD.map(([p, t]) => el("button", { text: t, onclick: () => { periodo = p; cargar(); } }));
+  const d = dialogo({ titulo: "Estadísticas", ancho: 800, botones: [cerrarBoton] });
+  d.cuerpo.append(
+    el("div", { class: "fila estad-nav" },
+      el("button", { text: "←", title: "Periodo anterior", "aria-label": "Periodo anterior", onclick: () => mover(-1) }),
+      titulo,
+      el("button", { text: "→", title: "Periodo siguiente", "aria-label": "Periodo siguiente", onclick: () => mover(1) }),
+      el("span", { class: "crece" }),
+      el("div", { class: "pills-periodo" }, ...botones)),
+    cuerpo);
+
+  function mover(n) {
+    const [a, m] = ref.split("-").map(Number);
+    if (periodo === "semana") ref = sumarDias(ref, 7 * n);
+    else if (periodo === "anio") ref = `${a + n}-${String(m).padStart(2, "0")}-01`;
+    else ref = new Date(Date.UTC(a, m - 1 + n, 1)).toISOString().slice(0, 10);
+    cargar();
+  }
+
+  async function cargar() {
+    botones.forEach((b, i) => b.classList.toggle("activo", PERIODOS_ESTAD[i][0] === periodo));
+    const mio = ++seq;
+    cuerpo.replaceChildren(nota("Calculando…"));
+    let r;
+    try { r = await llamar("estadisticas", periodo, ref); } catch (_e) { return; }
+    if (mio !== seq) return;
+    if (r.error) { cuerpo.replaceChildren(nota(r.error, "rojo")); return; }
+    titulo.textContent = r.titulo;
+    pintar(r);
+  }
+
+  function pintar(r) {
+    const kpi = (etiqueta, valor, clase = "") => el("div", { class: "kpi" },
+      el("small", { text: etiqueta }), el("b", { class: clase, text: valor }));
+    const nodos = [el("div", { class: "estad-kpis" },
+      kpi("Horas imputadas", r.total),
+      kpi("Jornada cumplida", r.cumplida === null ? "—" : `${r.cumplida}%`,
+          r.cumplida === null ? "" : r.cumplida >= 100 ? "verde" : "ambar"),
+      kpi("Media por día", r.media),
+      kpi("Horas de más", r.exceso === "0h" ? "0h" : `+${r.exceso}`, r.exceso === "0h" ? "" : "azul"))];
+    if (!r.tareas.length) {
+      nodos.push(nota("No hay apuntes en este periodo."));
+    } else {
+      nodos.push(el("h3", { class: "estad-sec", text: "Tareas más realizadas" }),
+        ...r.tareas.map((t, i) => el("div", { class: "estad-fila", title: t.nombre },
+          el("span", { class: "estad-nombre", text: t.nombre }),
+          el("div", { class: "estad-barra" },
+            el("i", { style: `--w:${t.pct}%;--c:${t.wp_id ? `var(--t${i % COLORES_TAREA})` : "var(--tenue)"}` })),
+          el("span", { class: "estad-cifra", text: `${t.horas_txt} · ${t.pct}%` }))),
+        el("h3", { class: "estad-sec", text: "Por actividad" }),
+        el("div", { class: "estad-mezcla" }, ...r.actividades.map((a, i) => el("i", {
+          title: `${a.nombre}: ${a.horas_txt}`,
+          style: `--w:${a.pct}%;--c:var(${COLORES_ACTIVIDAD[i % COLORES_ACTIVIDAD.length]})` }))),
+        el("div", { class: "estad-leyenda" }, ...r.actividades.map((a, i) => el("span", {},
+          el("i", { class: "punto", style: `--c:var(${COLORES_ACTIVIDAD[i % COLORES_ACTIVIDAD.length]})` }),
+          `${a.nombre} ${a.pct}%`))));
+    }
+    if (r.meses.length) {
+      const tope = Math.max(1, ...r.meses.map((m) => Math.max(m.reg, m.obj)));
+      nodos.push(el("h3", { class: "estad-sec", text: "El año, mes a mes" }),
+        el("div", { class: "estad-anio" }, ...r.meses.map((m) => el("div", { title: `${m.mes}: ${m.texto}` },
+          el("div", { class: "mes-col" },
+            el("span", { class: `mes-barra ${m.estado}`, style: `--h:${Math.round((m.reg / tope) * 100)}%` })),
+          m.mes))));
+    }
+    const dt = r.detalles;
+    nodos.push(el("h3", { class: "estad-sec", text: "Detalles" }), el("ul", { class: "estad-detalles" },
+      dt.racha ? el("li", { text: `🔥 Racha: ${dt.racha} ${dt.racha === 1 ? "día laborable completo" : "días laborables seguidos completos"}` }) : null,
+      el("li", { text: `⌂ Teletrabajo: ${dt.teletrabajo} ${dt.teletrabajo === 1 ? "día" : "días"} · ⚙ Guardias: ${dt.guardias} ${dt.guardias === 1 ? "día" : "días"}` }),
+      el("li", { text: dt.incompletos
+        ? `⚠ ${dt.incompletos} ${dt.incompletos === 1 ? "día incompleto" : "días incompletos"} (faltan ${dt.faltan} en total)`
+        : "✔ Ningún día incompleto" }),
+      dt.permisos !== "0h" ? el("li", { text: `🕐 Permisos usados: ${dt.permisos}` }) : null));
+    cuerpo.replaceChildren(...nodos);
+  }
+  cargar();
+}
+
 // ================================================================ diagnostico
 
 // Ayuda > Copiar diagnostico: para pegar en un correo cuando algo no va. Sin

@@ -76,6 +76,8 @@ def main():
         rust = json.load(f)
     with open(ruta + ".franja.json", encoding="utf-8") as f:
         franja_rust = json.load(f)
+    with open(ruta + ".estadisticas.json", encoding="utf-8") as f:
+        estad_rust = json.load(f)
     # franja de Python con los mismos apuntes, sin red y sin horas de permiso imputadas
     api = web.Api()
     with mock.patch.object(core, "entradas_rango", return_value=apuntes), \
@@ -103,7 +105,16 @@ def main():
             if not _iguales(franja_py.get(k), franja_rust.get(k)):
                 difs += 1
                 print(f"franja {k}:\n  python={franja_py.get(k)!r}\n  rust  ={franja_rust.get(k)!r}")
-    print(f"{len(python)} días y la franja comparados, {difs} diferencias.")
+    # estadisticas de la semana y el mes de hoy, con los mismos apuntes
+    rango = lambda d, h: [a for a in apuntes if d <= a["fecha"] <= h]
+    with mock.patch.object(core, "entradas_rango", side_effect=rango):
+        estad_py = [json.loads(json.dumps(api.estadisticas(p, hoy.isoformat(), hoy=hoy))) for p in ("semana", "mes")]
+    for p, r in zip(estad_py, estad_rust):
+        for k in sorted(set(p) | set(r)):
+            if not _iguales(p.get(k), r.get(k)):
+                difs += 1
+                print(f"estadísticas {p['periodo']} {k}:\n  python={p.get(k)!r}\n  rust  ={r.get(k)!r}")
+    print(f"{len(python)} días, la franja y las estadísticas comparados, {difs} diferencias.")
     return 1 if difs else 0
 
 

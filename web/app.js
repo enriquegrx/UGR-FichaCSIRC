@@ -245,6 +245,7 @@ const MENUS = {
   archivo: () => [
     { texto: "Exportar a CSV…", accion: dlgExportar },
     { texto: "Resumen del mes", accion: dlgResumen },
+    { texto: "Estadísticas…", accion: () => dlgEstadisticas() },
   ],
   ver: () => [
     ...PANELES.map(([id, nombre]) => ({
@@ -1495,6 +1496,7 @@ $("b-sig").onclick = () => navegar(1);
 $("b-hoy").onclick = () => navegar(0);
 $("b-recargar").onclick = () => cargarSemana();
 $("b-resumen").onclick = () => dlgResumen();
+$("b-estad").onclick = () => dlgEstadisticas();
 $("b-exportar").onclick = () => dlgExportar();
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [

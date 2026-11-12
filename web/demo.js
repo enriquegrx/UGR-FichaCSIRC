@@ -231,6 +231,19 @@
       : motivo === "guardia" ? { id: 13002, nombre: "[ATE] Guardias", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "" }
       : { id: 13001, nombre: "[ATE] Permisos", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "Asuntos propios" }),
     tareas_local: () => espera(tareasLocalDemo()),
+    estadisticas: (periodo) => espera({
+      periodo, titulo: periodo === "anio" ? "2026" : periodo === "semana" ? "Semana del 09/11 al 13/11/2026" : "Noviembre 2026",
+      total: "58,5h", cumplida: 92, media: "6,5h", exceso: "2,5h",
+      tareas: [{ wp_id: "11765", nombre: "[2026_ASG] Mantenimientos", horas: 36, horas_txt: "36h", pct: 62 },
+               { wp_id: "12065", nombre: "[ASG] Proxmox + dockers en SisGes", horas: 12, horas_txt: "12h", pct: 21 },
+               { wp_id: "13001", nombre: "[ATE] Permisos", horas: 6, horas_txt: "6h", pct: 10 },
+               { wp_id: "12154", nombre: "Formación UGR", horas: 4.5, horas_txt: "4,5h", pct: 7 }],
+      actividades: [{ nombre: "Actuaciones técnicas", horas_txt: "32h", pct: 55 }, { nombre: "Formación", horas_txt: "14,5h", pct: 25 },
+                    { nombre: "Gestión", horas_txt: "6h", pct: 10 }, { nombre: "Asuntos propios", horas_txt: "6h", pct: 10 }],
+      meses: periodo !== "anio" ? [] : ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"].map((mes, i) => ({
+        mes, reg: [140, 145, 130, 147, 150, 120, 90, 40, 138, 142, 58, 0][i], obj: [147, 147, 147, 147, 154, 140, 100, 0, 147, 154, 147, 0][i],
+        estado: i === 11 ? "futuro" : i === 7 ? "nolab" : [2, 8, 9, 10].includes(i) ? "parcial" : "completo", texto: "" })),
+      detalles: { racha: 9, teletrabajo: 4, guardias: 2, incompletos: 3, faltan: "6h", permisos: "6h" } }),
     diagnostico: () => espera({ texto: "FichaCSIRC demo · Windows 11\n\nConfiguración: demo\n  API key: sí, 40 caracteres\n\nProyectosTIC: responde 200 en 0.2 s (API key aceptada)" }),
     mes_pendiente: () => espera(avisoMesVisto ? null : { anio: 2026, mes: 11, texto: "Noviembre cierra y te faltan 5h en 1 día:",
                                                       dias: [{ iso: d(2), texto: `miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)} (1h de 7h)` }] }),

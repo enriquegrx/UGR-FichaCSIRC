@@ -1802,6 +1802,111 @@ class Api:
         core.eliminar_plantilla(nombre)
         return self.plantillas()
 
+    # ---- estadisticas: semana, mes o año (una consulta por rango) ----
+    MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
+    MAX_TAREAS_ESTAD = 8
+
+    def estadisticas(self, periodo="mes", ref=None, hoy=None):
+        """El panel de estadisticas: horas, jornada cumplida, media, horas de
+        mas, tareas y actividades mas hechas, el año mes a mes y detalles
+        (racha, teletrabajo, guardias, incompletos, permisos). Lo que cuenta
+        para "cumplida" llega hasta hoy; las tareas, todo el periodo."""
+        hoy = hoy or dt.date.today()
+        try:
+            r = dt.date.fromisoformat(ref) if ref else hoy
+        except (TypeError, ValueError):
+            r = hoy
+        if periodo == "semana":
+            desde = r - dt.timedelta(days=r.weekday())
+            hasta = desde + dt.timedelta(days=4)
+            titulo = f"Semana del {desde.strftime('%d/%m')} al {hasta.strftime('%d/%m/%Y')}"
+        elif periodo == "anio":
+            desde, hasta = dt.date(r.year, 1, 1), dt.date(r.year, 12, 31)
+            titulo = str(r.year)
+        else:
+            periodo = "mes"
+            desde = dt.date(r.year, r.month, 1)
+            hasta = dt.date(r.year, r.month, calendar.monthrange(r.year, r.month)[1])
+            titulo = f"{self.MESES[r.month - 1].capitalize()} {r.year}"
+        try:
+            apuntes = core.entradas_rango(desde.isoformat(), hasta.isoformat())
+        except Exception as e:
+            return {"error": diagnostico_conexion(e)["titulo"]}
+        por_dia = {}
+        for a in apuntes:
+            por_dia.setdefault(a["fecha"], []).append(a)
+        acts = actividades_de_permiso()
+        con_inari = destinos.configurado()
+        obj_total = reg_hoy = exceso = faltan = permisos = 0.0
+        dias_lab = incompletos = racha = tele = guardias = 0
+        obj_mes, reg_mes = collections.Counter(), collections.Counter()
+        d = desde
+        while d <= hasta:
+            iso = d.isoformat()
+            ap = por_dia.get(iso, [])
+            reg = sum(a["horas"] for a in ap)
+            reg_mes[d.month] += reg
+            if d.weekday() < 5 and d <= hoy:
+                tele += core.es_teletrabajo(iso)
+                guardias += core.es_guardia(iso)
+                if not core.es_no_laborable(iso):
+                    permisos += core.horas_permiso(iso)
+                # teletrabajo con INARI: sus horas no estan en ProyectosTIC
+                if not (con_inari and core.es_teletrabajo(iso)):
+                    obj = objetivo_dia(d, ap, acts)
+                    obj_mes[d.month] += obj
+                    obj_total += obj
+                    reg_hoy += reg
+                    exceso += max(0.0, reg - obj)
+                    if obj:
+                        dias_lab += 1
+                        if reg < obj - 0.001:
+                            incompletos += 1
+                            faltan += obj - reg
+                            racha = 0
+                        else:
+                            racha += 1
+            d += dt.timedelta(days=1)
+        total = sum(a["horas"] for a in apuntes)
+        horas_t, nombres = collections.Counter(), {}
+        for a in apuntes:
+            k = str(a.get("wp_id") or a["wp_titulo"])
+            horas_t[k] += a["horas"]
+            nombres[k] = a["wp_titulo"]
+        horas_a = collections.Counter()
+        for a in apuntes:
+            horas_a[a.get("actividad") or "Sin actividad"] += a["horas"]
+        pct = lambda h: round(100 * h / total) if total else 0
+        tareas = [{"wp_id": k, "nombre": nombres[k], "horas": round(h, 2), "horas_txt": _horas(h), "pct": pct(h)}
+                  for k, h in horas_t.most_common(self.MAX_TAREAS_ESTAD)]
+        otras = total - sum(t["horas"] for t in tareas)
+        if len(horas_t) > self.MAX_TAREAS_ESTAD and otras > 0.001:
+            tareas.append({"wp_id": "", "nombre": f"Otras {len(horas_t) - self.MAX_TAREAS_ESTAD}",
+                           "horas": round(otras, 2), "horas_txt": _horas(otras), "pct": pct(otras)})
+        actividades = [{"nombre": k, "horas_txt": _horas(h), "pct": pct(h)} for k, h in horas_a.most_common()]
+        meses = []
+        if periodo == "anio":
+            for m in range(1, 13):
+                if dt.date(r.year, m, 1) > hoy:
+                    estado = "futuro"
+                elif not obj_mes[m]:
+                    estado = "nolab"
+                else:
+                    estado = "completo" if reg_mes[m] >= obj_mes[m] - 0.001 else "parcial"
+                meses.append({"mes": self.MESES_CORTOS[m - 1], "reg": round(reg_mes[m], 2),
+                              "obj": round(obj_mes[m], 2), "estado": estado,
+                              "texto": f"{_horas(reg_mes[m])} de {_horas(obj_mes[m])}"})
+        permisos += sum(a["horas"] for a in apuntes
+                        if str(a.get("actividad") or "").strip().lower() in acts)
+        return {
+            "periodo": periodo, "titulo": titulo, "desde": desde.isoformat(), "hasta": hasta.isoformat(),
+            "total": _horas(total), "cumplida": round(100 * reg_hoy / obj_total) if obj_total else None,
+            "media": _horas(reg_hoy / dias_lab) if dias_lab else "—",
+            "exceso": _horas(exceso), "tareas": tareas, "actividades": actividades, "meses": meses,
+            "detalles": {"racha": racha, "teletrabajo": tele, "guardias": guardias,
+                         "incompletos": incompletos, "faltan": _horas(faltan), "permisos": _horas(permisos)},
+        }
+
     # ---- resumen del mes (una consulta por rango, no una por dia) ----
     def resumen_mes(self, anio, mes):
         anio, mes = int(anio), int(mes)

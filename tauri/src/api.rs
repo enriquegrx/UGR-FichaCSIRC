@@ -292,6 +292,10 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             herr::desasociar(&arg(&args, 0))
         }
+        "estadisticas" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(crate::estadisticas::estadisticas(e, &cfg, &arg(&args, 0), &arg(&args, 1), hoy()).await)
+        }
         "resumen_mes" => {
             e.exigir_desbloqueo(&cfg)?;
             let anio = args.first().and_then(Value::as_i64).unwrap_or(0) as i32;
