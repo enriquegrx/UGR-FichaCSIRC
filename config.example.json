@@ -74,6 +74,7 @@
   "pin_auto_min": 15,
   "bandeja": false,
   "avisos_local_no": [],
+  "tareas_local": {},
   "inari_activo": false,
   "inari_url": "https://inari.ugr.es/kanboard/jsonrpc.php",
   "inari_usuario": "",

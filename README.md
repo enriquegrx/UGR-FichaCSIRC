@@ -40,7 +40,19 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - 🌙 **Tema oscuro** (sistema / claro / oscuro) y tamaño de letra con Ctrl +/−
   (`tema`, `zoom`). 🪟 Cajas minimizables y menú Ver (`paneles`).
 - 📣 Aviso al abrir si la semana anterior quedó con huecos (`aviso_semana_vista`);
-  **fichar desde el aviso diario** sin abrir la app (`Api.aviso_fichar`).
+  **fichar desde el aviso diario** sin abrir la app (`Api.aviso_fichar`). Y de
+  **cierre de mes**: los últimos días del mes, los días pendientes del mes
+  (`Api.mes_pendiente`, `aviso_mes_visto`).
+- 🔴 **«Sin conexión» explicado**: si no se puede leer ProyectosTIC, una franja
+  dice por qué (fuera de la UGR sin VPN, API key caducada, servidor caído, sin
+  Internet o config sin conexión) y qué hacer (`diagnostico_conexion`). *Ayuda →
+  Copiar diagnóstico* genera un texto para soporte sin API key ni PIN.
+- 🖥 Marcas **«(local)»** (festivo, vacaciones, baja, permiso por horas, guardia,
+  teletrabajo): avisan antes de marcar y ofrecen imputar en la tarea de
+  ProyectosTIC de ese motivo, elegida en *Herramientas → Permisos*
+  (`tareas_local`: `{motivo: {id, nombre} | {ninguna: true}}`) o deducida por el
+  nombre. Las etiquetas del día salen rellenas si está imputado y con borde si
+  solo es local.
 - 🧰 **Bandeja del sistema** e inicio con Windows (`bandeja.py`, pystray; solo
   Windows: en Mac pystray exige el hilo principal, que es de pywebview).
 - 📅 Días propios de la UGR **propuestos** por año (`propuesta_dias_ugr`) y
@@ -203,6 +215,13 @@ personal. Existe [config.example.json](config.example.json) como plantilla.
 
 La aplicación escribe un log de diagnóstico en `fichacsirc.log`, junto a la
 configuración.
+
+**Protección de `config.json`** (desde la 3.2.2, tras perderse una entera en la
+3.2.0): nunca se escribe encima de un fichero que no se ha podido leer
+(`configurar.leer_para_cambiar`), ninguna escritura quita `base_url`/`api_key`,
+y al arrancar, si falta la conexión o el fichero está roto, se recupera sola de
+la última copia de `copias/` que la tenga (y se avisa). La copia buena más
+reciente nunca se purga.
 
 ## 🧱 Estructura del repositorio
 
