@@ -4,6 +4,7 @@
 
 use crate::apuntes;
 use crate::herramientas as herr;
+use crate::permisos as perm;
 use crate::resumen;
 use crate::config::{self, Cfg};
 use crate::openproject::{self, Cliente, ErrorOp};
@@ -247,6 +248,61 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             let anio = args.first().and_then(Value::as_i64).unwrap_or(0) as i32;
             let mes = args.get(1).and_then(Value::as_u64).unwrap_or(0) as u32;
             herr::resumen_mes(e, &cfg, anio, mes, hoy()).await
+        }
+        // ---- permisos, festivos, vacaciones y teletrabajo (fase 4b) ----
+        "permisos" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(perm::permisos(e, &cfg).await)
+        }
+        "actualizar_usadas_pt" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(perm::actualizar_usadas_pt(e, &cfg).await)
+        }
+        "fijar_actividad_permiso" => {
+            e.exigir_desbloqueo(&cfg)?;
+            perm::fijar_actividad_permiso(e, &arg(&args, 0), &arg(&args, 1)).await
+        }
+        "anadir_concesion" => {
+            e.exigir_desbloqueo(&cfg)?;
+            perm::anadir_concesion(e, &arg(&args, 0), args.get(1).unwrap_or(&Value::Null), &arg(&args, 2)).await
+        }
+        "quitar_concesion" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let i = arg(&args, 1).parse::<usize>().map_err(|_| "Concesión no válida.".to_string())?;
+            perm::quitar_concesion(e, &arg(&args, 0), i).await
+        }
+        "info_permiso_dia" => {
+            e.exigir_desbloqueo(&cfg)?;
+            perm::info_permiso_dia(e, &cfg, &arg(&args, 0))
+        }
+        "anadir_permiso" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let confirmado = args.get(3).and_then(Value::as_bool).unwrap_or(false);
+            perm::anadir_permiso(e, &cfg, &arg(&args, 0), &arg(&args, 1), args.get(2).unwrap_or(&Value::Null), confirmado)
+        }
+        "propuesta_permisos_anio" => Ok(perm::propuesta_permisos_anio(e, &cfg)),
+        "anadir_permisos_anio" => {
+            e.exigir_desbloqueo(&cfg)?;
+            perm::anadir_permisos_anio(&arg_lista(&args, 0))
+        }
+        "permisos_anio_no" => perm::marcar_anio_revisado(),
+        "festivos" | "importar_festivos" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let b = |i: usize| args.get(i).and_then(Value::as_bool).unwrap_or(false);
+            if metodo == "festivos" {
+                Ok(perm::festivos(&cfg, b(0), b(1), b(2), b(3)))
+            } else {
+                perm::importar_festivos(&cfg, b(0), b(1), b(2), b(3), &arg_lista(&args, 4))
+            }
+        }
+        "anadir_dia_ugr" => {
+            e.exigir_desbloqueo(&cfg)?;
+            perm::anadir_dia_ugr(&arg(&args, 0), &arg(&args, 1))
+        }
+        "ajustes_dias" => Ok(perm::ajustes_dias(&cfg)),
+        "guardar_ajustes_dias" => {
+            e.exigir_desbloqueo(&cfg)?;
+            perm::guardar_ajustes_dias(args.first().unwrap_or(&Value::Null), args.get(1).unwrap_or(&Value::Null))
         }
         // ---- buscar tareas ----
         "buscar_tareas" => {
@@ -525,7 +581,7 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "inari_listo": false,
         "inari": false,
         "asociaciones": asociaciones,
-        "toca_permisos_anio": false,
+        "toca_permisos_anio": perm::toca_permisos_anio(cfg),
         "novedades_tras_actualizar": null,
         "recuperada": "",
         "sugerir_pin": false,

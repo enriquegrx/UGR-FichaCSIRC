@@ -86,15 +86,42 @@ pub struct TipoPermiso {
     pub id: String,
     pub nombre: String,
     pub actividad: String,
-    /// horas de cada concesion (bolsa) de este tipo
-    pub concesiones: Vec<f64>,
+    /// las bolsas de horas concedidas de este tipo
+    pub concesiones: Vec<Concesion>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Concesion {
+    pub horas: f64,
+    /// "AAAA-MM-DD" o "" si no caduca
+    pub fecha_limite: String,
+}
+
+impl Concesion {
+    pub fn limite(&self) -> Option<NaiveDate> {
+        NaiveDate::parse_from_str(&self.fecha_limite, "%Y-%m-%d").ok()
+    }
+}
+
+impl TipoPermiso {
+    pub fn cupo(&self) -> f64 {
+        redondear(self.concesiones.iter().map(|c| c.horas).sum(), 2)
+    }
+}
+
+fn concesion(horas: f64) -> Concesion {
+    Concesion { horas, fecha_limite: String::new() }
 }
 
 /// Concesiones de un tipo de la config (tolera el modelo viejo de un "cupo").
-fn concesiones_de(t: &Value) -> Vec<f64> {
+pub fn concesiones_de(t: &Value) -> Vec<Concesion> {
+    let lim = |v: &Value| v.as_str().unwrap_or("").trim().to_string();
     match t.get("concesiones") {
-        Some(Value::Array(cs)) => cs.iter().filter_map(|c| horas_de_valor(&c["horas"])).filter(|h| *h > 0.0).collect(),
-        Some(Value::Null) | None => t.get("cupo").and_then(horas_de_valor).filter(|h| *h > 0.0).into_iter().collect(),
+        Some(Value::Array(cs)) => cs.iter()
+            .filter_map(|c| horas_de_valor(&c["horas"]).filter(|h| *h > 0.0).map(|h| Concesion { horas: h, fecha_limite: lim(&c["fecha_limite"]) }))
+            .collect(),
+        Some(Value::Null) | None => t.get("cupo").and_then(horas_de_valor).filter(|h| *h > 0.0)
+            .map(|h| Concesion { horas: h, fecha_limite: lim(&t["fecha_limite"]) }).into_iter().collect(),
         _ => vec![],
     }
 }
@@ -150,9 +177,9 @@ impl Reglas {
         let tipos_cfg = cfg.lista("permisos_tipos");
         let tipos = if tipos_cfg.is_empty() {
             vec![
-                TipoPermiso { id: "asuntos_particulares".into(), nombre: "Asuntos particulares por horas".into(), actividad: String::new(), concesiones: vec![70.0] },
-                TipoPermiso { id: "servicios_minimos".into(), nombre: "Compensación por servicios mínimos".into(), actividad: String::new(), concesiones: vec![56.0] },
-                TipoPermiso { id: "conciliacion".into(), nombre: "Conciliación vida laboral y familiar".into(), actividad: String::new(), concesiones: vec![30.0] },
+                TipoPermiso { id: "asuntos_particulares".into(), nombre: "Asuntos particulares por horas".into(), actividad: String::new(), concesiones: vec![concesion(70.0)] },
+                TipoPermiso { id: "servicios_minimos".into(), nombre: "Compensación por servicios mínimos".into(), actividad: String::new(), concesiones: vec![concesion(56.0)] },
+                TipoPermiso { id: "conciliacion".into(), nombre: "Conciliación vida laboral y familiar".into(), actividad: String::new(), concesiones: vec![concesion(30.0)] },
             ]
         } else {
             tipos_cfg
@@ -206,6 +233,11 @@ impl Reglas {
             permisos_desde: NaiveDate::parse_from_str(&cfg.texto("permisos_desde"), "%Y-%m-%d").ok(),
             cupo_vacaciones: cfg.get("cupo_vacaciones").and_then(Value::as_f64).unwrap_or(22.0),
         }
+    }
+
+    /// Lo que vale un dia completo de permiso: la jornada OFICIAL.
+    pub fn horas_dia_permiso(&self) -> f64 {
+        self.horas_dia_permiso
     }
 
     pub fn es_verano(&self, d: NaiveDate) -> bool {

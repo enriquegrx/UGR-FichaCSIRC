@@ -215,7 +215,7 @@ fn nombre_corto(id: &str, nombre: &str) -> String {
 
 /// Horas de cada permiso imputadas en ProyectosTIC con su actividad (desde
 /// permisos_desde hasta fin del año siguiente). Una consulta; se recuerda.
-async fn usadas_pt(e: &Estado, cfg: &Cfg, reglas: &Reglas) -> HashMap<String, f64> {
+pub(crate) async fn usadas_pt(e: &Estado, cfg: &Cfg, reglas: &Reglas) -> HashMap<String, f64> {
     let mapa: Vec<(String, String)> = reglas.tipos.iter().filter(|t| !t.actividad.is_empty())
         .map(|t| (t.id.clone(), t.actividad.to_lowercase())).collect();
     if mapa.is_empty() {
@@ -277,7 +277,7 @@ pub fn franja(reglas: &Reglas, aps: Option<Vec<Apunte>>, h: NaiveDate, pt: &Hash
     let desde = reglas.permisos_desde(h);
     let permisos: Vec<Value> = reglas.tipos.iter().filter(|t| !t.concesiones.is_empty()).map(|t| {
         let usadas = reglas.permiso_usadas_local(&t.id, desde) + pt.get(&t.id).copied().unwrap_or(0.0);
-        let disp = redondear(t.concesiones.iter().sum::<f64>() - redondear(usadas, 2), 2);
+        let disp = redondear(t.cupo() - redondear(usadas, 2), 2);
         json!({"nombre": nombre_corto(&t.id, &t.nombre), "disponible": fmt_hhmm(disp), "negativo": disp < 0.0})
     }).collect();
     out["permisos"] = json!(permisos);

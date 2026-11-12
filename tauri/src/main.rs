@@ -15,6 +15,7 @@ mod apuntes;
 mod config;
 mod herramientas;
 mod openproject;
+mod permisos;
 mod pin;
 mod reglas;
 mod resumen;
