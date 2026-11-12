@@ -86,6 +86,10 @@ fn main() {
                 ("index.html", "FichaCSIRC (Rust, en pruebas)", 1280.0, 860.0)
             };
             tauri::WebviewWindowBuilder::new(app, "principal", tauri::WebviewUrl::App(pagina.into()))
+                // Tauri captura por defecto el arrastrar y soltar (para recibir
+                // archivos del Explorador) y eso anula el del HTML: sin esto no
+                // se pueden arrastrar tareas de una ficha a otra
+                .disable_drag_drop_handler()
                 .title(titulo)
                 .inner_size(ancho, alto)
                 .min_inner_size(820.0, 600.0)
