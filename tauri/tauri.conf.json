@@ -8,24 +8,19 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "label": "principal",
-        "title": "FichaCSIRC (Rust, en pruebas)",
-        "url": "index.html",
-        "width": 1280,
-        "height": 860,
-        "minWidth": 900,
-        "minHeight": 600
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/icon.ico", "icons/icon.png"]
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
   }
 }

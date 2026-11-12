@@ -39,7 +39,9 @@ pub fn ruta_config() -> PathBuf {
         return PathBuf::from(r);
     }
     let destino = carpeta_base().join("FichaCSIRC-rust").join("config.json");
-    if !destino.exists() {
+    // solo la PRIMERA vez (sin carpeta): tras "He olvidado el PIN" no hay que
+    // volver a traer la config de la app de Python (con el PIN olvidado)
+    if !destino.exists() && !destino.parent().is_some_and(Path::exists) {
         let real = carpeta_base().join("FichaCSIRC").join("config.json");
         if real.exists() {
             if let Some(dir) = destino.parent() {
@@ -95,6 +97,16 @@ pub fn guardar_valores(valores: Map<String, Value>) -> Result<(), String> {
         }
     }
     escribir(&ruta, &cfg)
+}
+
+/// Escribe la config entera (el asistente, sobre un fichero roto).
+pub fn guardar_entera(cfg: &Map<String, Value>) -> Result<(), String> {
+    let _turno = CANDADO.lock().unwrap_or_else(|e| e.into_inner());
+    let ruta = ruta_config();
+    if let Some(dir) = ruta.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    escribir(&ruta, cfg)
 }
 
 /// Leer-cambiar-escribir en un solo turno: f recibe la config entera y la

@@ -218,6 +218,16 @@ pub fn es_exportacion(datos: &Value) -> bool {
         || ["favoritos", "jornada_invierno", "plantillas", "permisos_tipos"].iter().any(|k| m.contains_key(*k))
 }
 
+/// "He olvidado el PIN": las copias de antes ya no sirven para recuperar sola
+/// la config al arrancar (traerian el PIN olvidado). Siguen para restaurar a mano.
+pub fn marcar_de_cero(ruta_config: &Path) {
+    let dirc = carpeta(ruta_config);
+    let _ = std::fs::create_dir_all(&dirc);
+    let mut ind = indice(&dirc);
+    ind.insert("de_cero_desde".into(), json!(Local::now().format("%Y%m%d%H%M%S").to_string()));
+    let _ = escribir(&dirc.join("indice.json"), &Value::Object(ind));
+}
+
 /// La copia completa mas reciente (posterior a un "He olvidado el PIN").
 pub fn ultima_completa(ruta_config: &Path) -> Option<(String, Map<String, Value>)> {
     let dirc = carpeta(ruta_config);

@@ -190,7 +190,7 @@ pub async fn importar_config(e: &Estado, app: &AppHandle) -> Result<Value, Strin
 
 // ---------------------------------------------------------------- PIN
 
-fn pin_nuevo(p: &str) -> Value {
+pub fn pin_nuevo(p: &str) -> Value {
     let mut sal = [0u8; 16];
     getrandom::getrandom(&mut sal).expect("sin aleatoriedad del sistema");
     let mut out = [0u8; 32];

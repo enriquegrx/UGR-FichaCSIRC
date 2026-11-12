@@ -3,6 +3,7 @@
 //! registrar_web.py. Fase 1: abrir, PIN y ver la semana (solo lectura).
 
 use crate::apuntes;
+use crate::asistente;
 use crate::ayuda;
 use crate::herramientas as herr;
 use crate::permisos as perm;
@@ -40,6 +41,8 @@ pub struct Estado {
     pub(crate) ausencias: Mutex<HashMap<String, Value>>,
     /// ultimo CSV exportado (el unico que se puede abrir desde la app)
     pub(crate) ultima_exportacion: Mutex<Option<std::path::PathBuf>>,
+    /// se borro la config por olvidar el PIN (el asistente empieza de cero)
+    pub(crate) de_cero: Mutex<bool>,
     /// fecha de la copia de la que se recupero la config al arrancar (una vez)
     recuperada: Mutex<String>,
     /// copia preparada (dia/semana anterior): (tipo, [(destino, apuntes)])
@@ -69,6 +72,10 @@ impl Estado {
         candado(&self.usadas_pt).take();
         candado(&self.ausencias).clear();
         candado(&self.actividades).clear();
+    }
+
+    pub(crate) fn desbloquear(&self) {
+        *candado(&self.desbloqueada) = Some(true);
     }
 
     fn desbloqueada(&self, cfg: &Cfg) -> bool {
@@ -146,8 +153,15 @@ fn guardar(clave: &str, valor: Value) -> Result<Value, String> {
 
 #[tauri::command]
 pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Estado>, app: tauri::AppHandle) -> Result<Value, String> {
-    let cfg = config::leer()?;
     let e: &Estado = &estado;
+    // el asistente (y el PIN) funcionan tambien sin config: la primera vez,
+    // tras "He olvidado el PIN" o con el fichero roto
+    let sin_config_vale = metodo.starts_with("cfg_") || ["cerrar", "pin_estado", "tema"].contains(&metodo.as_str());
+    let (cfg, hay_config) = match config::leer() {
+        Ok(c) => (c, true),
+        Err(_) if sin_config_vale => (Cfg(Map::new()), false),
+        Err(x) => return Err(x),
+    };
     match metodo.as_str() {
         // ---- PIN ----
         "pin_estado" => Ok(pin_estado(e, &cfg)),
@@ -323,6 +337,24 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             perm::guardar_ajustes_dias(args.first().unwrap_or(&Value::Null), args.get(1).unwrap_or(&Value::Null))
         }
+        // ---- asistente y "He olvidado el PIN" (fase 5a) ----
+        "cfg_cargar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(asistente::cfg_cargar(e, &cfg, hay_config))
+        }
+        "cfg_probar" => Ok(asistente::cfg_probar(&cfg, args.first().unwrap_or(&Value::Null), args.get(1).unwrap_or(&Value::Null)).await),
+        "cfg_proyectos" => Ok(asistente::cfg_proyectos(&cfg, args.first().unwrap_or(&Value::Null), args.get(1).unwrap_or(&Value::Null)).await),
+        "cfg_tareas" => Ok(asistente::cfg_tareas(&cfg, args.first().unwrap_or(&Value::Null), args.get(1).unwrap_or(&Value::Null),
+                                                 args.get(2).unwrap_or(&Value::Null)).await),
+        "cfg_validar_jornada" => Ok(asistente::cfg_validar_jornada(args.first().unwrap_or(&Value::Null))),
+        "cfg_guardar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(asistente::cfg_guardar(e, &cfg, args.first().unwrap_or(&Value::Null)))
+        }
+        "cerrar" => {
+            app.exit(0);
+            Ok(json!({"ok": true}))
+        }
         // ---- copias, PIN, CSV y ayuda (fase 4c) ----
         "copias" => {
             e.exigir_desbloqueo(&cfg)?;
@@ -350,7 +382,7 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         }
         "pin_auto" => ayuda::pin_auto(args.first().unwrap_or(&Value::Null)),
         "pin_no_sugerir" => Ok(ayuda::pin_no_sugerir()),
-        "pin_olvidado" => Ok(json!({"error": "En la versión Rust en pruebas, «He olvidado el PIN» se hace desde FichaCSIRC normal."})),
+        "pin_olvidado" => Ok(asistente::pin_olvidado(e, &cfg)),
         "exportar_csv" => {
             e.exigir_desbloqueo(&cfg)?;
             ayuda::exportar_csv(e, &cfg, &app, &arg(&args, 0), &arg(&args, 1)).await
