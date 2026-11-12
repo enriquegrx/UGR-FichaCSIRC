@@ -1035,6 +1035,8 @@ function pintarSelectorVista() {
   $("b-ant").title = st.vista === "mes" ? "Mes anterior (Ctrl+←)" : "Semana anterior (Ctrl+←)";
   $("b-sig").title = st.vista === "mes" ? "Mes siguiente (Ctrl+→)" : "Semana siguiente (Ctrl+→)";
   $("b-hoy").title = st.vista === "mes" ? "Volver al mes actual" : "Volver a la semana actual";
+  $("b-estad").classList.toggle("activo", !!st.estad);
+  $("b-estad").setAttribute("aria-pressed", String(!!st.estad));
   if (st.estad) {
     $("b-ant").title = "Periodo anterior (Ctrl+←)";
     $("b-sig").title = "Periodo siguiente (Ctrl+→)";
@@ -1531,6 +1533,13 @@ $("b-sig").onclick = () => navegar(1);
 $("b-hoy").onclick = () => navegar(0);
 $("b-recargar").onclick = () => (st.estad ? st.estad.cargar() : cargarSemana());
 $("b-resumen").onclick = () => dlgResumen();
+// Estadisticas: entra en el panel; pulsado otra vez, vuelve a las fichas
+$("b-estad").onclick = async () => {
+  if (!st.estad) { entrarEstadisticas(); return; }
+  salirEstadisticas();
+  pintarSelectorVista();
+  await cargarSemana();
+};
 $("b-exportar").onclick = () => dlgExportar();
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [

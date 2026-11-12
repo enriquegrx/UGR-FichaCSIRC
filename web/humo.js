@@ -330,7 +330,9 @@
       aplicarTema("claro");
     });
     await prueba("estadísticas en la propia ventana", async () => {
-      document.querySelector('.selector-vista [data-vista="estad"]').click();
+      ok(!document.querySelector('.selector-vista [data-vista="estad"]'), "Estadísticas sigue junto a Semana y Mes");
+      $("b-estad").click();
+      ok($("b-estad").classList.contains("activo"), "el botón no queda resaltado");
       ok(await hasta(() => !$("estadisticas").hidden && $("estadisticas").textContent.includes("Tareas más realizadas")), "no se ve el panel");
       ok(getComputedStyle($("seccion-dias")).display === "none", "las fichas siguen a la vista");
       ok(!dlg(), "salió en una ventana flotante");
@@ -342,6 +344,12 @@
       ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "Hoy no vuelve a la semana");
       ok(await hasta(() => document.querySelector(".dia.hoy.marcado")), "Hoy no marca la ficha de hoy");
       ok(document.querySelector('.selector-vista [data-vista="semana"]').classList.contains("activo"), "no queda en Semana");
+      ok(!$("b-estad").classList.contains("activo"), "el botón sigue resaltado fuera del panel");
+      // pulsado dos veces: entra y vuelve a las fichas
+      $("b-estad").click();
+      ok(await hasta(() => !$("estadisticas").hidden), "no entra");
+      $("b-estad").click();
+      ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "pulsado otra vez no vuelve a las fichas");
     });
     await prueba("vista mensual", async () => {
       document.querySelector('.selector-vista [data-vista="mes"]').click();

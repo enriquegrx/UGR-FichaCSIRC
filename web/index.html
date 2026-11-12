@@ -39,7 +39,6 @@
     <div class="selector-vista" role="group" aria-label="Vista">
       <button data-vista="semana" aria-pressed="true">Semana</button>
       <button data-vista="mes" aria-pressed="false">Mes</button>
-      <button data-vista="estad" aria-pressed="false">Estadísticas</button>
     </div>
     <div class="titulo-semana">
       <strong id="titulo-semana">Cargando…</strong>
@@ -47,6 +46,8 @@
       <span id="tt-semana" class="chip chip-tele" hidden></span>
       <span id="estado-vista" class="chip-estado" hidden></span>
     </div>
+    <!-- a la derecha, con lo de consultar (a la izquierda, moverse por los dias) -->
+    <button id="b-estad" aria-pressed="false" title="Tareas más realizadas, jornada cumplida y el año mes a mes">📊 Estadísticas</button>
     <button id="b-resumen" title="Horas del mes: registradas, objetivo y días incompletos">Resumen</button>
     <button id="b-exportar" title="Exporta tus apuntes a CSV por rango de fechas">Exportar CSV…</button>
     <button id="b-recargar" title="Recargar (F5)">⟳</button>

@@ -694,6 +694,7 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 body.modo-estad #seccion-dias, body.modo-estad #franja, body.modo-estad .zona-trabajo,
 body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #estado-vista { display: none !important; }
 .panel-estad .cabeza-seccion { margin-bottom: 2px; }
+#b-estad.activo { background: var(--seleccion); border-color: var(--primario); color: var(--primario); font-weight: 600; }
 
 .estad-nav { gap: 8px; margin-bottom: 4px; }
 .estad-titulo { font-size: 16px; min-width: 220px; text-align: center; }
