@@ -363,6 +363,8 @@ td { padding: 7px 8px; border-bottom: 1px solid var(--borde-suave); vertical-ali
 
 fieldset.permiso { border: 1px solid var(--borde); border-radius: 8px; margin: 0 0 10px; padding: 6px 12px 10px; }
 fieldset.permiso legend { font-weight: 600; padding: 0 4px; }
+.tarea-local-fila { margin: 6px 0; }
+.tarea-local-titulo { width: 140px; flex: none; }
 .cifras-permiso { gap: 18px; flex-wrap: wrap; }
 .concesion { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; padding: 2px 0; }
 .pie-permiso { margin-top: 8px; flex-wrap: wrap; }

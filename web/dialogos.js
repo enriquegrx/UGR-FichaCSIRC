@@ -1057,7 +1057,39 @@ function dlgPermisos() {
       accion: () => dlgPermisosAnio({ manual: true, alTerminar: () => llamar("permisos").then(pintar) }) },
     cerrarBoton] });
   const cabecera = nota("");
-  d.cuerpo.append(cabecera, info, listaAct, cuerpo);
+  const destinos = el("div");
+  d.cuerpo.append(cabecera, info, listaAct, cuerpo, destinos);
+
+  // Donde imputa ESTE usuario lo que se marca en local: al marcarlo, la app
+  // ofrece esa tarea (sin elegir, la deduce por el nombre).
+  function pintarDestinos(filas) {
+    const caja = el("fieldset", { class: "permiso" }, el("legend", { text: "¿Dónde se imputa en ProyectosTIC?" }),
+      nota("Lo que marcas «(local)» no se envía a ProyectosTIC. Si en tu servicio se imputa en "
+           + "una tarea, elígela aquí: al marcarlo, la app te ofrecerá imputarlo en ella. "
+           + "«La busca la app» la deduce por el nombre; «Ninguna» deja de ofrecerla."));
+    for (const f of filas) {
+      const modo = selector([{ valor: "auto", texto: "La busca la app" }, { valor: "tarea", texto: "Esta tarea:" },
+                             { valor: "ninguna", texto: "Ninguna" }], f.modo);
+      const tarea = entrada(f.id ? `${f.id} - ${f.nombre}` : "",
+                            { placeholder: "Busca por nombre o número de tarea", class: "crece tarea-local" });
+      tarea.hidden = f.modo !== "tarea";
+      buscadorTarea(tarea, { alElegir: async (t) => {
+        const r = await llamar("fijar_tarea_local", f.motivo, "tarea", t.id, t.nombre);
+        if (r.error) { await avisar("Permisos", r.error); return; }
+        estado(`${f.titulo}: se ofrecerá «${t.nombre}».`);
+        pintarDestinos(r.filas);
+      } });
+      modo.addEventListener("change", async () => {
+        if (modo.value === "tarea") { tarea.hidden = false; tarea.focus(); return; }   // se guarda al elegirla
+        tarea.hidden = true;
+        pintarDestinos((await llamar("fijar_tarea_local", f.motivo, modo.value)).filas);
+      });
+      caja.append(el("div", { class: "fila tarea-local-fila" },
+        el("span", { class: "tarea-local-titulo", text: f.titulo }), modo, tarea));
+    }
+    destinos.replaceChildren(caja);
+  }
+  llamar("tareas_local").then(pintarDestinos).catch(() => {});
 
   function pintar(p) {
     cabecera.textContent = `Saldo desde el ${p.desde}: lo que no usas se arrastra y las horas de cada año `

@@ -191,8 +191,8 @@ La app recuerda la vista que dejaste.
 - 🖱️ En la vista semanal, al pasar el ratón por una tarea de la ficha salen sus
   botones ✏️ editar y 🗑️ borrar.
 - ➕ **El «+» de cada día** (sale al pasar el ratón; o pulsa **+** con el día
-  seleccionado): tus tareas habituales con las horas ya puestas. Un clic y
-  añadida a ese día.
+  seleccionado): **Copiar día anterior**, tus tareas habituales con las horas
+  ya puestas y tus **plantillas**. Un clic y añadido a ese día.
 - ✅ **Completar con…** (botón derecho sobre un día al que le faltan horas):
   rellena lo que falta con una de tus tareas habituales.
 - 🔢 **Doble clic sobre las horas** de una tarea en la ficha para cambiarlas ahí
@@ -208,7 +208,9 @@ La app recuerda la vista que dejaste.
   vacaciones, apertura de curso, baja, permiso por horas, guardia,
   teletrabajo) se guarda **solo en tu FichaCSIRC**: no va a ProyectosTIC. Si
   tienes una tarea de permisos, bajas, guardias o teletrabajo, la app te
-  ofrece imputarlo ahí.
+  ofrece imputarlo ahí. Cuál es esa tarea en tu servicio lo eliges en
+  *Herramientas → Permisos → ¿Dónde se imputa en ProyectosTIC?* (si no, la
+  app la deduce por el nombre).
 - 💾 **Copias de seguridad** (*Herramientas*): tu configuración se copia sola
   cuando cambias favoritas, plantillas, permisos o festivos. Desde ahí vuelves
   a una copia anterior, o **exportas** la configuración para llevártela a otro

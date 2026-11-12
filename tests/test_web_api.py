@@ -500,6 +500,18 @@ class TestBorrarYMarcas(Base):
             favs.append({"id": 9002, "nombre": "Teletrabajo"})
             self.assertEqual(self.api.tarea_ausencia("guardia")["id"], 9001)
             self.assertEqual(self.api.tarea_ausencia("teletrabajo")["id"], 9002)
+            # elegida en Herramientas > Permisos: manda sobre lo que deduce
+            self.assertEqual([f["modo"] for f in self.api.tareas_local()], ["auto"] * 5)
+            self.api.fijar_tarea_local("baja", "tarea", "#4242", "Bajas SEDE")
+            self.assertEqual(self.api.tarea_ausencia("baja")["id"], 4242)
+            self.api.fijar_tarea_local("guardia", "ninguna")
+            self.assertIsNone(self.api.tarea_ausencia("guardia"))
+            self.assertEqual({f["motivo"]: f["modo"] for f in self.api.tareas_local()}["guardia"], "ninguna")
+            self.api.fijar_tarea_local("guardia", "auto")
+            self.assertEqual(self.api.tarea_ausencia("guardia")["id"], 9001)
+            self.assertIn("error", self.api.fijar_tarea_local("festivo", "ninguna"))
+            self.assertIn("error", self.api.fijar_tarea_local("baja", "tarea", "abc"))
+            self.api.fijar_tarea_local("baja", "auto")
             # asociada a mano gana, aunque el nombre no diga nada
             guardado["tareas_actividad"] = {"Bajas médicas": 777}
             self.assertEqual(self.api.tarea_ausencia("baja")["id"], 777)

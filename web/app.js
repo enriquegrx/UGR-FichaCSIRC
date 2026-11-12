@@ -640,19 +640,46 @@ function horasPropuestas(d, f) {
 
 const corto = (t, n = 38) => (t.length > n ? `${t.slice(0, n - 1)}…` : t);
 
-function menuAnadirRapido(d, x, y) {
+async function menuAnadirRapido(d, x, y) {
   if (d.estado === "error") return;
   const filas = st.habituales?.filas || [];
+  // las plantillas viven en este equipo: leerlas es inmediato
+  const plantillas = await llamar("plantillas").catch(() => []);
   const items = [{ titulo: `Añadir al ${d.nombre.toLowerCase()} ${d.fecha}`
-                           + (d.falta > 0.001 ? ` · faltan ${fmtHoras(d.falta)}h` : "") }];
+                           + (d.falta > 0.001 ? ` · faltan ${fmtHoras(d.falta)}h` : "") },
+                 // lo mas repetido, lo primero (como en el botón derecho)
+                 { texto: "⧉ Copiar día anterior", clase: "destacado", accion: () => dlgCopiarDia([d.iso]) }];
+  if (st.portapapeles && st.portapapeles.iso !== d.iso) {
+    items.push({ texto: `Pegar lo del ${st.portapapeles.texto.toLowerCase()}`, accion: () => pegarDia(d.iso) });
+  }
+  items.push("-");
   for (const f of filas) {
     const h = horasPropuestas(d, f);
     items.push({ texto: `+ ${fmtHoras(h)}h   ${corto(f.tarea)}${f.actividad ? ` · ${f.actividad}` : ""}`,
                  accion: () => anadirRapido(d, f, h) });
   }
   if (filas.length) items.push("-");
+  for (const p of plantillas.slice(0, 4)) {
+    items.push({ texto: `▤ Plantilla «${corto(p.nombre, 30)}» (${p.n} apuntes, ${p.total})`,
+                 accion: () => aplicarPlantillaDia(p, d) });
+  }
+  if (plantillas.length) items.push("-");
   items.push({ texto: "Otra tarea u otras horas…", accion: () => dlgEditarDia(d, { nueva: true }) });
   mostrarMenu(x, y, items);
+}
+
+// Una plantilla a UN dia, desde el "+" de su ficha (sin marcar dias).
+async function aplicarPlantillaDia(p, d) {
+  if (st.ocupado) return;
+  st.ocupado = true;
+  estado("Aplicando plantilla…");
+  try {
+    await informarLote(await llamar("aplicar_plantilla", p.nombre, [d.iso]), {
+      hecho: (n) => `Plantilla «${corto(p.nombre, 40)}» aplicada al ${d.nombre.toLowerCase()} ${d.fecha}: ${n} apuntes.`,
+      nada: "No se añadió nada: esas tareas ya estaban ese día." });
+  } finally {
+    st.ocupado = false;
+  }
 }
 
 // Añade UNA tarea a UN dia pasando por los mismos avisos que el formulario

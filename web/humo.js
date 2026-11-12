@@ -205,6 +205,15 @@
       ok(await hasta(() => !dlg()), "Cancelar no cierra");
       ok(!dias()[4].textContent.includes("Teletrabajo"), "Cancelar marcó el teletrabajo");
     });
+    await prueba("Permisos: elegir dónde se imputa lo local", async () => {
+      dlgPermisos();
+      ok(await hasta(() => dlg()?.querySelectorAll(".tarea-local-fila").length === 5), "sin las 5 filas");
+      const fila = () => [...dlg().querySelectorAll(".tarea-local-fila")].find((f) => f.textContent.includes("Teletrabajo"));
+      const sel = fila().querySelector("select");
+      sel.value = "ninguna"; sel.dispatchEvent(new Event("change"));
+      ok(await hasta(() => fila().querySelector("select").value === "ninguna"), "no guarda «Ninguna»");
+      cerrarTodo();
+    });
     await prueba("aviso local de un festivo: sin «null»", async () => {
       menuDe(3); pulsarMenu("Marcar como festivo (local)");
       ok(await hasta(() => dlg()), "no avisa");
@@ -232,8 +241,11 @@
     });
     await prueba("+ rápido añade al viernes", async () => {
       dias()[4].querySelector(".b-mas-dia").click();
-      ok(document.querySelector("#menu .titulo-menu")?.textContent.includes("viernes"), "menú del +");
-      document.querySelector("#menu button").click();
+      ok(await hasta(() => document.querySelector("#menu .titulo-menu")?.textContent.includes("viernes")), "menú del +");
+      const bs = [...document.querySelectorAll("#menu button")];
+      ok(bs[0].textContent.includes("Copiar día anterior"), "sin «Copiar día anterior» arriba");
+      ok(bs.some((b) => b.textContent.startsWith("▤ Plantilla")), "sin plantillas en el +");
+      bs.find((b) => b.textContent.startsWith("+ ")).click();
       ok(await hasta(() => dias()[4].querySelectorAll(".ap-tarjeta").length === 1), "no añadió");
     });
     await prueba("completar con…", async () => {

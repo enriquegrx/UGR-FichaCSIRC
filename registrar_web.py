@@ -1275,6 +1275,43 @@ class Api:
         "teletrabajo": ("teletrabajo", "trabajo a distancia", "no presencial"),
     }
 
+    # Herramientas > Permisos: en que tarea imputa ESTE usuario cada cosa que
+    # se marca en local. Sin elegir, la app la deduce por el nombre (y en cada
+    # servicio se llama distinto, o una tarea tecnica dice "permisos").
+    TITULOS_LOCAL = {"permiso": "Permisos por horas", "baja": "Bajas", "vacaciones": "Vacaciones",
+                     "guardia": "Guardias", "teletrabajo": "Teletrabajo"}
+
+    def tareas_local(self):
+        guardadas = core.config_valor("tareas_local") or {}
+        out = []
+        for m, titulo in self.TITULOS_LOCAL.items():
+            g = guardadas.get(m) or {}
+            modo = "ninguna" if g.get("ninguna") else "tarea" if g.get("id") else "auto"
+            out.append({"motivo": m, "titulo": titulo, "modo": modo,
+                        "id": g.get("id") or "", "nombre": g.get("nombre") or ""})
+        return out
+
+    def fijar_tarea_local(self, motivo, modo, wp_id=None, nombre=""):
+        """modo: auto (la busca la app), tarea (wp_id) o ninguna (no ofrecer)."""
+        if motivo not in self.TITULOS_LOCAL:
+            return {"error": f"Motivo desconocido: {motivo}"}
+        guardadas = dict(core.config_valor("tareas_local") or {})
+        if modo == "auto":
+            guardadas.pop(motivo, None)
+        elif modo == "ninguna":
+            guardadas[motivo] = {"ninguna": True}
+        elif modo == "tarea":
+            try:
+                wp = int(str(wp_id).strip().lstrip("#"))
+            except (TypeError, ValueError):
+                return {"error": "Elige una tarea de la lista."}
+            guardadas[motivo] = {"id": wp, "nombre": str(nombre or "").strip()[:200]}
+        else:
+            return {"error": f"Modo desconocido: {modo}"}
+        core.guardar_config_valor("tareas_local", guardadas)
+        getattr(self, "_ausencias_buscadas", {}).pop(motivo, None)
+        return {"ok": True, "filas": self.tareas_local()}
+
     def avisos_local_no(self):
         return list(core.config_valor("avisos_local_no") or [])
 
@@ -1293,12 +1330,19 @@ class Api:
     def tarea_ausencia(self, motivo, habituales=None):
         """La tarea de ProyectosTic donde este usuario imputaria ese motivo
         (baja, vacaciones, permiso, guardia, teletrabajo), o None. De mas fiable a menos:
+        0) la elegida en Herramientas > Permisos ("Ninguna": None, sin buscar);
         1) la tarea asociada a mano a una actividad de ausencias o la de un
            permiso enlazado a su actividad; 2) habituales, favoritas y buscadas
            cuyo nombre lo diga; 3) una busqueda en ProyectosTic (sin red: nada)."""
         palabras = self.PALABRAS_AUSENCIA.get(motivo)
         if not palabras:
             return None
+        elegida = (core.config_valor("tareas_local") or {}).get(motivo) or {}
+        if elegida.get("ninguna"):
+            return None
+        if elegida.get("id"):
+            return {"id": int(elegida["id"]), "nombre": elegida.get("nombre") or f"Tarea {elegida['id']}",
+                    "proyecto": "", "padre": "", "actividad": ""}
         encaja = lambda texto: any(p in _sin_tildes(texto) for p in palabras)
         asociadas = core.config_valor("tareas_actividad") or {}
         acts = [core.actividad_de_permiso(t["id"]) for t in core.permisos_tipos()]

@@ -25,6 +25,12 @@ instalada aparece en el pie de la ventana.
   como festivos, vacaciones o bajas, avisan antes de marcar que solo se guarda
   en tu FichaCSIRC. Si tienes en ProyectosTIC una tarea de guardias o de
   teletrabajo, te ofrecen imputar ahí.
+- **Elige tú la tarea** de cada cosa (permisos, bajas, vacaciones, guardias,
+  teletrabajo) en *Herramientas → Permisos → ¿Dónde se imputa en
+  ProyectosTIC?*: cada servicio la llama distinto y la app ya no tiene que
+  adivinarla. «Ninguna» deja de ofrecerla.
+- El **+** de cada día trae ahora **Copiar día anterior**, **Pegar** (si has
+  copiado un día) y tus **plantillas**, para aplicarlas a ese día con un clic.
 
 ---
 

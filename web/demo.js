@@ -23,6 +23,12 @@
   const favDemo = new Set([11765, 12063, 12065, 13001]);
   const avisosLocalNo = [];
   const marcas = { nolab: {}, guardia: new Set(), tele: new Set() };
+  const destinosDemo = {};
+  const tareasLocalDemo = () => Object.entries({ permiso: "Permisos por horas", baja: "Bajas",
+    vacaciones: "Vacaciones", guardia: "Guardias", teletrabajo: "Teletrabajo" }).map(([m, titulo]) => {
+    const g = destinosDemo[m] || {};
+    return { motivo: m, titulo, modo: g.ninguna ? "ninguna" : g.id ? "tarea" : "auto", id: g.id || "", nombre: g.nombre || "" };
+  });
   let siguiente = 100;
   let borrados = null;
   let diaAntes = null;      // [fecha, apuntes] antes de "Editar día" (deshacer)
@@ -223,6 +229,12 @@
     tarea_ausencia: (motivo) => espera(motivo === "festivo" || motivo === "teletrabajo" ? null
       : motivo === "guardia" ? { id: 13002, nombre: "[ATE] Guardias", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "" }
       : { id: 13001, nombre: "[ATE] Permisos", proyecto: "ATE", padre: "[2026_ATE] Servicio", actividad: "Asuntos propios" }),
+    tareas_local: () => espera(tareasLocalDemo()),
+    fijar_tarea_local: (m, modo, id, nombre) => {
+      if (modo === "auto") delete destinosDemo[m];
+      else destinosDemo[m] = modo === "ninguna" ? { ninguna: true } : { id, nombre };
+      return espera({ ok: true, filas: tareasLocalDemo() });
+    },
     no_avisar_local: (m) => { avisosLocalNo.push(m); return espera({ ok: true, avisos_local_no: [...avisosLocalNo] }); },
     volver_a_avisar_local: () => { avisosLocalNo.length = 0; return espera({ ok: true }); },
     copias: () => espera([{ id: "config-20261111-1002.json", fecha: "11/11/2026 10:02", resumen: "4 favoritas · 1 plantilla · 2 tipos de permiso · 5 días marcados" },
