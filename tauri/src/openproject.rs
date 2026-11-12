@@ -322,6 +322,7 @@ fn apunte(e: &Value) -> Apunte {
         comentario: e["comment"]["raw"].as_str().unwrap_or("").to_string(),
         actividad: links["activity"]["title"].as_str().unwrap_or("").to_string(),
         fecha: e["spentOn"].as_str().unwrap_or("").to_string(),
+        destino: String::new(),
     }
 }
 

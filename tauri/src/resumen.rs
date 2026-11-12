@@ -70,6 +70,7 @@ pub async fn mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32) -> Result<Value, St
     let semanas = semanas_de(anio, mes);
     let dias: Vec<NaiveDate> = semanas.iter().flat_map(|l| (0..5).map(move |i| *l + Duration::days(i))).collect();
     let leido = rango(e, cfg, dias[0], *dias.last().unwrap()).await;
+    let ok = leido.is_ok();
     {
         let mut cache = candado(&e.cache);
         match leido {
@@ -87,6 +88,9 @@ pub async fn mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32) -> Result<Value, St
                 *candado(&e.error) = Some(err);
             }
         }
+    }
+    if ok {
+        crate::api::inari_en_cache(e, cfg, &dias).await;
     }
     Ok(pintar_mes(e, cfg, anio, mes).await)
 }
@@ -145,7 +149,8 @@ pub async fn pintar_mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32) -> Value {
 // ---------------------------------------------------------------- franja
 
 /// (registrado, objetivo hasta 'hasta') de un mes con los apuntes ya leidos.
-fn estado_mes(reglas: &Reglas, anio: i32, mes: u32, pd: &HashMap<String, Vec<Apunte>>, hasta: NaiveDate) -> (f64, f64) {
+fn estado_mes(reglas: &Reglas, anio: i32, mes: u32, pd: &HashMap<String, Vec<Apunte>>, hasta: NaiveDate,
+              tt: &HashMap<String, f64>) -> (f64, f64) {
     let acts = reglas.actividades_de_permiso();
     let (mut reg, mut obj) = (0.0, 0.0);
     let mut d = NaiveDate::from_ymd_opt(anio, mes, 1).unwrap();
@@ -153,7 +158,11 @@ fn estado_mes(reglas: &Reglas, anio: i32, mes: u32, pd: &HashMap<String, Vec<Apu
         if d.weekday().num_days_from_monday() < 5 {
             let aps = pd.get(&d.to_string());
             obj += reglas.objetivo_dia(d, aps.map(|v| v.as_slice()), &acts);
-            reg += aps.map(|v| v.iter().map(|a| a.horas).sum::<f64>()).unwrap_or(0.0);
+            // teletrabajo con INARI: sus horas (cubos disjuntos, sin doble conteo)
+            reg += match tt.get(&d.to_string()) {
+                Some(h) => *h,
+                None => aps.map(|v| v.iter().map(|a| a.horas).sum::<f64>()).unwrap_or(0.0),
+            };
         }
         d += Duration::days(1);
     }
@@ -252,12 +261,34 @@ pub async fn resumen_franja(e: &Estado, cfg: &Cfg) -> Value {
     let (_, ant_primero) = mes_anterior(h);
     let aps = rango(e, cfg, ant_primero, h).await.ok();
     let pt = usadas_pt(e, cfg, &reglas).await;
-    franja(&reglas, aps, h, &pt)
+    let tt = horas_inari(cfg, &reglas, ant_primero, h).await;
+    franja(&reglas, aps, h, &pt, &tt)
+}
+
+/// Teletrabajo con INARI: {iso: horas en INARI} de los dias de teletrabajo
+/// del rango (0 si no se pudieron leer, como la app de Python).
+pub async fn horas_inari(cfg: &Cfg, reglas: &Reglas, desde: NaiveDate, hasta: NaiveDate) -> HashMap<String, f64> {
+    let mut out = HashMap::new();
+    if !crate::inari::configurado(cfg) {
+        return out;
+    }
+    let cli = crate::inari::Inari::desde(cfg);
+    let pid = crate::inari::proyecto(cfg);
+    let mut d = desde;
+    while d <= hasta {
+        if d.weekday().num_days_from_monday() < 5 && reglas.es_teletrabajo(&d.to_string()) {
+            let h = cli.slots_dia(pid, &d.to_string()).await.map(|s| s.iter().map(|a| a.horas).sum()).unwrap_or(0.0);
+            out.insert(d.to_string(), h);
+        }
+        d += Duration::days(1);
+    }
+    out
 }
 
 /// La franja ya con los apuntes leidos (None = sin red) y las horas de
 /// permiso imputadas: sin red, para poder compararla con la de Python.
-pub fn franja(reglas: &Reglas, aps: Option<Vec<Apunte>>, h: NaiveDate, pt: &HashMap<String, f64>) -> Value {
+pub fn franja(reglas: &Reglas, aps: Option<Vec<Apunte>>, h: NaiveDate, pt: &HashMap<String, f64>,
+              tt: &HashMap<String, f64>) -> Value {
     let (ant, ant_primero) = mes_anterior(h);
     let mut out = json!({"permisos": [], "meses": [], "habituales": null});
     if let Some(aps) = aps {
@@ -265,7 +296,7 @@ pub fn franja(reglas: &Reglas, aps: Option<Vec<Apunte>>, h: NaiveDate, pt: &Hash
         let pd = por_dia(aps);
         let mut meses = Vec::new();
         for (anio, mes, hasta, siempre) in [(h.year(), h.month(), h, true), (ant.year(), ant.month(), ant, false)] {
-            let (reg, obj) = estado_mes(reglas, anio, mes, &pd, hasta);
+            let (reg, obj) = estado_mes(reglas, anio, mes, &pd, hasta, tt);
             let al_dia = reg >= obj - 0.001;
             if siempre || !al_dia {
                 meses.push(json!({"titulo": capital(MESES[mes as usize - 1]), "anio": anio, "mes": mes, "al_dia": al_dia,
@@ -359,7 +390,9 @@ pub async fn mes_pendiente(e: &Estado, cfg: &Cfg, h: NaiveDate) -> Value {
     let mut d = desde;
     while d <= hasta {
         let wd = d.weekday().num_days_from_monday() as usize;
-        if wd < 5 {
+        // teletrabajo con INARI: sus horas no estan en ProyectosTIC
+        let con_inari = crate::inari::configurado(cfg) && reglas.es_teletrabajo(&d.to_string());
+        if wd < 5 && !con_inari {
             let ap = pd.get(&d.to_string()).cloned().unwrap_or_default();
             let obj = reglas.objetivo_dia(d, Some(&ap), &acts);
             let reg: f64 = ap.iter().map(|a| a.horas).sum();
@@ -409,8 +442,9 @@ mod tests {
             id: x["id"].to_string(), wp_id: x["wp_id"].as_str().unwrap_or("").into(), horas: x["horas"].as_f64().unwrap(),
             wp_titulo: x["wp_titulo"].as_str().unwrap_or("").into(), comentario: x["comentario"].as_str().unwrap_or("").into(),
             actividad: x["actividad"].as_str().unwrap_or("").into(), fecha: x["fecha"].as_str().unwrap_or("").into(),
+            destino: String::new(),
         }).collect();
-        let salida = franja(&reglas, Some(aps), h, &HashMap::new());
+        let salida = franja(&reglas, Some(aps), h, &HashMap::new(), &HashMap::new());
         std::fs::write(format!("{ruta}.franja.json"), serde_json::to_string_pretty(&salida).unwrap()).unwrap();
     }
 

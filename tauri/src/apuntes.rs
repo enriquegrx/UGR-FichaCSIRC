@@ -282,8 +282,11 @@ pub async fn eliminar(e: &Estado, cfg: &Cfg, items: &[Value]) -> Result<Value, S
         let (id, fecha) = (texto_de(&it["id"]), texto_de(&it["fecha"]));
         dias.insert(fecha.clone());
         if texto_de(&it["destino"]) == "inari" {
-            errores += 1;
-            ultimo = "INARI aún no está en la versión Rust.".into();
+            // un slot de INARI no se puede recrear tal cual: sin Deshacer
+            match crate::inari::Inari::desde(cfg).borrar_slot(&id).await {
+                Ok(()) => n_ok += 1,
+                Err(err) => { errores += 1; ultimo = err; }
+            }
             continue;
         }
         match e.borrar_uno(&cli, &fecha, &id).await {
@@ -366,6 +369,13 @@ pub async fn guardar_dia(e: &Estado, cfg: &Cfg, fecha: &str, cambios: &Value) ->
         }
     }
     for b in lista("borrar") {
+        if texto_de(&b["destino"]) == "inari" {
+            match crate::inari::Inari::desde(cfg).borrar_slot(&texto_de(&b["id"])).await {
+                Ok(()) => hechos += 1,
+                Err(err) => { errores += 1; ultimo = err; }
+            }
+            continue;
+        }
         match e.borrar_uno(&cli, fecha, &texto_de(&b["id"])).await {
             Ok(paso) => { deshacer.extend(paso); hechos += 1; }
             Err(err) => { errores += 1; ultimo = err.to_string(); }

@@ -6,6 +6,7 @@ use crate::apuntes;
 use crate::asistente;
 use crate::ayuda;
 use crate::herramientas as herr;
+use crate::inari::{self, Inari};
 use crate::permisos as perm;
 use crate::resumen;
 use crate::sistema;
@@ -408,6 +409,74 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             Ok(ayuda::diagnostico().await)
         }
+        // ---- INARI (fase 5d) ----
+        "inari_config" => Ok(json!({
+            "activo": cfg.get("inari_activo").and_then(Value::as_bool).unwrap_or(false),
+            "url": Some(cfg.texto("inari_url")).filter(|s| !s.is_empty()).unwrap_or(inari::URL_POR_DEFECTO.into()),
+            "usuario": cfg.texto("inari_usuario"), "hay_token": !cfg.texto("inari_token").is_empty(),
+            "proyecto": cfg.get("inari_project_id"), "columna": cfg.get("inari_column_id"),
+            "carril": cfg.get("inari_swimlane_id"), "categoria": cfg.get("inari_category_id")})),
+        "inari_probar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let (url, u, t) = inari_creds(&cfg, &arg(&args, 0), &arg(&args, 1), &arg(&args, 2));
+            if u.is_empty() || t.is_empty() {
+                return Ok(json!({"error": "Escribe usuario y token."}));
+            }
+            let cli = Inari::nuevo(&url, &u, &t);
+            let me = cli.probar().await?;
+            let nombre = me["name"].as_str().filter(|s| !s.is_empty()).or(me["username"].as_str()).unwrap_or(u.as_str()).to_string();
+            Ok(json!({"nombre": nombre, "usuario": u, "proyectos": cli.proyectos().await?}))
+        }
+        "inari_tablero" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let (url, u, t) = inari_creds(&cfg, &arg(&args, 0), &arg(&args, 1), &arg(&args, 2));
+            Inari::nuevo(&url, &u, &t).tablero(id_o(args.get(3), None)).await
+        }
+        "inari_guardar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let (url, u, t) = inari_creds(&cfg, &arg(&args, 1), &arg(&args, 2), &arg(&args, 3));
+            let mut m = Map::new();
+            m.insert("inari_activo".into(), json!(args.first().and_then(Value::as_bool).unwrap_or(false)));
+            for (k, v) in [("inari_url", json!(url)), ("inari_usuario", json!(u)), ("inari_token", json!(t))] {
+                m.insert(k.into(), v);
+            }
+            for (i, k) in [(4, "inari_project_id"), (5, "inari_column_id"), (6, "inari_swimlane_id"), (7, "inari_category_id")] {
+                m.insert(k.into(), args.get(i).cloned().unwrap_or(Value::Null));
+            }
+            // Null = quitar la clave: aqui hay que guardar el null tal cual
+            config::modificar(|c| { for (k, v) in m { c.insert(k, v); } })?;
+            Ok(json!({"ok": true}))
+        }
+        "inari_opciones_slot" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let pid = inari::proyecto(&cfg);
+            let mut r = if pid > 0 { Inari::desde(&cfg).tablero(pid).await? } else { json!({}) };
+            let pref = |k: &str| cfg.get(&format!("inari_last_{k}")).or(cfg.get(&format!("inari_{k}"))).cloned().unwrap_or(Value::Null);
+            r["pref"] = json!({"columna": pref("column_id"), "carril": pref("swimlane_id"), "categoria": pref("category_id")});
+            Ok(r)
+        }
+        "duracion" => Ok(json!(inari::duracion_horas(&arg(&args, 0), &arg(&args, 1)).map(fmt_horas).unwrap_or_default())),
+        "inari_registrar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let (iso, inicio, fin) = (arg(&args, 0), arg(&args, 1), arg(&args, 2));
+            if inari::duracion_horas(&inicio, &fin).is_none() {
+                return Ok(json!({"error": "Escribe inicio y fin como HH:MM, con el fin posterior al inicio."}));
+            }
+            let mut m = Map::new();
+            for (i, k) in [(4, "inari_last_column_id"), (5, "inari_last_swimlane_id"), (6, "inari_last_category_id")] {
+                if let Some(v) = args.get(i).filter(|v| !v.is_null()) {
+                    m.insert(k.into(), v.clone());
+                }
+            }
+            if !m.is_empty() {
+                let _ = config::guardar_valores(m);
+            }
+            let col = id_o(args.get(4), cfg.get("inari_column_id"));
+            let car = id_o(args.get(5), cfg.get("inari_swimlane_id"));
+            let cat = id_o(args.get(6), cfg.get("inari_category_id"));
+            Inari::desde(&cfg).crear_slot(inari::proyecto(&cfg), &iso, &inicio, &fin, &arg(&args, 3), col, car, cat).await?;
+            Ok(json!({"ok": true}))
+        }
         // ---- buscar tareas ----
         "buscar_tareas" => {
             e.exigir_desbloqueo(&cfg)?;
@@ -710,8 +779,8 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "version": VERSION,
         "experimento": false,
         "github": GITHUB_REPO,
-        "inari_listo": false,
-        "inari": false,
+        "inari_listo": inari::configurado(cfg),
+        "inari": cfg.get("inari_activo").and_then(Value::as_bool).unwrap_or(false),
         "asociaciones": asociaciones,
         "toca_permisos_anio": perm::toca_permisos_anio(cfg),
         "novedades_tras_actualizar": null,
@@ -764,7 +833,47 @@ async fn semana(e: &Estado, cfg: &Cfg, lunes_iso: &str) -> Result<Value, String>
             }
         }
     }
+    inari_en_cache(e, cfg, &dias).await;
     Ok(pintar_semana(e, cfg, lunes).await)
+}
+
+/// Teletrabajo con INARI: esos dias se ven (y cuentan) los slots de INARI,
+/// no lo de ProyectosTIC. Sin poder leerlos, el dia queda "sin conexion".
+pub(crate) async fn inari_en_cache(e: &Estado, cfg: &Cfg, dias: &[NaiveDate]) {
+    if !inari::configurado(cfg) {
+        return;
+    }
+    let reglas = Reglas::desde(cfg);
+    let cli = Inari::desde(cfg);
+    let pid = inari::proyecto(cfg);
+    for d in dias {
+        let iso = d.to_string();
+        if reglas.es_teletrabajo(&iso) {
+            let r = cli.slots_dia(pid, &iso).await.ok();
+            candado(&e.cache).insert(iso, r);
+        }
+    }
+}
+
+/// usuario/token del cuadro de INARI: el token NO viaja al JS; vacio = el
+/// guardado (o "usuario:token" pegado en el campo de usuario).
+fn inari_creds(cfg: &Cfg, url: &str, usuario: &str, token: &str) -> (String, String, String) {
+    let (mut u, mut t) = (usuario.trim().to_string(), token.trim().to_string());
+    if t.is_empty() {
+        let (u2, t2) = inari::separar_credencial(&u);
+        if t2.is_empty() {
+            t = cfg.texto("inari_token");
+        } else {
+            (u, t) = (u2, t2);
+        }
+    }
+    let url = if url.trim().is_empty() { inari::URL_POR_DEFECTO.to_string() } else { url.trim().to_string() };
+    (url, u, t)
+}
+
+fn id_o(v: Option<&Value>, defecto: Option<&Value>) -> i64 {
+    let n = |x: &Value| x.as_i64().or_else(|| x.as_str().and_then(|s| s.parse().ok()));
+    v.and_then(n).or_else(|| defecto.and_then(n)).unwrap_or(0)
 }
 
 async fn pintar_semana(e: &Estado, cfg: &Cfg, lunes: NaiveDate) -> Value {

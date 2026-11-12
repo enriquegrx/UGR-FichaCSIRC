@@ -80,6 +80,8 @@ pub struct Apunte {
     pub comentario: String,
     pub actividad: String,
     pub fecha: String,
+    /// "op" (ProyectosTIC, por defecto) o "inari" (slot de teletrabajo)
+    pub destino: String,
 }
 
 pub struct TipoPermiso {
@@ -415,7 +417,7 @@ impl Reglas {
             "apuntes": lista.iter().map(|a| json!({
                 "id": a.id, "horas": a.horas, "horas_txt": fmt_horas(a.horas), "wp_id": a.wp_id,
                 "tarea": a.wp_titulo, "actividad": a.actividad, "comentario": a.comentario,
-                "destino": "op"})).collect::<Vec<_>>(),
+                "destino": if a.destino.is_empty() { "op" } else { a.destino.as_str() }})).collect::<Vec<_>>(),
         })
     }
 }
@@ -503,6 +505,7 @@ mod tests {
                 comentario: x["comentario"].as_str().unwrap_or("").to_string(),
                 actividad: x["actividad"].as_str().unwrap_or("").to_string(),
                 fecha: String::new(),
+                destino: String::new(),
             }).collect());
             r.estado_dia(dia(d["iso"].as_str().unwrap()), aps.as_deref(), hoy, &acts)
         }).collect();

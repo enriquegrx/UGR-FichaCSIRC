@@ -438,6 +438,8 @@ pub async fn resumen_mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32, hoy: NaiveD
     let reglas = Reglas::desde(cfg);
     let acts = reglas.actividades_de_permiso();
     let (mut total, mut obj_hoy, mut obj_mes) = (0.0, 0.0, 0.0);
+    let (mut tt_horas, mut tt_dias) = (0.0, 0);
+    let tt = crate::resumen::horas_inari(cfg, &reglas, primero, ultimo).await;
     let mut incompletos = Vec::new();
     let mut d = primero;
     while d <= ultimo {
@@ -445,7 +447,17 @@ pub async fn resumen_mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32, hoy: NaiveD
             let ap = por_dia.get(&d.to_string());
             let obj = reglas.objetivo_dia(d, ap.map(|v| v.as_slice()), &acts);
             obj_mes += obj;
-            let reg: f64 = ap.map(|v| v.iter().map(|a| a.horas).sum()).unwrap_or(0.0);
+            // en un dia de teletrabajo con INARI cuentan sus horas (cubos disjuntos)
+            let reg: f64 = match tt.get(&d.to_string()) {
+                Some(h) => {
+                    if *h > 0.0 {
+                        tt_horas += h;
+                        tt_dias += 1;
+                    }
+                    *h
+                }
+                None => ap.map(|v| v.iter().map(|a| a.horas).sum()).unwrap_or(0.0),
+            };
             total += reg;
             if d <= hoy {
                 obj_hoy += obj;
@@ -465,7 +477,7 @@ pub async fn resumen_mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32, hoy: NaiveD
         "al_dia": al_dia,
         "estado": if al_dia { "Al día ✔".to_string() } else { format!("Te faltan {} para estar al día", fmt_horas(obj_hoy - total)) },
         "frac": crate::reglas::redondear(if obj_mes > 0.0 { (total / obj_mes).clamp(0.0, 1.0) } else { 0.0 }, 3),
-        "teletrabajo": "",
+        "teletrabajo": if tt_dias > 0 { format!("Incluye teletrabajo en INARI: {} en {tt_dias} día(s)", fmt_horas(tt_horas)) } else { String::new() },
         "incompletos": incompletos,
     }))
 }

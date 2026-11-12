@@ -17,6 +17,7 @@ mod ayuda;
 mod config;
 mod copias;
 mod herramientas;
+mod inari;
 mod openproject;
 mod permisos;
 mod pin;
