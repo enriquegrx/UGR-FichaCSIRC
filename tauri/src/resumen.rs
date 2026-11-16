@@ -293,6 +293,14 @@ pub fn franja(reglas: &Reglas, aps: Option<Vec<Apunte>>, h: NaiveDate, pt: &Hash
     let mut out = json!({"permisos": [], "meses": [], "habituales": null});
     if let Some(aps) = aps {
         out["habituales"] = habituales(&aps, ant_primero);
+        // las de una actividad de permiso no se proponen para rellenar huecos
+        let acts = reglas.actividades_de_permiso();
+        if let Some(fs) = out["habituales"]["filas"].as_array_mut() {
+            for f in fs {
+                let p = acts.contains(&f["actividad"].as_str().unwrap_or("").trim().to_lowercase());
+                f["permiso"] = json!(p);
+            }
+        }
         let pd = por_dia(aps);
         let mut meses = Vec::new();
         for (anio, mes, hasta, siempre) in [(h.year(), h.month(), h, true), (ant.year(), ant.month(), ant, false)] {

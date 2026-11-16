@@ -207,9 +207,13 @@ pub async fn aviso_datos(e: &Estado, cfg: &Cfg) -> Value {
             }
         }
     }
+    // y los dias del año que siguen sin completar (para abrir ese panel)
+    let por_completar = if dias.is_empty() { 0 } else {
+        crate::completar::por_completar(e, cfg, None, Local::now().date_naive()).await["n"].as_u64().unwrap_or(0)
+    };
     let tema = Some(cfg.texto("tema")).filter(|t| !t.is_empty()).unwrap_or("sistema".into());
     json!({"texto": candado(&e.aviso).clone(), "minutos": AVISO_MINUTOS, "dias": dias, "habituales": habituales,
-           "pin": crate::pin::guardado(cfg).is_some(), "tema": tema})
+           "pin": crate::pin::guardado(cfg).is_some(), "tema": tema, "por_completar": por_completar})
 }
 
 /// Desde el aviso: un apunte en ese dia; devuelve lo que sigue faltando.
@@ -241,9 +245,13 @@ pub async fn aviso_fichar(e: &Estado, cfg: &Cfg, iso: &str, wp_id: &str, horas: 
 }
 
 /// "Abrir FichaCSIRC" o "Ahora no": se cierra el aviso (y se abre la app).
-pub fn aviso_responder(app: &AppHandle, abrir: bool) -> Value {
+pub fn aviso_responder(app: &AppHandle, abrir: bool, destino: &str) -> Value {
     if abrir {
-        let _ = std::process::Command::new(exe()).spawn();
+        let mut c = std::process::Command::new(exe());
+        if destino == "pendientes" {
+            c.arg("--por-completar");
+        }
+        let _ = c.spawn();
     }
     app.exit(0);
     json!({"ok": true})
@@ -320,9 +328,12 @@ pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
     }
     let abrir = MenuItem::with_id(app, "abrir", "Abrir FichaCSIRC", true, None::<&str>)?;
     let hoy = MenuItem::with_id(app, "hoy", "Fichar hoy", true, None::<&str>)?;
+    let n = *candado(&app.state::<Estado>().n_pendientes);
+    let pend = MenuItem::with_id(app, "pend", texto_pendientes(n), true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&abrir, &hoy, &sep, &salir])?;
+    let menu = Menu::with_items(app, &[&abrir, &hoy, &pend, &sep, &salir])?;
+    *candado(&app.state::<Estado>().item_pendientes) = Some(pend);
     let mut b = TrayIconBuilder::with_id("bandeja").tooltip(format!("FichaCSIRC{}", modo::sufijo())).menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -331,6 +342,12 @@ pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
                 mostrar(app);
                 if let Some(w) = app.get_webview_window("principal") {
                     let _ = w.eval("navegar(0)");
+                }
+            }
+            "pend" => {
+                mostrar(app);
+                if let Some(w) = app.get_webview_window("principal") {
+                    let _ = w.eval("entrarPendientes()");
                 }
             }
             "salir" => app.exit(0),
@@ -348,9 +365,24 @@ pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+pub fn texto_pendientes(n: u64) -> String {
+    if n > 0 { format!("Por completar ({n})") } else { "Por completar ✔".into() }
+}
+
+/// El numero de "Por completar (n)" en el menu del icono (lo pone la ventana).
+pub fn bandeja_pendientes(app: &AppHandle, n: u64) -> Value {
+    let e = app.state::<Estado>();
+    *candado(&e.n_pendientes) = n;
+    if let Some(item) = candado(&e.item_pendientes).as_ref() {
+        let _ = item.set_text(texto_pendientes(n));
+    }
+    json!({"ok": true})
+}
+
 pub fn quitar_bandeja(app: &AppHandle) {
     app.state::<Estado>().con_bandeja.store(false, std::sync::atomic::Ordering::SeqCst);
     let _ = app.remove_tray_by_id("bandeja");
+    candado(&app.state::<Estado>().item_pendientes).take();
 }
 
 #[cfg(test)]
@@ -371,5 +403,7 @@ mod tests {
         assert_eq!(mensaje_pendientes(&[(d, 3.0, 6.5)]),
                    "Te faltan horas por fichar esta semana (3.5h en total):\n\n  Martes 10/11: 3h de 6.5h");
         assert_eq!(mensaje_pendientes(&[]), "");
+        assert_eq!(texto_pendientes(5), "Por completar (5)");
+        assert_eq!(texto_pendientes(0), "Por completar ✔");
     }
 }

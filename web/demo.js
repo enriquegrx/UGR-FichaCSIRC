@@ -43,6 +43,10 @@
   ];
   apuntes[d(1)] = [{ id: 3, horas: 3.5, tarea: tareas[0].nombre, wp_id: "11765", actividad: "Actuaciones técnicas", comentario: "" }];
   apuntes[d(2)] = [{ id: 4, horas: 1, tarea: tareas[3].nombre, wp_id: "13001", actividad: "Asuntos propios", comentario: "" }];
+  apuntes[d(-5)] = [
+    { id: 5, horas: 7, tarea: tareas[0].nombre, wp_id: "11765", actividad: "Actuaciones técnicas", comentario: "Revisión de copias" },
+    { id: 6, horas: 2, tarea: tareas[0].nombre, wp_id: "11765", actividad: "Actuaciones técnicas", comentario: "Certificado SSL renovado" },
+  ];
   marcas.guardia.add(d(1));
   marcas.tele.add(d(3));
 
@@ -251,16 +255,41 @@
     mes_pendiente: () => espera(avisoMesVisto ? null : { anio: 2026, mes: 11, texto: "Noviembre cierra y te faltan 5h en 1 día:",
                                                       dias: [{ iso: d(2), texto: `miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)} (1h de 7h)` }] }),
     aviso_mes_visto: () => { avisoMesVisto = true; return espera({ ok: true }); },
+    bandeja_pendientes: () => espera({ ok: true }),
+    buscar_apuntes: (texto, anio) => {
+      const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const palabras = norm(texto).split(/\s+/).filter(Boolean);
+      const out = [];
+      for (const [i, ap] of Object.entries(apuntes)) {
+        for (const a of ap) {
+          const heno = norm(`${a.tarea} ${a.wp_id} ${a.actividad} ${a.comentario} ${i.slice(8)}/${i.slice(5, 7)}`);
+          if (palabras.length && palabras.every((w) => heno.includes(w))) {
+            out.push({ iso: i, dia: `${i.slice(8)}/${i.slice(5, 7)}`, horas: a.horas, horas_txt: fmt(a.horas),
+                       tarea: a.tarea, actividad: a.actividad, comentario: a.comentario });
+          }
+        }
+      }
+      out.sort((x, y) => (x.iso < y.iso ? 1 : -1));
+      return espera({ anio: Number(anio), resultados: out, n: out.length, recortado: false,
+                      total: fmt(out.reduce((s, x) => s + x.horas, 0)) });
+    },
     // Por completar: los laborables de las 3 semanas anteriores hasta ayer
     por_completar: (anio) => {
       const a = Number(anio) || hoy.getFullYear();
-      const dias = [];
+      const dias = [], excesos = [];
       let modelo = null;
       for (let n = -21; n < 0; n++) {
         const x = new Date(hoy); x.setDate(x.getDate() + n);
         const i = iso(x);
         if (x.getDay() === 0 || x.getDay() === 6 || x.getFullYear() !== a || marcas.nolab[i]) continue;
         const reg = (apuntes[i] || []).reduce((s, y) => s + y.horas, 0);
+        if (reg > 7) {
+          const ap = apuntes[i];
+          excesos.push({ iso: i, mes: x.getMonth() + 1, dia: `${["Domingo", ...DIAS][x.getDay()]} ${i.slice(8)}/${i.slice(5, 7)}`,
+                         reg, obj: 7, sobra: reg - 7, sobra_txt: fmt(reg - 7), texto: `${fmt(reg)} de 7h`, nolab: false, motivo: "",
+                         duplicado: new Set(ap.map((y) => y.wp_id + y.actividad)).size < ap.length,
+                         apuntes: ap.map((y) => ({ tarea: y.tarea, horas_txt: fmt(y.horas), actividad: y.actividad })) });
+        }
         if (reg >= 7) { modelo = i; continue; }
         dias.push({ iso: i, mes: x.getMonth() + 1, dia: `${["Domingo", ...DIAS][x.getDay()]} ${i.slice(8)}/${i.slice(5, 7)}`,
                     reg, obj: 7, falta: 7 - reg, texto: `${fmt(reg)} de 7h`, falta_txt: fmt(7 - reg),
@@ -276,17 +305,23 @@
       });
       return espera({ anio: a, titulo: `Por completar · ${a}`, dias, n: dias.length,
                       falta: fmt(dias.reduce((s, y) => s + y.falta, 0)), modelo, meses, frac: 0.86,
+                      excesos, n_excesos: excesos.length, sobra: fmt(excesos.reduce((s, y) => s + y.sobra, 0)),
                       anterior: a > hoy.getFullYear() - 3, siguiente: a < hoy.getFullYear() });
     },
-    completar_dias: (dias, wp, actividad, comentario) => {
-      const t = tareas.find((x) => x.id === Number(wp));
+    completar_dias: (dias, wp, actividad, comentario, reparto) => {
+      const partes = reparto && reparto.length ? reparto : [{ wp_id: wp, actividad, peso: 1 }];
       let creados = 0, saltados = 0, horas = 0;
       for (const i of dias) {
         const falta = 7 - (apuntes[i] || []).reduce((s, y) => s + y.horas, 0);
         if (falta <= 0) { saltados++; continue; }
-        (apuntes[i] = apuntes[i] || []).push({ id: siguiente++, horas: falta, tarea: t ? t.nombre : "Tarea", wp_id: String(wp),
-                                               actividad: actividad || "", comentario: comentario || "" });
-        creados++; horas += falta;
+        repartirHoras(falta, partes.map((p) => p.peso)).forEach((h, k) => {
+          if (h <= 0) return;
+          const t = tareas.find((x) => x.id === Number(partes[k].wp_id));
+          (apuntes[i] = apuntes[i] || []).push({ id: siguiente++, horas: h, tarea: t ? t.nombre : "Tarea", wp_id: String(partes[k].wp_id),
+                                                 actividad: partes[k].actividad || "", comentario: comentario || "" });
+          horas += h;
+        });
+        creados++;
       }
       return espera({ creados, saltados, errores: 0, ultimo: "", fallidos: [], horas: fmt(horas),
                       puede_deshacer: !!creados, quedan: creados ? 1 : 0 });
@@ -502,7 +537,7 @@
         { wp_id: 12065, tarea: "[ASG] Proxmox + dockers en SisGes", actividad: "Formación",
           horas: 52, horas_txt: "52h", pct: 21, tipico: 2, tipico_txt: "2h" },
         { wp_id: 13001, tarea: "[ATE] Permisos", actividad: "Asuntos propios",
-          horas: 28, horas_txt: "28h", pct: 11, tipico: 7, tipico_txt: "7h" },
+          horas: 28, horas_txt: "28h", pct: 11, tipico: 7, tipico_txt: "7h", permiso: true },
         { wp_id: 14000, tarea: "[ASG] Migración de correo", actividad: "Soporte",
           horas: 21, horas_txt: "21h", pct: 9, tipico: 1.5, tipico_txt: "1,5h" } ] } }),
     aviso_aplicaciones: () => espera(""),

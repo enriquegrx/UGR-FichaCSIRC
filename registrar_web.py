@@ -169,6 +169,23 @@ def _dia_corto(iso):
         return str(iso)
 
 
+def repartir(falta, pesos):
+    """Reparte 'falta' horas segun 'pesos' (p. ej. [70, 30]) a cuartos de
+    hora; lo que deje el redondeo va a la ultima, para que sume justo lo que
+    falta. 7h a 70/30 -> [5, 2]."""
+    total = sum(pesos)
+    out, resto = [], round(falta, 2)
+    for i, p in enumerate(pesos):
+        if i == len(pesos) - 1:
+            h = resto
+        else:
+            h = min(resto, int(falta * p / total * 4 + 0.5) / 4)
+        h = round(max(h, 0.0), 2)
+        out.append(h)
+        resto = round(resto - h, 2)
+    return out
+
+
 def objetivo_dia(d, apuntes, acts_permiso=None):
     """Objetivo del dia contando los permisos IMPUTADOS como actividad.
 
@@ -609,6 +626,8 @@ class Api:
             "inari_listo": destinos.configurado(),
             "asociaciones": self.asociaciones(),
             "toca_permisos_anio": core.toca_anadir_permisos_del_anio(),
+            # desde el aviso diario: "Abrir «Por completar»"
+            "abrir_pendientes": "--por-completar" in sys.argv[1:],
             "novedades_tras_actualizar": self._novedades_tras_actualizar(),
             "recuperada": self._recuperada(),
             "sugerir_pin": self._sugerir_pin(),
@@ -908,6 +927,10 @@ class Api:
             for a in apuntes:
                 por_dia.setdefault(a["fecha"], []).append(a)
             out["habituales"] = self._habituales(apuntes, ant.replace(day=1))
+            # las de una actividad de permiso no se proponen para rellenar huecos
+            acts = actividades_de_permiso()
+            for f in out["habituales"]["filas"]:
+                f["permiso"] = f["actividad"].strip().lower() in acts
             for anio, mes, hasta, siempre in ((hoy.year, hoy.month, hoy, True),
                                               (ant.year, ant.month, ant, False)):
                 reg, obj = self._estado_mes(anio, mes, por_dia, hasta)
@@ -1941,7 +1964,7 @@ class Api:
         hasta = min(dt.date(anio, 12, 31), hoy - dt.timedelta(days=1))
         base = {"anio": anio, "titulo": f"Por completar · {anio}", "dias": [], "n": 0, "falta": "0h",
                 "modelo": None, "anterior": anio > hoy.year - self.ANIOS_ATRAS_PENDIENTES,
-                "siguiente": anio < hoy.year, "frac": 0.0,
+                "siguiente": anio < hoy.year, "frac": 0.0, "excesos": [], "n_excesos": 0, "sobra": "0h",
                 "meses": self._fichas_meses(anio, hasta, {}, {}, {}, {})}
         if hasta < desde:
             return base
@@ -1954,7 +1977,7 @@ class Api:
             por_dia.setdefault(a["fecha"], []).append(a)
         acts = actividades_de_permiso()
         con_inari = destinos.configurado()
-        dias, total, modelo = [], 0.0, None
+        dias, total, modelo, excesos = [], 0.0, None, []
         obj_mes, cub_mes = collections.Counter(), collections.Counter()
         n_mes, falta_mes = collections.Counter(), collections.Counter()
         d = desde
@@ -1979,13 +2002,31 @@ class Api:
                                  "texto": f"{_horas(reg)} de {_horas(obj)}", "falta_txt": _horas(falta),
                                  "vacio": not ap, "guardia": core.es_guardia(iso),
                                  "teletrabajo": core.es_teletrabajo(iso)})
-                elif obj and ap:
+                elif obj and ap and reg <= obj + 0.001:
                     modelo = iso
+                # te pasas: mas horas que la jornada (o horas en un dia no
+                # laborable que no es de guardia): a menudo, un apunte repetido
+                if ap and reg > obj + 0.001 and (obj or not core.es_guardia(iso)):
+                    excesos.append(self._exceso(d, ap, reg, obj))
             d += dt.timedelta(days=1)
         obj_t = sum(obj_mes.values())
         return {**base, "dias": dias, "n": len(dias), "falta": _horas(total), "modelo": modelo,
+                "excesos": excesos, "n_excesos": len(excesos),
+                "sobra": _horas(sum(x["sobra"] for x in excesos)),
                 "frac": round(sum(cub_mes.values()) / obj_t, 3) if obj_t else 1.0,
                 "meses": self._fichas_meses(anio, hasta, obj_mes, cub_mes, n_mes, falta_mes)}
+
+    @staticmethod
+    def _exceso(d, ap, reg, obj):
+        iso = d.isoformat()
+        veces = collections.Counter((str(a.get("wp_id")), a.get("actividad") or "") for a in ap)
+        return {"iso": iso, "mes": d.month, "dia": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
+                "reg": round(reg, 2), "obj": round(obj, 2), "sobra": round(reg - obj, 2),
+                "sobra_txt": _horas(reg - obj), "texto": f"{_horas(reg)} de {_horas(obj)}",
+                "nolab": not obj, "motivo": (core.motivo_no_laborable(iso) or "permiso") if not obj else "",
+                "duplicado": any(n > 1 for n in veces.values()),
+                "apuntes": [{"tarea": a.get("wp_titulo", ""), "horas_txt": _horas(a["horas"]),
+                             "actividad": a.get("actividad") or ""} for a in ap]}
 
     def _fichas_meses(self, anio, hasta, obj_mes, cub_mes, n_mes, falta_mes):
         """Una ficha por mes: 'pendiente' (con dias por completar), 'completo',
@@ -2006,17 +2047,24 @@ class Api:
                         "frac": round(cub_mes.get(m, 0.0) / obj, 3) if obj else (0.0 if estado == "futuro" else 1.0)})
         return out
 
-    def completar_dias(self, dias_iso, wp_id, actividad="", comentario=""):
-        """Completa cada dia con UNA tarea: a cada uno, justo lo que le falta
-        (no unas horas fijas). Lo que falta se calcula ahora, con lo que haya
-        en ProyectosTIC (no con lo que se pinto hace un rato). Todo va en una
-        sola accion de Deshacer."""
+    def completar_dias(self, dias_iso, wp_id, actividad="", comentario="", reparto=None):
+        """Completa cada dia con lo que le falta: con UNA tarea, o repartido
+        entre varias (reparto = [{wp_id, actividad, peso}], p. ej. 70/30), a
+        cuartos de hora y sumando justo lo que falta. Lo que falta se calcula
+        ahora, con lo que haya en ProyectosTIC (no con lo que se pinto hace un
+        rato). Todo va en una sola accion de Deshacer."""
         dias = sorted({str(i) for i in dias_iso or []})
         if not dias:
             return {"error": "Marca al menos un día."}
-        try:
-            wp = int(wp_id)
-        except (TypeError, ValueError):
+        partes = []
+        for p in (reparto or [{"wp_id": wp_id, "actividad": actividad, "peso": 1}]):
+            try:
+                wp, peso = int(p.get("wp_id")), float(p.get("peso") or 0)
+            except (TypeError, ValueError, AttributeError):
+                return {"error": "Elige la tarea con la que completar."}
+            if peso > 0:
+                partes.append((wp, p.get("actividad") or "", peso))
+        if not partes:
             return {"error": "Elige la tarea con la que completar."}
         try:
             apuntes = core.entradas_rango(dias[0], dias[-1])
@@ -2029,7 +2077,7 @@ class Api:
         con_inari = destinos.configurado()
         comentario = (comentario or "").strip()
         guardia_auto = comentario == core.comentario_guardia()
-        creados = saltados = errores = 0
+        creados = saltados = errores = n_apuntes = 0
         ultimo, horas, fallidos, hechos, deshacer = "", 0.0, [], [], []
         for iso in dias:
             d = dt.date.fromisoformat(iso)
@@ -2039,7 +2087,7 @@ class Api:
                 continue
             self._cache[iso] = [dict(a, destino="op") for a in ap]
             # con una actividad de permiso, el objetivo es el de la jornada oficial
-            obj = objetivo_dia(d, ap + [{"actividad": actividad}], acts)
+            obj = objetivo_dia(d, ap + [{"actividad": act} for _wp, act, _p in partes], acts)
             falta = round(obj - sum(a["horas"] for a in ap), 2)
             if falta <= 0.001:
                 saltados += 1
@@ -2048,24 +2096,73 @@ class Api:
                 com = comentario or core.comentario_guardia()
             else:
                 com = "" if guardia_auto else comentario
-            try:
-                nuevo = core.crear_entrada(iso, wp, falta, com, actividad or None)
-                if nuevo:
-                    deshacer.append({"tipo": "borrar", "id": nuevo})
+            hecho = False
+            for (wp, act, _p), h in zip(partes, repartir(falta, [p for _w, _a, p in partes])):
+                if h <= 0.001:
+                    continue
+                try:
+                    nuevo = core.crear_entrada(iso, wp, h, com, act or None)
+                    if nuevo:
+                        deshacer.append({"tipo": "borrar", "id": nuevo})
+                    n_apuntes += 1
+                    horas += h
+                    hecho = True
+                except Exception as e:
+                    errores += 1
+                    ultimo = str(e)
+                    if _dia_corto(iso) not in fallidos:
+                        fallidos.append(_dia_corto(iso))
+            if hecho:
                 creados += 1
-                horas += falta
                 hechos.append(iso)
-            except Exception as e:
-                errores += 1
-                ultimo = str(e)
-                fallidos.append(_dia_corto(iso))
         if creados:
-            self._recordar(wp, comentario, actividad)
-        self._apilar(f"completar {creados} días ({_horas(horas)})" if creados > 1
-                     else f"completar el {_dia_corto((hechos or dias)[0])}", deshacer)
-        return {"creados": creados, "saltados": saltados, "errores": errores, "ultimo": ultimo,
-                "fallidos": fallidos, "horas": _horas(horas),
+            for wp, act, _p in partes:
+                self._recordar(wp, comentario, act)
+        texto = (f"completar {creados} días ({_horas(horas)})" if creados > 1
+                 else f"completar el {_dia_corto((hechos or dias)[0])}")
+        if len(partes) > 1:
+            texto += f" entre {len(partes)} tareas"
+        self._apilar(texto, deshacer)
+        return {"creados": creados, "apuntes": n_apuntes, "saltados": saltados, "errores": errores,
+                "ultimo": ultimo, "fallidos": fallidos, "horas": _horas(horas),
                 "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
+
+    # ---- buscar en los apuntes del año ----
+    MAX_BUSQUEDA = 300
+
+    def buscar_apuntes(self, texto, anio=None, hoy=None):
+        """Los apuntes del año cuyo comentario, tarea, actividad o fecha
+        (dd/mm) contienen TODAS las palabras buscadas (sin tildes ni
+        mayusculas). Los mas recientes primero. Una consulta por rango."""
+        hoy = hoy or dt.date.today()
+        palabras = _sin_tildes(texto or "").split()
+        try:
+            anio = int(anio or hoy.year)
+        except (TypeError, ValueError):
+            anio = hoy.year
+        base = {"anio": anio, "resultados": [], "n": 0, "total": "0h", "recortado": False}
+        if not palabras or len("".join(palabras)) < 2:
+            return base
+        desde, hasta = dt.date(anio, 1, 1), min(dt.date(anio, 12, 31), hoy)
+        if hasta < desde:
+            return base
+        try:
+            apuntes = core.entradas_rango(desde.isoformat(), hasta.isoformat())
+        except Exception as e:
+            return {**base, "error": diagnostico_conexion(e)["titulo"]}
+        out = []
+        for a in apuntes:
+            d = dt.date.fromisoformat(a["fecha"])
+            heno = _sin_tildes(f"{a.get('wp_titulo', '')} {a.get('wp_id') or ''} {a.get('actividad') or ''} "
+                               f"{a.get('comentario') or ''} {d.strftime('%d/%m')} {core.DIAS_ES[d.weekday()]}")
+            if all(p in heno for p in palabras):
+                out.append({"iso": a["fecha"], "dia": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
+                            "horas": a["horas"], "horas_txt": _horas(a["horas"]), "tarea": a.get("wp_titulo", ""),
+                            "actividad": a.get("actividad") or "", "comentario": a.get("comentario") or ""})
+        out.sort(key=lambda x: x["iso"], reverse=True)
+        total = sum(x["horas"] for x in out)
+        return {**base, "resultados": out[:self.MAX_BUSQUEDA], "n": len(out), "total": _horas(total),
+                "recortado": len(out) > self.MAX_BUSQUEDA}
 
     # ---- resumen del mes (una consulta por rango, no una por dia) ----
     def resumen_mes(self, anio, mes):
@@ -2700,8 +2797,22 @@ class Api:
             return
         def fichar_hoy():
             self._ventana.evaluate_js("navegar(0)")
-        self._bandeja = bandeja.Bandeja(self._ventana, al_fichar_hoy=fichar_hoy)
+
+        def por_completar():
+            self._ventana.evaluate_js("entrarPendientes()")
+        self._bandeja = bandeja.Bandeja(self._ventana, al_fichar_hoy=fichar_hoy,
+                                        al_por_completar=por_completar)
         self._bandeja.arrancar()
+
+    def bandeja_pendientes(self, n):
+        """El numero de "Por completar (n)" en el menu del icono."""
+        b = getattr(self, "_bandeja", None)
+        if b:
+            try:
+                b.poner_pendientes(int(n or 0))
+            except (TypeError, ValueError):
+                pass
+        return {"ok": True}
 
     # =============================================================== actualizaciones
 
@@ -2796,9 +2907,16 @@ class Api:
                 habituales = h["filas"][:3]
             except Exception:
                 habituales = []
+        # y los dias del año que siguen sin completar (para abrir ese panel)
+        por_completar = 0
+        if dias:
+            try:
+                por_completar = self.por_completar().get("n", 0)
+            except Exception:
+                por_completar = 0
         return {"texto": getattr(self, "_aviso", ""), "minutos": 10, "dias": dias,
                 "habituales": habituales, "pin": _pin_guardado() is not None,
-                "tema": self.tema()}
+                "tema": self.tema(), "por_completar": por_completar}
 
     def aviso_fichar(self, iso, wp_id, horas, actividad):
         """Desde el aviso: un apunte en ese dia. Devuelve lo que sigue faltando
@@ -2830,12 +2948,13 @@ class Api:
         self._aviso = recordatorio.mensaje_pendientes(pend) if pend else ""
         return {"ok": True, **self.aviso_datos()}
 
-    def aviso_responder(self, abrir):
+    def aviso_responder(self, abrir, destino=""):
         if abrir:
+            extra = ["--por-completar"] if destino == "pendientes" else []
             if getattr(sys, "frozen", False):
-                subprocess.Popen([sys.executable])
+                subprocess.Popen([sys.executable, *extra])
             else:
-                subprocess.Popen([sys.executable, os.path.abspath(__file__)])
+                subprocess.Popen([sys.executable, os.path.abspath(__file__), *extra])
         return self.cerrar()
 
     # =============================================================== Mac: Aplicaciones

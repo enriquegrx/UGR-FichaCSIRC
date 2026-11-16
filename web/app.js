@@ -95,6 +95,13 @@ async function avisarSemanaAnterior() {
       st.lunes = r.lunes;
       cargarSemana({ marcar: r.dias });
     } }),
+    // a "Por completar", con esos dias ya marcados
+    el("button", { class: "enlace", text: "Completar ahora", onclick: () => {
+      a.hidden = true;
+      const meses = new Set(r.dias.map((i) => i.slice(0, 7)));
+      entrarPendientes({ anio: Number(r.dias[0].slice(0, 4)), marcar: r.dias,
+                         filtro: meses.size === 1 ? Number(r.dias[0].slice(5, 7)) : "anio" });
+    } }),
     el("button", { class: "cerrar-aviso", text: "×", title: "No volver a avisar de esa semana",
                    "aria-label": "Cerrar", onclick: () => { a.hidden = true; llamar("aviso_semana_visto", r.lunes).catch(() => {}); } }));
   a.hidden = false;
@@ -140,6 +147,11 @@ async function avisarCierreMes() {
   if (r.dias.length > max) enlaces.push(el("span", { text: `y ${r.dias.length - max} más` }));
   a.replaceChildren(
     el("span", { class: "aviso-semana-texto", text: `📅 ${r.texto}` }),
+    // a "Por completar", en ese mes y con sus dias ya marcados
+    el("button", { class: "enlace", text: "Completar ahora", onclick: () => {
+      a.hidden = true;
+      entrarPendientes({ anio: r.anio, filtro: r.mes, marcar: r.dias.map((x) => x.iso) });
+    } }),
     el("button", { class: "cerrar-aviso", text: "×", title: "No volver a avisar hasta mañana", "aria-label": "Cerrar",
                    onclick: () => { a.hidden = true; llamar("aviso_mes_visto").catch(() => {}); } }),
     el("div", { class: "dias-mes" }, ...enlaces));
@@ -248,6 +260,8 @@ const MENUS = {
     { texto: "Resumen del mes", accion: () => entrarEstadisticas("mes") },
     { texto: "Estadísticas", accion: () => entrarEstadisticas() },
     { texto: "Días por completar", accion: () => entrarPendientes() },
+    "-",
+    { texto: "Buscar en mis apuntes…\tCtrl+F", accion: dlgBuscarApuntes },
   ],
   ver: () => [
     ...PANELES.map(([id, nombre]) => ({
@@ -391,6 +405,8 @@ async function arrancar() {
   avisarCierreMes();
   refrescarFranja();
   refrescarPendientes(0);
+  // "Abrir «Por completar»" desde el aviso diario
+  if (ini.abrir_pendientes) entrarPendientes();
   if (st.tareas.size) elegirTarea();
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
   // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
@@ -1073,17 +1089,26 @@ function entrarEstadisticas(periodo = "anio") {
 
 // La pestaña "Por completar": en el mismo sitio que Estadisticas (las flechas
 // cambian de año; "Hoy", a la semana de hoy).
-function entrarPendientes() {
-  if (st.estad?.tipo === "pend") return;
+// opciones (desde un aviso): {anio, filtro (mes o "anio"), marcar: [iso]}
+function entrarPendientes(opciones = null) {
+  if (st.estad?.tipo === "pend" && !opciones) return;
   if (st.estad) salirEstadisticas();
   document.body.classList.add("modo-estad");
   $("estadisticas").hidden = false;
   st.estad = { tipo: "pend", ...montarPendientes($("estadisticas"), {
+    ...(opciones || {}),
     alTitulo: (t) => { $("titulo-semana").textContent = t; },
-    alIrADia: (iso) => { salirEstadisticas(); pintarSelectorVista(); irADia(iso); },
+    alIrADia: irADiaSaliendo,
     alDatos: ponerContadorPendientes,
   }) };
   pintarSelectorVista();
+}
+
+// A la semana de ese dia, con el dia marcado (saliendo de Estadisticas o de
+// Por completar si se estaba en ellos).
+function irADiaSaliendo(iso) {
+  if (st.estad) { salirEstadisticas(); pintarSelectorVista(); }
+  irADia(iso);
 }
 
 // El numero del boton 🧩: los dias por completar de este año. Tras cada
@@ -1107,6 +1132,8 @@ function ponerContadorPendientes(r) {
   b.title = r.n ? `${r.n} ${r.n === 1 ? "día" : "días"} de ${r.anio} sin completar (faltan ${r.falta}): `
                   + "márcalos y rellénalos de una vez"
                 : `Todo completo en ${r.anio} hasta ayer`;
+  // y en el menu del icono de la bandeja: "Por completar (n)"
+  try { api().bandeja_pendientes(r.n)?.catch?.(() => {}); } catch (_e) { /* sin bandeja (demo) */ }
 }
 
 function salirEstadisticas() {
@@ -1649,6 +1676,7 @@ document.addEventListener("keydown", (e) => {
     return;                                   // con un dialogo abierto, nada mas
   }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); dlgBuscarApuntes(); return; }
   if (e.altKey && /^[1-5]$/.test(e.key) && st.vista === "semana") {
     e.preventDefault();
     const d = st.dias[Number(e.key) - 1];

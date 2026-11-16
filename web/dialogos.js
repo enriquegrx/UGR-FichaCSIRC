@@ -338,7 +338,8 @@ const LOCAL_COMO = { guardia: " como día de guardia" };
 const LOCAL_NOMBRE = { permiso: "permiso por horas", guardia: "día de guardia" };
 const LOCAL_PLURAL = { permiso: "los permisos", baja: "las bajas", vacaciones: "las vacaciones",
                        guardia: "las guardias", teletrabajo: "los días de teletrabajo" };
-async function confirmarLocal(d, motivo) {
+// alImputar(tarea): que hacer con "Imputar en esa tarea" (por defecto, Editar dia).
+async function confirmarLocal(d, motivo, { alImputar = null } = {}) {
   if ((st.ini?.avisos_local_no || []).includes(motivo)) return "local";
   let tarea = null;
   if (CON_TAREA.includes(motivo)) {
@@ -370,7 +371,8 @@ async function confirmarLocal(d, motivo) {
       botones.unshift({ texto: "Imputar en esa tarea", clase: "primario", izquierda: true, accion: async () => {
         await recordar();
         salir("imputar");
-        dlgEditarDia(d, { tarea, horas: d.falta > 0.001 ? d.falta : d.obj });
+        if (alImputar) alImputar(tarea);
+        else dlgEditarDia(d, { tarea, horas: d.falta > 0.001 ? d.falta : d.obj });
       } });
     }
     const dlg = dialogo({ titulo: `${que} ${d.nombre.toLowerCase()} ${d.fecha}${como} (solo en este equipo)`,
@@ -514,12 +516,16 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
 const MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
                       "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
-function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDatos = () => {} } = {}) {
+function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDatos = () => {},
+                                  anio: anioIni = null, filtro: filtroIni = null, marcar: marcarIni = [] } = {}) {
   // filtro: "anio" (la lista entera) o el numero del mes de la ficha elegida;
-  // null = elegirlo al cargar (el mes mas reciente con huecos, o el año si son pocos)
-  let anio = Number(hoyIso().slice(0, 4)), seq = 0, datos = null, ancla = null, filtro = null;
+  // null = elegirlo al cargar (el mes mas reciente con huecos, o el año si son pocos).
+  // Desde un aviso llega ya con su año, su mes y sus dias marcados.
+  let anio = anioIni || Number(hoyIso().slice(0, 4)), seq = 0, datos = null, ancla = null, filtro = filtroIni;
+  // modo: "faltan" (por completar) o "sobran" (dias en que te pasas)
+  let modo = "faltan";
   const POCOS = 8;
-  const marcados = new Set();
+  const marcados = new Set(marcarIni);
   const fichas = el("div", { class: "pend-fichas", role: "tablist", "aria-label": "Meses" });
   const cuerpo = el("div", { class: "pend" });
   const cifras = el("span", { class: "pend-cifras" });
@@ -539,12 +545,23 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
   ];
   const barra = el("div", { class: "pend-barra" },
     el("label", { class: "check" }, todos, " Todos"), nMarcados, el("span", { class: "pend-hueco" }), ...acciones);
+  const bFaltan = el("button", { onclick: () => ponerModo("faltan") });
+  const bSobran = el("button", { title: "Días con más horas que su jornada: a veces, un apunte repetido",
+                                 onclick: () => ponerModo("sobran") });
   cont.replaceChildren(
     el("div", { class: "cabeza-seccion" },
       el("div", { class: "fila pend-cabeza" },
-        el("h2", { text: "🧩 Por completar" }), cifras, el("span", { class: "pend-hueco" }), bDeshacer)),
+        el("h2", { text: "🧩 Por completar" }),
+        el("div", { class: "pills-periodo pend-modo", role: "group", "aria-label": "Qué ver" }, bFaltan, bSobran),
+        cifras, el("span", { class: "pend-hueco" }), bDeshacer)),
     fichas, barra, cuerpo);
   pintarDeshacerPend();
+
+  function ponerModo(m) {
+    modo = m;
+    ancla = null;
+    pintar();
+  }
 
   const visibles = () => (datos?.dias || []).filter((x) => filtro === "anio" || x.mes === filtro);
 
@@ -653,6 +670,13 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
 
   function pintar() {
     const r = datos;
+    bFaltan.textContent = `Faltan (${r.n})`;
+    bSobran.textContent = `Te pasas (${r.n_excesos || 0})`;
+    for (const [b, m] of [[bFaltan, "faltan"], [bSobran, "sobran"]]) {
+      b.classList.toggle("activo", modo === m);
+      b.setAttribute("aria-pressed", String(modo === m));
+    }
+    if (modo === "sobran") { pintarExcesos(); return; }
     cifras.textContent = r.n ? `${r.n} ${r.n === 1 ? "día" : "días"} · faltan ${r.falta}` : "";
     barra.hidden = !r.n;
     pintarFichas();
@@ -688,7 +712,9 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
             ancla = x.iso;
           });
           const pct = x.obj ? Math.round((100 * x.reg) / x.obj) : 0;
-          return el("label", { class: `pend-dia${x.vacio ? " vacio" : ""}` }, c,
+          // boton derecho (o ⋯): marcarlo como vacaciones, festivo, permiso...
+          return el("label", { class: `pend-dia${x.vacio ? " vacio" : ""}`,
+                               oncontextmenu: (e) => { e.preventDefault(); menuDiaPend(e.clientX, e.clientY, x); } }, c,
             el("b", { class: "pend-fecha", text: x.dia }),
             el("span", { class: "pend-mini", title: x.texto }, el("i", { style: `--w:${pct}%` })),
             el("span", { class: "pend-texto", text: x.vacio ? `sin apuntes · ${x.texto}` : x.texto }),
@@ -697,14 +723,90 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
               x.guardia ? el("span", { class: "chip-marca guardia", text: "Guardia" }) : null,
               x.teletrabajo ? el("span", { class: "chip-marca tele", text: "Teletrabajo" }) : null),
             el("button", { class: "enlace pend-ir", text: "Ir al día →", title: "Abrir su semana con el día marcado",
-                           onclick: (e) => { e.preventDefault(); e.stopPropagation(); alIrADia(x.iso); } }));
+                           onclick: (e) => { e.preventDefault(); e.stopPropagation(); alIrADia(x.iso); } }),
+            el("button", { class: "pend-mas", text: "⋯", title: "Marcarlo como vacaciones, festivo, baja o permiso",
+                           "aria-label": `Más opciones del ${x.dia}`,
+                           onclick: (e) => {
+                             e.preventDefault(); e.stopPropagation();
+                             const b = e.currentTarget.getBoundingClientRect();
+                             menuDiaPend(b.left, b.bottom + 2, x);
+                           } }));
         }));
     });
     cuerpo.replaceChildren(
       nota("Días laborables con menos horas que su jornada, hasta ayer (hoy se completa en su ficha). "
-           + "Festivos, vacaciones y permisos no salen."),
+           + "Festivos, vacaciones y permisos no salen. ¿Estabas de vacaciones o era festivo? "
+           + "Botón derecho (o ⋯) sobre el día para marcarlo."),
       ...meses);
     pintarMarcas();
+  }
+
+  // Un hueco que no es olvido: vacaciones, festivo, baja o permiso sin
+  // marcar. Se marca (solo en este equipo, como en las fichas) y sale de la
+  // lista sin imputar nada; o, si hay tarea de ausencias, se completa con ella.
+  function menuDiaPend(px, py, x) {
+    const [nombre, fecha] = x.dia.split(" ");
+    const d = { iso: x.iso, nombre, fecha, falta: x.falta, obj: x.obj };
+    const imputar = async (tarea) => {
+      estado("Completando…");
+      const r = await llamar("completar_dias", [x.iso], tarea.id, tarea.actividad || "", "");
+      await informarLote(r, { hecho: () => `${x.dia}: ${r.horas} en «${corto(tarea.nombre, 40)}».`,
+                              nada: "No se añadió nada: ese día ya estaba completo." });
+      cargar();
+    };
+    const marca = (motivo) => async () => {
+      if ((await confirmarLocal(d, motivo, { alImputar: imputar })) !== "local") return;
+      await llamar("accion_dia", x.iso, "no_laborable", motivo);
+      estado(`${x.dia} marcado como ${motivo} (solo en este equipo): ya no sale en la lista.`);
+      cargar();
+    };
+    mostrarMenu(px, py, [
+      { titulo: `${x.dia} · faltan ${x.falta_txt}` },
+      ...["vacaciones", "festivo", "apertura de curso", "baja"].map((m) => ({ texto: `Marcar como ${m} (local)`, accion: marca(m) })),
+      "-",
+      { texto: "Añadir permiso por horas… (local)", accion: async () => {
+        if ((await confirmarLocal(d, "permiso", { alImputar: imputar })) === "local") dlgPermisoDia(d, { alGuardar: cargar });
+      } },
+      "-",
+      { texto: "Ir al día →", accion: () => alIrADia(x.iso) },
+    ]);
+  }
+
+  // "Te pasas": los dias con mas horas que su jornada (o con horas en un dia
+  // no laborable que no es de guardia). A veces es un apunte repetido o con
+  // las horas mal puestas: cada uno lleva a su dia para revisarlo.
+  function pintarExcesos() {
+    const r = datos;
+    fichas.hidden = true;
+    barra.hidden = true;
+    cifras.textContent = r.n_excesos ? `${r.n_excesos} ${r.n_excesos === 1 ? "día" : "días"} · sobran ${r.sobra}` : "";
+    if (!r.n_excesos) {
+      cuerpo.replaceChildren(el("div", { class: "pend-vacio" },
+        el("b", { text: "✔ Ningún día de más" }), el("span", { text: ` en ${r.anio}${r.siguiente ? "" : " hasta ayer"}.` })));
+      return;
+    }
+    const porMes = new Map();
+    for (const x of r.excesos) { if (!porMes.has(x.mes)) porMes.set(x.mes, []); porMes.get(x.mes).push(x); }
+    cuerpo.replaceChildren(
+      nota("Días con más horas que su jornada (o con horas en un día no laborable que no es de guardia), hasta ayer. "
+           + "Si no es una jornada larga de verdad, puede ser un apunte repetido o con las horas mal puestas."),
+      ...[...porMes].map(([mes, del]) => el("section", { class: "pend-mes" },
+        el("div", { class: "pend-mes-cab" }, el("b", { text: MESES_LARGOS[mes - 1] }),
+          el("span", { class: "tenue", text: `${del.length} ${del.length === 1 ? "día" : "días"} · sobran ${fmtHoras(del.reduce((s, x) => s + x.sobra, 0))}h` })),
+        ...del.map((x) => {
+          const detalle = x.apuntes.map((a) => `${a.horas_txt} ${a.tarea}`).join(" · ");
+          return el("div", { class: "pend-dia exceso" }, el("span"),
+            el("b", { class: "pend-fecha", text: x.dia }),
+            el("span", { class: "pend-mini", title: x.texto }, el("i", { style: "--w:100%" })),
+            el("span", { class: "pend-texto", title: detalle, text: `${x.texto} · ${detalle}` }),
+            el("span", { class: "pend-falta sobra", text: `+${x.sobra_txt}` }),
+            el("span", { class: "pend-marcas" },
+              x.duplicado ? el("span", { class: "chip-marca repetido", text: "¿Repetido?",
+                                         title: "La misma tarea y actividad dos veces ese día" }) : null,
+              x.nolab ? el("span", { class: "chip-marca tele", text: x.motivo }) : null),
+            el("button", { class: "enlace pend-ir", text: "Ir al día →", title: "Abrir su semana para revisarlo",
+                           onclick: () => alIrADia(x.iso) }));
+        }))));
   }
 
   // Lo que se haga, sobre los marcados (de cualquier mes); luego, la lista
@@ -736,15 +838,31 @@ const listaDias = (dias, horas = true, max = 8) =>
   dias.slice(0, max).map((x) => `  · ${x.dia}${horas ? `  +${x.falta_txt}` : ""}`).join("\n")
   + (dias.length > max ? `\n  … y ${dias.length - max} más` : "");
 
-// Completar lo que falta: UNA tarea (de las habituales o cualquier otra) y a
-// cada dia, justo lo que le falta. El resumen se ve antes de pulsar.
+// Reparte 'falta' horas segun 'pesos' a cuartos de hora; lo que deje el
+// redondeo, a la ultima (igual que repartir() de Python y Rust).
+function repartirHoras(falta, pesos) {
+  const total = pesos.reduce((s, p) => s + p, 0);
+  const r2 = (x) => Math.round(x * 100) / 100;
+  let resto = r2(falta);
+  return pesos.map((p, i) => {
+    let h = i === pesos.length - 1 ? resto : Math.min(resto, Math.floor((falta * p) / total * 4 + 0.5) / 4);
+    h = r2(Math.max(h, 0));
+    resto = r2(resto - h);
+    return h;
+  });
+}
+
+// Completar lo que falta: UNA tarea (de las habituales o cualquier otra) o
+// REPARTIDO entre varias (p. ej. 70% Mantenimientos, 30% Proxmox; se propone
+// el reparto de tus habituales). A cada dia, justo lo que le falta. El
+// resumen se ve antes de pulsar.
 function dlgCompletarPend(dias) {
   const total = fmtHoras(dias.reduce((s, x) => s + x.falta, 0));
   const isos = dias.map((x) => x.iso);
   const habituales = (st.habituales?.filas || []).slice(0, 5);
   return new Promise((resolver) => {
     let elegida = habituales[0] ? { wp_id: habituales[0].wp_id, tarea: habituales[0].tarea, actividad: habituales[0].actividad } : null;
-    let comAuto = "", seqAct = 0;
+    let comAuto = "", seqAct = 0, modo = "una";
     const act = el("select");
     const com = entrada("", { class: "ancho", placeholder: "Opcional" });
     const resumen = el("div", { class: "pend-resumen" });
@@ -768,9 +886,59 @@ function dlgCompletarPend(dias) {
       elegir({ wp_id: t.id, tarea: t.nombre, actividad: "" });
     } });
     otra.addEventListener("focus", () => { opOtra.querySelector("input").checked = true; });
+    const unaTarea = el("div", {}, el("h4", { class: "pend-sub", text: "Tarea" }), opciones, rejilla(["Actividad", act]));
+
+    // ---- repartido: un % por tarea (las habituales, con el reparto que sueles hacer)
+    const filas = [];
+    const tabla = el("div", { class: "pend-reparto" });
+    const sumaPct = el("span", { class: "pend-suma" });
+    // el reparto que sueles hacer, sin las de permiso (no rellenan huecos)
+    const conPct = habituales.filter((h) => !h.permiso).slice(0, 3);
+    const sumaHab = conPct.reduce((s, h) => s + (h.pct || 0), 0);
+    const ponerFila = (t, pct) => {
+      const p = entrada(String(pct), { class: "horas", type: "number", min: "0", max: "100", step: "5",
+                                       "aria-label": `Porcentaje de ${t.tarea}` });
+      const f = { t, p, nodo: null };
+      f.nodo = el("div", { class: "pend-reparto-fila" },
+        el("span", { class: "pend-reparto-tarea", title: t.tarea, text: `${t.tarea}${t.actividad ? ` · ${t.actividad}` : ""}` }),
+        el("span", { class: "fila" }, p, " %"), el("span", { class: "pend-reparto-h tenue" }));
+      p.addEventListener("input", pintarResumen);
+      filas.push(f);
+      tabla.append(f.nodo);
+    };
+    habituales.forEach((h) => ponerFila({ wp_id: h.wp_id, tarea: h.tarea, actividad: h.actividad },
+      conPct.includes(h) && sumaHab ? Math.round((100 * (h.pct || 0)) / sumaHab / 5) * 5 : 0));
+    // que el reparto propuesto sume 100 (el redondeo a 5 lo puede descuadrar)
+    const primera = filas[habituales.indexOf(conPct[0])];
+    if (primera && sumaHab) {
+      const s = filas.reduce((a, f) => a + Number(f.p.value), 0);
+      primera.p.value = String(Number(primera.p.value) + 100 - s);
+    }
+    const otraR = entrada("", { class: "ancho", placeholder: "＋ Añadir otra tarea al reparto…" });
+    buscadorTarea(otraR, { alElegir: async (t) => {
+      otraR.value = "";
+      const r = await llamar("actividades", t.id).catch(() => null);
+      ponerFila({ wp_id: t.id, tarea: t.nombre, actividad: r?.preferida || r?.nombres?.[0] || "" }, 0);
+      filas[filas.length - 1].p.focus();
+      pintarResumen();
+    } });
+    const repartida = el("div", { hidden: true },
+      el("h4", { class: "pend-sub", text: "Reparto (propuesto con lo que sueles hacer)" }), tabla,
+      el("div", { class: "fila pend-reparto-pie" }, otraR, sumaPct));
+
+    const modoUna = el("input", { type: "radio", name: "pend-modo", checked: true });
+    const modoRep = el("input", { type: "radio", name: "pend-modo" });
+    const cambiarModo = () => {
+      modo = modoRep.checked ? "reparto" : "una";
+      unaTarea.hidden = modo !== "una";
+      repartida.hidden = modo !== "reparto";
+      pintarResumen();
+    };
+    modoUna.addEventListener("change", cambiarModo);
+    modoRep.addEventListener("change", cambiarModo);
 
     let fin = () => {};
-    const d = dialogo({ titulo: "Completar lo que falta", ancho: 640, botones: [
+    const d = dialogo({ titulo: "Completar lo que falta", ancho: 680, botones: [
       { texto: "Cancelar", accion: () => fin(false) },
       { texto: `Completar ${dias.length} ${dias.length === 1 ? "día" : "días"}`, clase: "primario", id: "ok", accion: completar }] });
     const cerrarDialogo = d.cerrar;
@@ -784,9 +952,12 @@ function dlgCompletarPend(dias) {
     };
     d.cerrar = () => fin(false);
     d.cuerpo.append(
-      nota(`A cada uno de los ${dias.length} días marcados se le añade justo lo que le falta, de la tarea que elijas.`),
-      el("h4", { class: "pend-sub", text: "Tarea" }), opciones,
-      rejilla(["Actividad", act], ["Comentario", com]),
+      nota(`A cada uno de los ${dias.length} días marcados se le añade justo lo que le falta.`),
+      el("div", { class: "pend-modos", role: "radiogroup", "aria-label": "Cómo completar" },
+        el("label", { class: "check" }, modoUna, " Con una tarea"),
+        el("label", { class: "check" }, modoRep, " Repartido entre varias tareas")),
+      unaTarea, repartida,
+      rejilla(["Comentario", com]),
       resumen);
     if (habituales.length) opciones.querySelector("input").checked = true;
     act.addEventListener("change", pintarResumen);
@@ -807,7 +978,33 @@ function dlgCompletarPend(dias) {
       pintarResumen();
     }
 
+    const reparto = () => filas.map((f) => ({ ...f.t, peso: Math.max(0, Number(f.p.value) || 0), fila: f }))
+      .filter((f) => f.peso > 0);
+
     function pintarResumen() {
+      if (modo === "reparto") {
+        const rep = reparto();
+        const suma = filas.reduce((s, f) => s + Math.max(0, Number(f.p.value) || 0), 0);
+        sumaPct.textContent = `Suma: ${suma}%${suma && suma !== 100 ? " (se reparte en proporción)" : ""}`;
+        sumaPct.classList.toggle("ambar", !!suma && suma !== 100);
+        // horas de cada tarea, sumando el reparto de cada dia (a cuartos)
+        const horas = new Map();
+        for (const x of dias) {
+          repartirHoras(x.falta, rep.map((f) => f.peso)).forEach((h, i) => {
+            horas.set(i, (horas.get(i) || 0) + h);
+          });
+        }
+        for (const f of filas) f.nodo.querySelector(".pend-reparto-h").textContent = "";
+        rep.forEach((r, i) => { r.fila.nodo.querySelector(".pend-reparto-h").textContent = `${fmtHoras(horas.get(i) || 0)}h`; });
+        d.botones.ok.disabled = !rep.length;
+        resumen.replaceChildren(
+          el("p", {}, el("b", { text: `Se añadirán ${total}h en ${dias.length} ${dias.length === 1 ? "día" : "días"}` }),
+            rep.length ? `, repartidas entre ${rep.length} ${rep.length === 1 ? "tarea" : "tareas"} (a cuartos de hora).`
+                       : ": pon un % a alguna tarea."),
+          el("pre", { class: "pend-lista", text: listaDias(dias) }),
+          nota("Después, «Deshacer» lo quita todo de una vez."));
+        return;
+      }
       d.botones.ok.disabled = !elegida;
       resumen.replaceChildren(
         el("p", {}, el("b", { text: `Se añadirán ${total}h en ${dias.length} ${dias.length === 1 ? "día" : "días"}` }),
@@ -817,16 +1014,26 @@ function dlgCompletarPend(dias) {
     }
 
     async function completar() {
-      if (!elegida) { await avisar("Completar", "Elige la tarea con la que completar."); return; }
-      estado("Completando…");
-      const r = await llamar("completar_dias", isos, elegida.wp_id, act.value || "", com.value.trim());
+      let r, quien;
+      if (modo === "reparto") {
+        const rep = reparto();
+        if (!rep.length) { await avisar("Completar", "Pon un % a alguna tarea."); return; }
+        estado("Completando…");
+        r = await llamar("completar_dias", isos, "", "", com.value.trim(),
+                         rep.map((f) => ({ wp_id: f.wp_id, actividad: f.actividad || "", peso: f.peso })));
+        quien = `${rep.length} tareas`;
+      } else {
+        if (!elegida) { await avisar("Completar", "Elige la tarea con la que completar."); return; }
+        estado("Completando…");
+        r = await llamar("completar_dias", isos, elegida.wp_id, act.value || "", com.value.trim());
+        quien = `«${corto(elegida.tarea, 40)}»`;
+      }
       if (r.error) { await avisar("No se pudo", r.error); return; }
-      const tarea = elegida.tarea;
       if (r.fallidos?.length) {
         r.ultimo = `${r.ultimo}\n\nSin imputar: ${r.fallidos.join(", ")}. Si ese mes ya está cerrado en ProyectosTIC, no admite cambios.`;
       }
       await fin(true, () => informarLote(r, {
-        hecho: (n) => `Completados ${n} ${n === 1 ? "día" : "días"} con «${corto(tarea, 40)}»: ${r.horas}.`,
+        hecho: (n) => `Completados ${n} ${n === 1 ? "día" : "días"} con ${quien}: ${r.horas}.`,
         nada: "No se añadió nada: esos días ya estaban completos.",
         saltados: (n) => ` Saltados ${n} (ya completos o no laborables).` }));
     }
@@ -926,6 +1133,48 @@ function dlgCopiarPend(dias, datos) {
       await fin(true, () => dlgCopiarDia(isos, fecha.value));
     }
   });
+}
+
+// ================================================================ buscar en mis apuntes
+
+// Archivo > Buscar en mis apuntes (Ctrl+F): por comentario, tarea, actividad
+// o fecha (dd/mm), en el año elegido. Cada resultado lleva a su dia.
+function dlgBuscarApuntes() {
+  const actual = Number(hoyIso().slice(0, 4));
+  const caja = entrada("", { class: "ancho", type: "search", "aria-label": "Buscar",
+                             placeholder: "Comentario, tarea, actividad o fecha (dd/mm)…" });
+  const anio = selector([0, 1, 2, 3].map((i) => ({ valor: actual - i, texto: String(actual - i) })), actual);
+  const AYUDA = "Escribe al menos dos letras: busca todas las palabras, sin importar tildes ni mayúsculas.";
+  const info = nota(AYUDA);
+  const lista = el("div", { class: "busca-lista" });
+  const d = dialogo({ titulo: "Buscar en mis apuntes", ancho: 780, botones: [cerrarBoton] });
+  d.cuerpo.append(el("div", { class: "fila busca-fila" }, caja, anio), info, lista);
+  let seq = 0, t = null;
+  async function buscar() {
+    const q = caja.value.trim();
+    const mio = ++seq;
+    if (q.replace(/\s/g, "").length < 2) { lista.replaceChildren(); info.textContent = AYUDA; info.className = "nota tenue"; return; }
+    info.textContent = "Buscando…";
+    let r;
+    try { r = await llamar("buscar_apuntes", q, Number(anio.value)); } catch (_e) { return; }
+    if (mio !== seq) return;
+    if (r.error) { info.textContent = r.error; info.className = "nota rojo"; lista.replaceChildren(); return; }
+    info.className = "nota tenue";
+    info.textContent = r.n
+      ? `${r.n} ${r.n === 1 ? "apunte" : "apuntes"} · ${r.total}`
+        + (r.recortado ? ` (se ven los ${r.resultados.length} más recientes)` : "")
+      : `Nada con «${q}» en ${r.anio}.`;
+    lista.replaceChildren(...r.resultados.map((x) => el("button", {
+      class: "busca-res", title: "Ir a ese día", onclick: () => { d.cerrar(); irADiaSaliendo(x.iso); } },
+      el("b", { class: "busca-dia", text: x.dia }),
+      el("span", { class: "busca-h", text: x.horas_txt }),
+      el("span", { class: "busca-tarea", text: `${x.tarea}${x.actividad ? ` · ${x.actividad}` : ""}` }),
+      el("span", { class: "busca-com", text: x.comentario || "—" }))));
+  }
+  caja.addEventListener("input", () => { clearTimeout(t); t = setTimeout(buscar, 350); });
+  caja.addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(t); buscar(); } });
+  anio.addEventListener("change", buscar);
+  caja.focus();
 }
 
 // ================================================================ diagnostico
@@ -1687,7 +1936,7 @@ function dlgPermisos() {
   llamar("permisos").then((p) => { pintar(p); if (p.hay_actividades) leerPt(); });
 }
 
-async function dlgPermisoDia(dia) {
+async function dlgPermisoDia(dia, { alGuardar = null } = {}) {
   let inf = await llamar("info_permiso_dia", dia.iso);
   if (inf.lleno) {
     await avisar("Permisos", `Ese día ya tiene ${inf.ya} de permiso, que cubren toda la jornada (${inf.jornada}).`);
@@ -1737,6 +1986,7 @@ async function dlgPermisoDia(dia) {
     dd.cerrar();
     await repintarLocal();
     estado(`Permiso añadido: ${r.horas}.`);
+    alGuardar?.();
   }
 }
 
@@ -1951,6 +2201,7 @@ function dlgAcerca() {
 function dlgAtajos() {
   const filas = [["Enter", "Añadir el apunte (desde Horas o Comentario)"],
     ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…); otra vez, lo anterior (hasta 20)"],
+    ["Ctrl+F", "Buscar en tus apuntes del año (comentario, tarea, actividad o fecha)"],
     ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],

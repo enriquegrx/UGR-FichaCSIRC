@@ -235,6 +235,7 @@
       const a = document.getElementById("aviso-mes");
       ok(await hasta(() => !a.hidden), "no avisa del cierre de mes");
       ok(a.querySelector(".dias-mes button"), "sin enlaces a los días");
+      ok([...a.querySelectorAll("button")].some((b) => b.textContent === "Completar ahora"), "sin «Completar ahora»");
       a.querySelector(".cerrar-aviso").click();
       ok(a.hidden, "la X no lo cierra");
       await avisarCierreMes();
@@ -390,7 +391,7 @@
       // completar: resumen antes y fuera de la lista despues
       acciones[0].click();
       ok(await hasta(() => dlg()?.textContent.includes("Se añadirán")), "no sale el resumen antes de completar");
-      ok(!/null|undefined/.test(dlg().textContent), "escribe null/undefined");
+      ok(!/\bnull\b|undefined/.test(dlg().textContent), "escribe null/undefined");
       ok(await hasta(() => !dlg().querySelector(".dlg-pie .primario").disabled), "no deja completar con una tarea habitual");
       dlg().querySelector(".dlg-pie .primario").click();
       ok(await hasta(() => !dlg() && p.querySelectorAll(".pend-dia").length === antes - 3), "los días completados siguen en la lista");
@@ -408,6 +409,56 @@
       $("b-pend").click();
       ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "pulsado otra vez no vuelve a las fichas");
       ok(!$("b-pend").classList.contains("activo"), "el botón sigue resaltado fuera del panel");
+    });
+    await prueba("por completar: marcar el día, te pasas, repartir y buscar", async () => {
+      $("b-pend").click();
+      const p = $("estadisticas");
+      ok(await hasta(() => p.querySelector(".pend-dia")), "no se ve la lista");
+      p.querySelector(".pend-ficha.anual").click();
+      // ⋯ de un dia: marcarlo como vacaciones lo saca de la lista
+      const n0 = p.querySelectorAll(".pend-dia").length;
+      p.querySelector(".pend-mas").click();
+      ok(!$("menu").hidden, "el ⋯ no abre el menú");
+      pulsarMenu("Marcar como vacaciones");
+      ok(await hasta(() => dlg()), "no avisa de que es solo en este equipo");
+      botonDlg("Marcar solo aquí");
+      ok(await hasta(() => p.querySelectorAll(".pend-dia").length === n0 - 1), "el día marcado sigue en la lista");
+      // Te pasas: el dia con el apunte repetido
+      [...p.querySelectorAll(".pend-modo button")].find((b) => b.textContent.startsWith("Te pasas")).click();
+      ok(await hasta(() => p.querySelector(".pend-dia.exceso")), "no salen los días en que te pasas");
+      ok(p.querySelector(".chip-marca.repetido"), "no marca el apunte repetido");
+      ok(p.querySelector(".pend-fichas").hidden && p.querySelector(".pend-barra").hidden, "en «Te pasas» siguen las fichas o las acciones");
+      [...p.querySelectorAll(".pend-modo button")].find((b) => b.textContent.startsWith("Faltan")).click();
+      ok(await hasta(() => !p.querySelector(".pend-fichas").hidden), "no vuelve a «Faltan»");
+      // completar repartido entre varias tareas
+      p.querySelector(".pend-ficha.anual").click();
+      const cs = [...p.querySelectorAll("input[data-iso]")];
+      const n1 = cs.length;
+      cs[0].click(); cs[1].click();
+      p.querySelector(".pend-barra .primario").click();
+      ok(await hasta(() => dlg()?.querySelector(".pend-modos")), "no se puede elegir repartir");
+      dlg().querySelectorAll(".pend-modos input")[1].click();
+      ok(await hasta(() => dlg().querySelectorAll(".pend-reparto-fila").length >= 2), "no propone el reparto de las habituales");
+      const pcts = [...dlg().querySelectorAll(".pend-reparto-fila input")].map((i) => Number(i.value));
+      ok(pcts.reduce((a, b) => a + b, 0) === 100, `el reparto propuesto no suma 100 (${pcts})`);
+      ok(/repartidas entre/.test(dlg().querySelector(".pend-resumen").textContent), "el resumen no dice el reparto");
+      ok(!/\bnull\b|undefined|NaN/.test(dlg().textContent), "escribe null/undefined/NaN");
+      dlg().querySelector(".dlg-pie .primario").click();
+      ok(await hasta(() => !dlg() && p.querySelectorAll(".pend-dia").length === n1 - 2), "no completa repartido");
+      ok(/Completados 2 días con \d tareas/.test($("estado").textContent), `no dice lo hecho: ${$("estado").textContent}`);
+      $("b-pend").click();
+      ok(await hasta(() => $("estadisticas").hidden), "no vuelve a las fichas");
+      // Ctrl+F: buscar en mis apuntes, y el resultado lleva al dia
+      teclado("f", { ctrlKey: true });
+      ok(await hasta(() => dlg()?.querySelector("h3")?.textContent === "Buscar en mis apuntes"), "Ctrl+F no abre la búsqueda");
+      const caja = dlg().querySelector("input[type=search]");
+      caja.value = "certificado ssl";
+      caja.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      ok(await hasta(() => dlg()?.querySelector(".busca-res")), "no encuentra el apunte");
+      dlg().querySelector(".busca-res").click();
+      ok(await hasta(() => !dlg() && document.querySelector(".dia.marcado")), "el resultado no lleva al día");
+      $("b-hoy").click();
+      ok(await hasta(() => document.querySelector(".dia.hoy")), "no vuelve a hoy");
     });
     await prueba("vista mensual", async () => {
       document.querySelector('.selector-vista [data-vista="mes"]').click();

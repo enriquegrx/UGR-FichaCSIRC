@@ -50,17 +50,32 @@ def icono_imagen(tam=64):
 class Bandeja:
     """Icono de la bandeja ligado a la ventana de pywebview."""
 
-    def __init__(self, ventana, al_fichar_hoy=None):
+    def __init__(self, ventana, al_fichar_hoy=None, al_por_completar=None):
         self.ventana = ventana
         self.al_fichar_hoy = al_fichar_hoy
+        self.al_por_completar = al_por_completar
         self._icono = None
         self._saliendo = False
+        self._pendientes = 0
+
+    def texto_pendientes(self, *_a):
+        return f"Por completar ({self._pendientes})" if self._pendientes else "Por completar ✔"
+
+    def poner_pendientes(self, n):
+        """Lo pone la ventana cada vez que cuenta los dias por completar."""
+        self._pendientes = max(0, int(n))
+        if self._icono:
+            try:
+                self._icono.update_menu()
+            except Exception:
+                pass
 
     def arrancar(self):
         import pystray
         menu = pystray.Menu(
             pystray.MenuItem("Abrir FichaCSIRC", self.mostrar, default=True),
             pystray.MenuItem("Fichar hoy", self.fichar_hoy),
+            pystray.MenuItem(self.texto_pendientes, self.por_completar),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Salir", self.salir))
         self._icono = pystray.Icon("FichaCSIRC", icono_imagen(), "FichaCSIRC", menu)
@@ -104,6 +119,14 @@ class Bandeja:
         if self.al_fichar_hoy:
             try:
                 self.al_fichar_hoy()
+            except Exception:
+                pass
+
+    def por_completar(self, *_a):
+        self.mostrar()
+        if self.al_por_completar:
+            try:
+                self.al_por_completar()
             except Exception:
                 pass
 

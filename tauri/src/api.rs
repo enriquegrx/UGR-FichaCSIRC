@@ -64,6 +64,9 @@ pub struct Estado {
     pub(crate) ids: Mutex<HashMap<String, String>>,
     /// wp_id -> [(actividad, href)]
     pub(crate) actividades: Mutex<HashMap<String, Vec<(String, String)>>>,
+    /// "Por completar (n)" del menu de la bandeja
+    pub(crate) n_pendientes: Mutex<u64>,
+    pub(crate) item_pendientes: Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>,
 }
 
 pub(crate) fn candado<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -303,8 +306,15 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         "completar_dias" => {
             e.exigir_desbloqueo(&cfg)?;
             let dias: Vec<String> = arg_lista(&args, 0).iter().filter_map(|d| d.as_str().map(String::from)).collect();
-            crate::completar::completar_dias(e, &cfg, &dias, &arg(&args, 1), &arg(&args, 2), &arg(&args, 3)).await
+            crate::completar::completar_dias(e, &cfg, &dias, &arg(&args, 1), &arg(&args, 2), &arg(&args, 3),
+                                             &arg_lista(&args, 4)).await
         }
+        "buscar_apuntes" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let anio = args.get(1).and_then(|v| v.as_i64().or_else(|| v.as_str()?.parse().ok()));
+            Ok(crate::completar::buscar_apuntes(e, &cfg, &arg(&args, 0), anio, hoy()).await)
+        }
+        "bandeja_pendientes" => Ok(sistema::bandeja_pendientes(&app, args.first().and_then(Value::as_u64).unwrap_or(0))),
         "estadisticas" => {
             e.exigir_desbloqueo(&cfg)?;
             Ok(crate::estadisticas::estadisticas(e, &cfg, &arg(&args, 0), &arg(&args, 1), hoy()).await)
@@ -638,7 +648,7 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             sistema::aviso_fichar(e, &cfg, &arg(&args, 0), &arg(&args, 1), args.get(2).unwrap_or(&Value::Null), &arg(&args, 3)).await
         }
-        "aviso_responder" => Ok(sistema::aviso_responder(&app, args.first().and_then(Value::as_bool).unwrap_or(false))),
+        "aviso_responder" => Ok(sistema::aviso_responder(&app, args.first().and_then(Value::as_bool).unwrap_or(false), &arg(&args, 1))),
         "bandeja_estado" => Ok(sistema::bandeja_estado(&cfg)),
         "bandeja_guardar" => {
             e.exigir_desbloqueo(&cfg)?;
@@ -802,6 +812,8 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "inari": cfg.get("inari_activo").and_then(Value::as_bool).unwrap_or(false),
         "asociaciones": asociaciones,
         "toca_permisos_anio": perm::toca_permisos_anio(cfg),
+        // desde el aviso diario: "Abrir «Por completar»"
+        "abrir_pendientes": std::env::args().any(|a| a == "--por-completar"),
         "novedades_tras_actualizar": null,
         "recuperada": std::mem::take(&mut *candado(&e.recuperada)),
         "sugerir_pin": false,

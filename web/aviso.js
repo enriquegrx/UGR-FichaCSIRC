@@ -60,6 +60,14 @@ async function arrancarAviso() {
   }
   aplicarTema(d.tema);
   pintar(d);
+  if (d.por_completar > 0) {
+    const n = d.por_completar;
+    $("pend-aviso").replaceChildren(
+      el("span", { text: `📋 En el año tienes ${n} ${n === 1 ? "día" : "días"} sin completar. ` }),
+      el("button", { class: "enlace", text: "Abrir «Por completar»",
+                     onclick: () => api().aviso_responder(true, "pendientes") }));
+    $("pend-aviso").hidden = false;
+  }
   $("cierre").textContent = `Esta ventana se cierra sola en ${d.minutos} minutos.`;
   cierreT = setTimeout(() => api().aviso_responder(false), d.minutos * 60 * 1000);
   (document.querySelector(".aviso-dia button") || $("b-si")).focus();

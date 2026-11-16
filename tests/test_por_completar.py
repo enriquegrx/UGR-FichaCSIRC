@@ -104,6 +104,53 @@ class TestPorCompletar(unittest.TestCase):
         self.assertIn("error", self.api.completar_dias(["2026-11-03"], ""))
         self.assertIn("error", self.api.completar_dias([], "20"))
 
+    def test_repartir_a_cuartos(self):
+        self.assertEqual(web.repartir(7, [70, 30]), [5.0, 2.0])
+        self.assertEqual(web.repartir(3, [1, 1, 1]), [1.0, 1.0, 1.0])
+        self.assertEqual(web.repartir(0.5, [70, 30]), [0.25, 0.25])
+        self.assertEqual(web.repartir(0.25, [50, 50]), [0.25, 0.0])        # nunca mas de lo que falta
+        self.assertAlmostEqual(sum(web.repartir(6.5, [60, 25, 15])), 6.5)
+
+    def test_completar_repartido(self):
+        r = self.api.completar_dias(["2026-11-04", "2026-11-03"], "", "", "",
+                                    [{"wp_id": "20", "actividad": "Soporte", "peso": 70},
+                                     {"wp_id": "30", "actividad": "Formación", "peso": 30}])
+        self.assertEqual((r["creados"], r["apuntes"], r["horas"]), (2, 4, "10h"))
+        self.assertEqual([(c[0], c[1], c[2]) for c in self.creados],
+                         [("2026-11-03", 20, 2.0), ("2026-11-03", 30, 1.0),
+                          ("2026-11-04", 20, 5.0), ("2026-11-04", 30, 2.0)])
+        self.assertEqual(self.api.deshacer_estado()["siguiente"], "completar 2 días (10h) entre 2 tareas")
+        self.assertIn("error", self.api.completar_dias(["2026-11-03"], "", reparto=[{"wp_id": "x", "peso": 1}]))
+
+    def test_excesos(self):
+        self.apuntes += [ap("2026-11-10", "10", 2),                        # el 10: 9h de 7
+                         ap("2026-10-12", "10", 3)]                        # festivo con horas
+        r = self.api.por_completar(2026, hoy=HOY)
+        self.assertEqual([x["iso"] for x in r["excesos"]], ["2026-10-12", "2026-11-10"])
+        x = r["excesos"][1]
+        self.assertEqual((x["sobra_txt"], x["texto"], x["duplicado"]), ("2h", "9h de 7h", True))
+        self.assertTrue(r["excesos"][0]["nolab"])
+        self.assertEqual((r["n_excesos"], r["sobra"]), (2, "5h"))
+        self.assertEqual(r["modelo"], "2026-11-11")                   # un dia de mas no es modelo
+
+    def test_buscar_apuntes(self):
+        self.apuntes[1]["comentario"] = "Renovación del certificado SSL"
+        r = self.api.buscar_apuntes("certificado renovacion", 2026, hoy=HOY)
+        self.assertEqual((r["n"], r["resultados"][0]["iso"], r["total"]), (1, "2026-11-03", "4h"))
+        r = self.api.buscar_apuntes("t10", 2026, hoy=HOY)               # por tarea; recientes primero
+        self.assertEqual(r["resultados"][0]["iso"], "2026-11-11")
+        self.assertEqual(self.api.buscar_apuntes("05/11", 2026, hoy=HOY)["n"], 1)   # por fecha
+        self.assertEqual(self.api.buscar_apuntes(" ", 2026, hoy=HOY)["n"], 0)
+
+
+class TestBandejaPendientes(unittest.TestCase):
+    def test_texto(self):
+        import bandeja
+        b = bandeja.Bandeja(ventana=None)
+        self.assertEqual(b.texto_pendientes(), "Por completar ✔")
+        b.poner_pendientes(5)
+        self.assertEqual(b.texto_pendientes(), "Por completar (5)")
+
 
 if __name__ == "__main__":
     unittest.main()
