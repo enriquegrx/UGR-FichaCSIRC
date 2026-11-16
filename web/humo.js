@@ -366,6 +366,17 @@
       ok(await hasta(() => !$("estadisticas").hidden && $("estadisticas").querySelector(".pend-dia")), "no se ve la lista de días");
       ok(getComputedStyle($("seccion-dias")).display === "none", "las fichas siguen a la vista");
       const p = $("estadisticas");
+      // fichas de los meses: la del año y 12 meses; la elegida filtra la lista
+      ok(p.querySelectorAll(".pend-ficha").length === 13, "no salen las 13 fichas (año y meses)");
+      p.querySelector(".pend-ficha.anual").click();
+      const todo = p.querySelectorAll(".pend-dia").length;
+      ok(p.querySelector(".pend-ficha.anual.activa") && todo === Number($("b-pend").querySelector(".n-pend").textContent),
+         "la ficha del año no muestra todos los días");
+      const mesPend = [...p.querySelectorAll("button.pend-ficha.pendiente:not(.anual)")].pop();
+      mesPend.click();
+      ok(mesPend.isConnected === false && p.querySelector(".pend-ficha.activa:not(.anual)"), "la ficha del mes no queda elegida");
+      ok(p.querySelectorAll(".pend-mes").length === 1 && p.querySelectorAll(".pend-dia").length < todo, "la ficha del mes no filtra la lista");
+      ok(!p.querySelector("div.pend-ficha.futuro, div.pend-ficha.completo")?.onclick, "un mes completo o futuro se puede abrir");
       const antes = p.querySelectorAll(".pend-dia").length;
       const acciones = [...p.querySelectorAll(".pend-barra button")];
       ok(acciones.length === 3 && acciones.every((b) => b.disabled), "las acciones no empiezan apagadas");

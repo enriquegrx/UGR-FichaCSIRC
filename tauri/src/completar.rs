@@ -36,8 +36,30 @@ pub fn rango(anio: i32, hoy: NaiveDate) -> Option<(NaiveDate, NaiveDate)> {
 }
 
 fn base(anio: i32, hoy: NaiveDate) -> Value {
+    let hasta = NaiveDate::from_ymd_opt(anio, 12, 31).unwrap().min(hoy - Duration::days(1));
     json!({"anio": anio, "titulo": format!("Por completar · {anio}"), "dias": [], "n": 0, "falta": "0h",
-           "modelo": Value::Null, "anterior": anio > hoy.year() - ANIOS_ATRAS, "siguiente": anio < hoy.year()})
+           "modelo": Value::Null, "anterior": anio > hoy.year() - ANIOS_ATRAS, "siguiente": anio < hoy.year(),
+           "frac": 0.0, "meses": fichas_meses(anio, hasta, &[0.0; 13], &[0.0; 13], &[0; 13], &[0.0; 13])})
+}
+
+/// Una ficha por mes: "pendiente" (con dias por completar), "completo",
+/// "nolab" (sin dias laborables) o "futuro" (aun no ha empezado).
+fn fichas_meses(anio: i32, hasta: NaiveDate, obj: &[f64; 13], cub: &[f64; 13], n: &[usize; 13], falta: &[f64; 13]) -> Value {
+    json!((1..=12usize).map(|m| {
+        let estado = if NaiveDate::from_ymd_opt(anio, m as u32, 1).unwrap() > hasta {
+            "futuro"
+        } else if n[m] > 0 {
+            "pendiente"
+        } else if obj[m] == 0.0 {
+            "nolab"
+        } else {
+            "completo"
+        };
+        let frac = if obj[m] > 0.0 { redondear(cub[m] / obj[m], 3) } else if estado == "futuro" { 0.0 } else { 1.0 };
+        let nombre = crate::resumen::MESES[m - 1];
+        json!({"mes": m, "nombre": format!("{}{}", nombre[..1].to_uppercase(), &nombre[1..]), "estado": estado,
+               "n": n[m], "falta": fmt_horas(falta[m]), "frac": frac})
+    }).collect::<Vec<_>>())
 }
 
 /// La lista con los apuntes ya leidos (sin red), y los dias para la cache.
@@ -48,6 +70,7 @@ pub fn calcular(reglas: &Reglas, aps: Vec<Apunte>, anio: i32, hoy: NaiveDate, co
     let mut pd = por_dia(aps);
     let acts = reglas.actividades_de_permiso();
     let (mut dias, mut cache, mut total, mut modelo) = (Vec::new(), Vec::new(), 0.0, Value::Null);
+    let (mut obj_mes, mut cub_mes, mut n_mes, mut falta_mes) = ([0.0f64; 13], [0.0f64; 13], [0usize; 13], [0.0f64; 13]);
     let mut d = desde;
     while d <= hasta {
         let iso = d.to_string();
@@ -56,9 +79,14 @@ pub fn calcular(reglas: &Reglas, aps: Vec<Apunte>, anio: i32, hoy: NaiveDate, co
             let ap = pd.remove(&iso).unwrap_or_default();
             let obj = reglas.objetivo_dia(d, Some(&ap), &acts);
             let reg: f64 = ap.iter().map(|a| a.horas).sum();
+            let m = d.month() as usize;
+            obj_mes[m] += obj;
+            cub_mes[m] += reg.min(obj); // lo de mas un dia no tapa el hueco de otro
             if obj > 0.0 && reg < obj - 0.001 {
                 let falta = redondear(obj - reg, 2);
                 total += falta;
+                n_mes[m] += 1;
+                falta_mes[m] += falta;
                 dias.push(json!({
                     "iso": iso, "mes": d.month(),
                     "dia": format!("{} {}", DIAS_ES[d.weekday().num_days_from_monday() as usize], d.format("%d/%m")),
@@ -76,6 +104,9 @@ pub fn calcular(reglas: &Reglas, aps: Vec<Apunte>, anio: i32, hoy: NaiveDate, co
     r["dias"] = json!(dias);
     r["falta"] = json!(fmt_horas(total));
     r["modelo"] = modelo;
+    let obj_t: f64 = obj_mes.iter().sum();
+    r["frac"] = json!(if obj_t > 0.0 { redondear(cub_mes.iter().sum::<f64>() / obj_t, 3) } else { 1.0 });
+    r["meses"] = fichas_meses(anio, hasta, &obj_mes, &cub_mes, &n_mes, &falta_mes);
     (r, cache)
 }
 
@@ -237,6 +268,11 @@ mod tests {
         assert!(!r["dias"].as_array().unwrap().iter().any(|x| x["iso"] == "2026-10-12"));
         assert_eq!((r["anterior"].as_bool(), r["siguiente"].as_bool()), (Some(true), Some(false)));
         assert!(cache.iter().any(|(iso, ap)| iso == "2026-11-03" && ap.len() == 1));
+        let m = &r["meses"];
+        assert_eq!((m[10]["estado"].as_str(), m[10]["n"].as_u64(), m[10]["falta"].as_str()), (Some("pendiente"), Some(3), Some("10,5h")));
+        assert_eq!(m[11]["estado"], "futuro");
+        assert_eq!(m[10]["nombre"], "Noviembre");
+        assert_eq!(m[10]["frac"].as_f64(), Some(redondear(45.5 / 56.0, 3)));
     }
 
     #[test]

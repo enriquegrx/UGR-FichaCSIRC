@@ -1941,7 +1941,8 @@ class Api:
         hasta = min(dt.date(anio, 12, 31), hoy - dt.timedelta(days=1))
         base = {"anio": anio, "titulo": f"Por completar · {anio}", "dias": [], "n": 0, "falta": "0h",
                 "modelo": None, "anterior": anio > hoy.year - self.ANIOS_ATRAS_PENDIENTES,
-                "siguiente": anio < hoy.year}
+                "siguiente": anio < hoy.year, "frac": 0.0,
+                "meses": self._fichas_meses(anio, hasta, {}, {}, {}, {})}
         if hasta < desde:
             return base
         try:
@@ -1954,6 +1955,8 @@ class Api:
         acts = actividades_de_permiso()
         con_inari = destinos.configurado()
         dias, total, modelo = [], 0.0, None
+        obj_mes, cub_mes = collections.Counter(), collections.Counter()
+        n_mes, falta_mes = collections.Counter(), collections.Counter()
         d = desde
         while d <= hasta:
             iso = d.isoformat()
@@ -1962,9 +1965,13 @@ class Api:
                 ap = por_dia.get(iso, [])
                 obj = objetivo_dia(d, ap, acts)
                 reg = sum(a["horas"] for a in ap)
+                obj_mes[d.month] += obj
+                cub_mes[d.month] += min(reg, obj)     # lo de mas un dia no tapa el hueco de otro
                 if obj and reg < obj - 0.001:
                     falta = round(obj - reg, 2)
                     total += falta
+                    n_mes[d.month] += 1
+                    falta_mes[d.month] += falta
                     self._cache[iso] = [dict(a, destino="op") for a in ap]
                     dias.append({"iso": iso, "mes": d.month,
                                  "dia": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
@@ -1975,7 +1982,29 @@ class Api:
                 elif obj and ap:
                     modelo = iso
             d += dt.timedelta(days=1)
-        return {**base, "dias": dias, "n": len(dias), "falta": _horas(total), "modelo": modelo}
+        obj_t = sum(obj_mes.values())
+        return {**base, "dias": dias, "n": len(dias), "falta": _horas(total), "modelo": modelo,
+                "frac": round(sum(cub_mes.values()) / obj_t, 3) if obj_t else 1.0,
+                "meses": self._fichas_meses(anio, hasta, obj_mes, cub_mes, n_mes, falta_mes)}
+
+    def _fichas_meses(self, anio, hasta, obj_mes, cub_mes, n_mes, falta_mes):
+        """Una ficha por mes: 'pendiente' (con dias por completar), 'completo',
+        'nolab' (sin dias laborables) o 'futuro' (aun no ha empezado)."""
+        out = []
+        for m in range(1, 13):
+            if dt.date(anio, m, 1) > hasta:
+                estado = "futuro"
+            elif n_mes.get(m):
+                estado = "pendiente"
+            elif not obj_mes.get(m):
+                estado = "nolab"
+            else:
+                estado = "completo"
+            obj = obj_mes.get(m, 0.0)
+            out.append({"mes": m, "nombre": self.MESES[m - 1].capitalize(), "estado": estado,
+                        "n": n_mes.get(m, 0), "falta": _horas(falta_mes.get(m, 0.0)),
+                        "frac": round(cub_mes.get(m, 0.0) / obj, 3) if obj else (0.0 if estado == "futuro" else 1.0)})
+        return out
 
     def completar_dias(self, dias_iso, wp_id, actividad="", comentario=""):
         """Completa cada dia con UNA tarea: a cada uno, justo lo que le falta

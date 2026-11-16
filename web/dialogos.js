@@ -504,8 +504,10 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
 // ================================================================ por completar
 
 // Pestaña "Por completar" (botón 🧩 junto a Estadísticas): los días del año sin
-// imputar del todo, hasta ayer, por meses, para marcar uno, varios o todos y
-// rellenarlos de una vez. Tres maneras: completar lo que le falta a cada uno
+// imputar del todo, hasta ayer. Arriba, una ficha por mes (y una del año
+// entero) con lo que falta; la elegida filtra la lista de abajo, para no ver
+// un listado enorme. Se marcan uno, varios o todos (también de varios meses) y
+// se rellenan de una vez. Tres maneras: completar lo que le falta a cada uno
 // con una tarea, aplicar una plantilla o copiar un día. Antes de hacerlo, un
 // resumen; después, todo el bloque se deshace de una vez. Devuelve
 // {mover(n), cargar()}: las flechas de arriba cambian de año.
@@ -513,14 +515,18 @@ const MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Ju
                       "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 
 function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDatos = () => {} } = {}) {
-  let anio = Number(hoyIso().slice(0, 4)), seq = 0, datos = null, ancla = null;
+  // filtro: "anio" (la lista entera) o el numero del mes de la ficha elegida;
+  // null = elegirlo al cargar (el mes mas reciente con huecos, o el año si son pocos)
+  let anio = Number(hoyIso().slice(0, 4)), seq = 0, datos = null, ancla = null, filtro = null;
+  const POCOS = 8;
   const marcados = new Set();
+  const fichas = el("div", { class: "pend-fichas", role: "tablist", "aria-label": "Meses" });
   const cuerpo = el("div", { class: "pend" });
   const cifras = el("span", { class: "pend-cifras" });
   const bDeshacer = el("button", { class: "b-deshacer-pend", onclick: () => deshacer() },
     "↶ Deshacer", el("span", { class: "n-deshacer" }));
-  const todos = el("input", { type: "checkbox", "aria-label": "Marcar todos los días",
-    onchange: () => marcar((datos?.dias || []).map((x) => x.iso), todos.checked) });
+  const todos = el("input", { type: "checkbox", "aria-label": "Marcar todos los días de la lista",
+    onchange: () => marcar(visibles().map((x) => x.iso), todos.checked) });
   const nMarcados = el("span", { class: "pend-marcados" });
   const acciones = [
     el("button", { class: "primario", text: "＋ Completar lo que falta…",
@@ -537,8 +543,10 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
     el("div", { class: "cabeza-seccion" },
       el("div", { class: "fila pend-cabeza" },
         el("h2", { text: "🧩 Por completar" }), cifras, el("span", { class: "pend-hueco" }), bDeshacer)),
-    barra, cuerpo);
+    fichas, barra, cuerpo);
   pintarDeshacerPend();
+
+  const visibles = () => (datos?.dias || []).filter((x) => filtro === "anio" || x.mes === filtro);
 
   function mover(n) {
     if (n === 0) anio = Number(hoyIso().slice(0, 4));
@@ -546,6 +554,7 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
     else if (n > 0 && datos && !datos.siguiente) { estado("Los días que vienen se completan en su ficha."); return; }
     else anio += n;
     marcados.clear();
+    filtro = null;
     cargar();
   }
 
@@ -559,15 +568,60 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
     anio = r.anio;
     alTitulo(r.titulo);
     alDatos(r);
-    if (r.error) { cuerpo.replaceChildren(nota(r.error, "rojo")); barra.hidden = true; cifras.textContent = ""; return; }
+    if (r.error) {
+      cuerpo.replaceChildren(nota(r.error, "rojo"));
+      barra.hidden = true; fichas.hidden = true; cifras.textContent = "";
+      return;
+    }
     const hay = new Set(r.dias.map((x) => x.iso));
     for (const i of [...marcados]) if (!hay.has(i)) marcados.delete(i);
+    // la ficha elegida se mantiene mientras le queden dias; si no, la de siempre
+    const pendientes = r.meses.filter((m) => m.estado === "pendiente");
+    if (filtro !== "anio" && !pendientes.some((m) => m.mes === filtro)) {
+      filtro = r.n <= POCOS || !pendientes.length ? "anio" : pendientes[pendientes.length - 1].mes;
+    }
+    pintar();
+  }
+
+  function elegir(f) {
+    filtro = f;
+    ancla = null;
     pintar();
   }
 
   function marcar(isos, si) {
     for (const i of isos) { if (si) marcados.add(i); else marcados.delete(i); }
     pintarMarcas();
+  }
+
+  function pintarFichas() {
+    const r = datos;
+    const ficha = (f, titulo, linea, frac, clase, n, ayuda) => {
+      const activa = filtro === f;
+      const marc = (f === "anio" ? r.dias : r.dias.filter((x) => x.mes === f)).filter((x) => marcados.has(x.iso)).length;
+      const abre = clase === "pendiente" || f === "anio";
+      return el(abre ? "button" : "div", {
+        class: `pend-ficha ${clase}${activa ? " activa" : ""}`, role: abre ? "tab" : null,
+        "aria-selected": abre ? String(activa) : null,
+        title: ayuda,
+        onclick: abre ? () => elegir(f) : null },
+        el("span", { class: "pf-nombre", text: titulo }),
+        el("b", { class: "pf-n", text: n }),
+        el("span", { class: "pf-linea", text: linea }),
+        el("span", { class: "pf-barra" }, el("i", { style: `--w:${Math.round(frac * 100)}%` })),
+        marc ? el("span", { class: "pf-marcados", text: `${marc} ✓` }) : null);
+    };
+    const pend = (m) => `${m.n} ${m.n === 1 ? "día" : "días"}`;
+    fichas.replaceChildren(
+      ficha("anio", `Todo ${r.anio}`, r.n ? `faltan ${r.falta}` : "completo", r.frac,
+            r.n ? "pendiente anual" : "completo anual", r.n ? pend(r) : "✔",
+            `Todo ${r.anio}: ${r.n ? `${pend(r)} por completar, faltan ${r.falta}` : "completo"} · ${Math.round(r.frac * 100)}% imputado`),
+      ...r.meses.map((m) => ficha(m.mes, m.nombre.slice(0, 3),
+        { pendiente: `faltan ${m.falta}`, completo: "completo", nolab: "libre", futuro: "—" }[m.estado],
+        m.frac, m.estado, { pendiente: pend(m), completo: "✔", nolab: "·", futuro: "" }[m.estado],
+        `${m.nombre}: ${{ pendiente: `${pend(m)} por completar, faltan ${m.falta} · ${Math.round(m.frac * 100)}% imputado`,
+                          completo: "completo", nolab: "sin días laborables", futuro: "aún no ha llegado" }[m.estado]}`)));
+    fichas.hidden = false;
   }
 
   function pintarMarcas() {
@@ -581,39 +635,47 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
       c.checked = n === del.length;
       c.indeterminate = n > 0 && n < del.length;
     }
+    const vis = visibles();
+    const nVis = vis.filter((x) => marcados.has(x.iso)).length;
+    todos.checked = !!vis.length && nVis === vis.length;
+    todos.indeterminate = nVis > 0 && !todos.checked;
+    // lo marcado cuenta en todos los meses (se puede marcar en varios y hacerlo de una vez)
     const elegidos = datos.dias.filter((x) => marcados.has(x.iso));
-    todos.checked = !!datos.dias.length && elegidos.length === datos.dias.length;
-    todos.indeterminate = elegidos.length > 0 && !todos.checked;
+    const fuera = elegidos.length - nVis;
     nMarcados.textContent = elegidos.length
       ? `${elegidos.length} ${elegidos.length === 1 ? "día marcado" : "días marcados"} · faltan ${fmtHoras(elegidos.reduce((s, x) => s + x.falta, 0))}h`
+        + (fuera ? ` (${fuera} en otros meses)` : "")
       : "Marca los días que quieras rellenar (Mayús+clic, un rango)";
     nMarcados.classList.toggle("tenue", !elegidos.length);
     for (const b of acciones) b.disabled = !elegidos.length;
+    pintarFichas();
   }
 
   function pintar() {
     const r = datos;
     cifras.textContent = r.n ? `${r.n} ${r.n === 1 ? "día" : "días"} · faltan ${r.falta}` : "";
     barra.hidden = !r.n;
+    pintarFichas();
     if (!r.n) {
       cuerpo.replaceChildren(el("div", { class: "pend-vacio" },
         el("b", { text: "✔ Todo completo" }),
         el("span", { text: ` en ${r.anio}${r.siguiente ? "" : " hasta ayer"}.` })));
       return;
     }
-    const orden = r.dias.map((x) => x.iso);
+    const lista = visibles();
+    const orden = lista.map((x) => x.iso);
     const porMes = new Map();
-    for (const x of r.dias) { if (!porMes.has(x.mes)) porMes.set(x.mes, []); porMes.get(x.mes).push(x); }
-    const meses = [...porMes].map(([mes, lista]) => {
+    for (const x of lista) { if (!porMes.has(x.mes)) porMes.set(x.mes, []); porMes.get(x.mes).push(x); }
+    const meses = [...porMes].map(([mes, del]) => {
       const cMes = el("input", { type: "checkbox", "data-mes": String(mes),
         "aria-label": `Marcar todo ${MESES_LARGOS[mes - 1].toLowerCase()}`,
-        onchange: (e) => marcar(lista.map((x) => x.iso), e.target.checked) });
-      const falta = fmtHoras(lista.reduce((s, x) => s + x.falta, 0));
+        onchange: (e) => marcar(del.map((x) => x.iso), e.target.checked) });
+      const falta = fmtHoras(del.reduce((s, x) => s + x.falta, 0));
       return el("section", { class: "pend-mes" },
         el("label", { class: "pend-mes-cab" }, cMes,
           el("b", { text: MESES_LARGOS[mes - 1] }),
-          el("span", { class: "tenue", text: `${lista.length} ${lista.length === 1 ? "día" : "días"} · faltan ${falta}h` })),
-        ...lista.map((x) => {
+          el("span", { class: "tenue", text: `${del.length} ${del.length === 1 ? "día" : "días"} · faltan ${falta}h` })),
+        ...del.map((x) => {
           const c = el("input", { type: "checkbox", "data-iso": x.iso, "aria-label": x.dia });
           c.addEventListener("click", (e) => {
             // Mayus+clic: todo el rango desde el ultimo pulsado
@@ -645,8 +707,8 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
     pintarMarcas();
   }
 
-  // Lo que se haga, sobre los marcados; luego, la lista otra vez (lo
-  // completado desaparece) y fuera las marcas.
+  // Lo que se haga, sobre los marcados (de cualquier mes); luego, la lista
+  // otra vez (lo completado desaparece) y fuera las marcas.
   async function accion(fn) {
     const elegidos = (datos?.dias || []).filter((x) => marcados.has(x.iso));
     if (!elegidos.length) { await avisar("Por completar", "Marca al menos un día."); return; }

@@ -62,6 +62,14 @@ class TestPorCompletar(unittest.TestCase):
         self.assertEqual(r["modelo"], "2026-11-11")             # el ultimo completo
         self.assertNotIn("2026-10-12", [x["iso"] for x in r["dias"]])   # festivo
         self.assertEqual((r["anterior"], r["siguiente"]), (True, False))
+        # una ficha por mes
+        m = r["meses"]
+        self.assertEqual(len(m), 12)
+        self.assertEqual((m[10]["estado"], m[10]["n"], m[10]["falta"]), ("pendiente", 3, "10,5h"))
+        self.assertEqual(m[11]["estado"], "futuro")
+        self.assertEqual(m[10]["nombre"], "Noviembre")
+        # noviembre hasta ayer: 8 laborables x 7 = 56; cubiertas 45,5
+        self.assertEqual(m[10]["frac"], round(45.5 / 56, 3))
         # deja los dias en la cache (copiar y plantillas saben lo que ya tienen)
         self.assertEqual(len(self.api._cache["2026-11-03"]), 1)
 

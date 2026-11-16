@@ -266,8 +266,16 @@
                     reg, obj: 7, falta: 7 - reg, texto: `${fmt(reg)} de 7h`, falta_txt: fmt(7 - reg),
                     vacio: !reg, guardia: marcas.guardia.has(i), teletrabajo: marcas.tele.has(i) });
       }
+      const NOMBRES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+      const meses = NOMBRES.map((nombre, i) => {
+        const del = dias.filter((y) => y.mes === i + 1);
+        const futuro = a === hoy.getFullYear() && i > hoy.getMonth();
+        return { mes: i + 1, nombre, n: del.length, falta: fmt(del.reduce((s, y) => s + y.falta, 0)),
+                 estado: futuro ? "futuro" : del.length ? "pendiente" : i === 7 ? "nolab" : "completo",
+                 frac: futuro ? 0 : del.length ? 0.4 : 1 };
+      });
       return espera({ anio: a, titulo: `Por completar · ${a}`, dias, n: dias.length,
-                      falta: fmt(dias.reduce((s, y) => s + y.falta, 0)), modelo,
+                      falta: fmt(dias.reduce((s, y) => s + y.falta, 0)), modelo, meses, frac: 0.86,
                       anterior: a > hoy.getFullYear() - 3, siguiente: a < hoy.getFullYear() });
     },
     completar_dias: (dias, wp, actividad, comentario) => {

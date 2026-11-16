@@ -726,6 +726,32 @@ body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #esta
 .b-deshacer-pend .n-deshacer:not(:empty) { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 12px;
                                            background: var(--primario); color: #fff; }
 /* la barra de acciones se queda a la vista al bajar por la lista */
+/* las fichas de los meses (y la del año): la elegida filtra la lista */
+.pend-fichas { display: grid; grid-template-columns: 1.6fr repeat(12, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.pend-ficha { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0;
+              padding: 9px 10px 10px; border-radius: 10px; border: 1px solid var(--borde); background: var(--panel);
+              text-align: left; font: inherit; color: var(--texto); }
+button.pend-ficha { cursor: pointer; }
+button.pend-ficha:hover { border-color: var(--hover-borde); }
+.pf-nombre { font-size: 12px; font-weight: 600; color: var(--tenue); }
+.pf-n { font-size: 17px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pf-linea { font-size: 11px; color: var(--tenue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pf-barra { align-self: stretch; height: 5px; margin-top: 5px; border-radius: 3px; background: var(--barra-fondo); overflow: hidden; }
+.pf-barra > i { display: block; height: 100%; width: var(--w); border-radius: 3px; background: var(--tenue); }
+.pf-marcados { position: absolute; top: 6px; right: 7px; font-size: 10px; font-weight: 700; padding: 0 5px; border-radius: 999px;
+               background: var(--primario); color: #fff; }
+.pend-ficha.pendiente { background: color-mix(in srgb, var(--aviso) 8%, var(--panel)); border-color: color-mix(in srgb, var(--aviso) 35%, var(--panel)); }
+.pend-ficha.pendiente .pf-n, .pend-ficha.pendiente .pf-linea { color: var(--aviso); }
+.pend-ficha.pendiente .pf-barra > i { background: var(--aviso); }
+.pend-ficha.completo { background: color-mix(in srgb, var(--exito) 7%, var(--panel)); }
+.pend-ficha.completo .pf-n { color: var(--exito); }
+.pend-ficha.completo .pf-barra > i { background: var(--exito); }
+.pend-ficha.futuro, .pend-ficha.nolab { opacity: .55; border-style: dashed; }
+.pend-ficha.anual .pf-nombre { color: var(--texto-fuerte); }
+.pend-ficha.activa { border: 2px solid var(--primario); padding: 8px 9px 9px; background: var(--seleccion);
+                     box-shadow: 0 2px 6px color-mix(in srgb, var(--primario) 25%, transparent); }
+.pend-ficha.activa .pf-nombre { color: var(--primario); }
+@media (max-width: 1100px) { .pend-fichas { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
 .pend-barra { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
               margin: 10px 0 6px; padding: 10px 12px; border-radius: 10px; background: var(--panel-alt); }
 .pend-marcados { font-size: 13px; font-variant-numeric: tabular-nums; }
