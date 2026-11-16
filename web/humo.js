@@ -359,6 +359,45 @@
       $("b-estad").click();
       ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "pulsado otra vez no vuelve a las fichas");
     });
+    await prueba("por completar: marcar días y completarlos en bloque", async () => {
+      ok(await hasta(() => $("b-pend").querySelector(".n-pend").textContent !== ""), "el botón no dice cuántos faltan");
+      $("b-pend").click();
+      ok($("b-pend").classList.contains("activo"), "el botón no queda resaltado");
+      ok(await hasta(() => !$("estadisticas").hidden && $("estadisticas").querySelector(".pend-dia")), "no se ve la lista de días");
+      ok(getComputedStyle($("seccion-dias")).display === "none", "las fichas siguen a la vista");
+      const p = $("estadisticas");
+      const antes = p.querySelectorAll(".pend-dia").length;
+      const acciones = [...p.querySelectorAll(".pend-barra button")];
+      ok(acciones.length === 3 && acciones.every((b) => b.disabled), "las acciones no empiezan apagadas");
+      // Mayus+clic: un rango
+      const cs = [...p.querySelectorAll("input[data-iso]")];
+      cs[0].click();
+      cs[2].dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true }));
+      ok(cs.slice(0, 3).every((c) => c.checked), "Mayús+clic no marca el rango");
+      ok(acciones.every((b) => !b.disabled), "las acciones no se encienden");
+      ok(/3 días marcados/.test(p.querySelector(".pend-marcados").textContent), "no dice cuántos hay marcados");
+      // completar: resumen antes y fuera de la lista despues
+      acciones[0].click();
+      ok(await hasta(() => dlg()?.textContent.includes("Se añadirán")), "no sale el resumen antes de completar");
+      ok(!/null|undefined/.test(dlg().textContent), "escribe null/undefined");
+      ok(await hasta(() => !dlg().querySelector(".dlg-pie .primario").disabled), "no deja completar con una tarea habitual");
+      dlg().querySelector(".dlg-pie .primario").click();
+      ok(await hasta(() => !dlg() && p.querySelectorAll(".pend-dia").length === antes - 3), "los días completados siguen en la lista");
+      ok(/Completados 3 días/.test($("estado").textContent), `no dice lo hecho: ${$("estado").textContent}`);
+      // el boton Todos y las otras dos acciones abren su dialogo
+      p.querySelector(".pend-barra input").click();
+      ok(p.querySelectorAll("input[data-iso]:checked").length === p.querySelectorAll(".pend-dia").length, "Todos no los marca todos");
+      for (const [i, titulo] of [[1, "Aplicar plantilla"], [2, "Copiar un día"]]) {
+        p.querySelectorAll(".pend-barra button")[i].click();
+        ok(await hasta(() => dlg()?.querySelector("h3")?.textContent === titulo), `no abre «${titulo}»`);
+        dlg().querySelector(".dlg-x").click();
+        ok(await hasta(() => !dlg()), `«${titulo}» no se cierra`);
+      }
+      // otra pulsacion: a las fichas
+      $("b-pend").click();
+      ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "pulsado otra vez no vuelve a las fichas");
+      ok(!$("b-pend").classList.contains("activo"), "el botón sigue resaltado fuera del panel");
+    });
     await prueba("vista mensual", async () => {
       document.querySelector('.selector-vista [data-vista="mes"]').click();
       ok(await hasta(() => document.querySelectorAll(".celda").length >= 20), "sin celdas");

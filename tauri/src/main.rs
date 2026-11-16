@@ -13,6 +13,7 @@
 mod api;
 mod apuntes;
 mod asistente;
+mod completar;
 mod ayuda;
 mod config;
 mod copias;

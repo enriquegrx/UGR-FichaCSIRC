@@ -55,7 +55,7 @@ fn nombre_dia(iso: &str) -> String {
 }
 
 /// "martes 10/11" para los textos de Deshacer.
-fn dia_corto(iso: &str) -> String {
+pub(crate) fn dia_corto(iso: &str) -> String {
     let n = nombre_dia(iso);
     match n.split_once(' ') {
         Some((dia, resto)) => format!("{} {resto}", dia.to_lowercase()),
@@ -149,7 +149,7 @@ impl Estado {
 }
 
 /// Recordar la actividad y el comentario de la tarea (comodidad: nunca rompe nada).
-fn recordar(cfg: &Cfg, wp_id: &str, comentario: &str, actividad: &str, com_guardia: &str) {
+pub(crate) fn recordar(cfg: &Cfg, wp_id: &str, comentario: &str, actividad: &str, com_guardia: &str) {
     let mut cambios = Map::new();
     if !comentario.is_empty() && comentario != com_guardia {
         let mut m = cfg.objeto("comentarios_tarea");

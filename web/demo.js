@@ -251,6 +251,38 @@
     mes_pendiente: () => espera(avisoMesVisto ? null : { anio: 2026, mes: 11, texto: "Noviembre cierra y te faltan 5h en 1 día:",
                                                       dias: [{ iso: d(2), texto: `miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)} (1h de 7h)` }] }),
     aviso_mes_visto: () => { avisoMesVisto = true; return espera({ ok: true }); },
+    // Por completar: los laborables de las 3 semanas anteriores hasta ayer
+    por_completar: (anio) => {
+      const a = Number(anio) || hoy.getFullYear();
+      const dias = [];
+      let modelo = null;
+      for (let n = -21; n < 0; n++) {
+        const x = new Date(hoy); x.setDate(x.getDate() + n);
+        const i = iso(x);
+        if (x.getDay() === 0 || x.getDay() === 6 || x.getFullYear() !== a || marcas.nolab[i]) continue;
+        const reg = (apuntes[i] || []).reduce((s, y) => s + y.horas, 0);
+        if (reg >= 7) { modelo = i; continue; }
+        dias.push({ iso: i, mes: x.getMonth() + 1, dia: `${["Domingo", ...DIAS][x.getDay()]} ${i.slice(8)}/${i.slice(5, 7)}`,
+                    reg, obj: 7, falta: 7 - reg, texto: `${fmt(reg)} de 7h`, falta_txt: fmt(7 - reg),
+                    vacio: !reg, guardia: marcas.guardia.has(i), teletrabajo: marcas.tele.has(i) });
+      }
+      return espera({ anio: a, titulo: `Por completar · ${a}`, dias, n: dias.length,
+                      falta: fmt(dias.reduce((s, y) => s + y.falta, 0)), modelo,
+                      anterior: a > hoy.getFullYear() - 3, siguiente: a < hoy.getFullYear() });
+    },
+    completar_dias: (dias, wp, actividad, comentario) => {
+      const t = tareas.find((x) => x.id === Number(wp));
+      let creados = 0, saltados = 0, horas = 0;
+      for (const i of dias) {
+        const falta = 7 - (apuntes[i] || []).reduce((s, y) => s + y.horas, 0);
+        if (falta <= 0) { saltados++; continue; }
+        (apuntes[i] = apuntes[i] || []).push({ id: siguiente++, horas: falta, tarea: t ? t.nombre : "Tarea", wp_id: String(wp),
+                                               actividad: actividad || "", comentario: comentario || "" });
+        creados++; horas += falta;
+      }
+      return espera({ creados, saltados, errores: 0, ultimo: "", fallidos: [], horas: fmt(horas),
+                      puede_deshacer: !!creados, quedan: creados ? 1 : 0 });
+    },
     fijar_tarea_local: (m, modo, id, nombre) => {
       if (modo === "auto") delete destinosDemo[m];
       else destinosDemo[m] = modo === "ninguna" ? { ninguna: true } : { id, nombre };

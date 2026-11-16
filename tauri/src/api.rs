@@ -294,6 +294,17 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             herr::desasociar(&arg(&args, 0))
         }
+        // ---- por completar: los dias sin imputar del año, en bloque ----
+        "por_completar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let anio = args.first().and_then(|v| v.as_i64().or_else(|| v.as_str()?.parse().ok()));
+            Ok(crate::completar::por_completar(e, &cfg, anio, hoy()).await)
+        }
+        "completar_dias" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let dias: Vec<String> = arg_lista(&args, 0).iter().filter_map(|d| d.as_str().map(String::from)).collect();
+            crate::completar::completar_dias(e, &cfg, &dias, &arg(&args, 1), &arg(&args, 2), &arg(&args, 3)).await
+        }
         "estadisticas" => {
             e.exigir_desbloqueo(&cfg)?;
             Ok(crate::estadisticas::estadisticas(e, &cfg, &arg(&args, 0), &arg(&args, 1), hoy()).await)

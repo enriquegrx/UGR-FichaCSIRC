@@ -1921,6 +1921,123 @@ class Api:
                          "incompletos": incompletos, "faltan": _horas(faltan), "permisos": _horas(permisos)},
         }
 
+    # ---- por completar: los dias sin imputar del año, para rellenarlos en bloque ----
+    ANIOS_ATRAS_PENDIENTES = 3
+
+    def por_completar(self, anio=None, hoy=None):
+        """Los dias laborables del año, hasta AYER, con menos horas que su
+        objetivo (los mismos que "Cómo va" de Estadisticas): festivos,
+        vacaciones, permisos y teletrabajo con INARI no cuentan. Una consulta
+        por rango; deja esos dias en la cache, para que completar, copiar y
+        las plantillas sepan lo que ya tienen. 'modelo': el ultimo dia
+        completo, para copiarlo."""
+        hoy = hoy or dt.date.today()
+        try:
+            anio = int(anio or hoy.year)
+        except (TypeError, ValueError):
+            anio = hoy.year
+        anio = max(hoy.year - self.ANIOS_ATRAS_PENDIENTES, min(anio, hoy.year))
+        desde = dt.date(anio, 1, 1)
+        hasta = min(dt.date(anio, 12, 31), hoy - dt.timedelta(days=1))
+        base = {"anio": anio, "titulo": f"Por completar · {anio}", "dias": [], "n": 0, "falta": "0h",
+                "modelo": None, "anterior": anio > hoy.year - self.ANIOS_ATRAS_PENDIENTES,
+                "siguiente": anio < hoy.year}
+        if hasta < desde:
+            return base
+        try:
+            apuntes = core.entradas_rango(desde.isoformat(), hasta.isoformat())
+        except Exception as e:
+            return {**base, "error": diagnostico_conexion(e)["titulo"]}
+        por_dia = {}
+        for a in apuntes:
+            por_dia.setdefault(a["fecha"], []).append(a)
+        acts = actividades_de_permiso()
+        con_inari = destinos.configurado()
+        dias, total, modelo = [], 0.0, None
+        d = desde
+        while d <= hasta:
+            iso = d.isoformat()
+            # teletrabajo con INARI: sus horas no estan en ProyectosTIC
+            if d.weekday() < 5 and not (con_inari and core.es_teletrabajo(iso)):
+                ap = por_dia.get(iso, [])
+                obj = objetivo_dia(d, ap, acts)
+                reg = sum(a["horas"] for a in ap)
+                if obj and reg < obj - 0.001:
+                    falta = round(obj - reg, 2)
+                    total += falta
+                    self._cache[iso] = [dict(a, destino="op") for a in ap]
+                    dias.append({"iso": iso, "mes": d.month,
+                                 "dia": f"{core.DIAS_ES[d.weekday()]} {d.strftime('%d/%m')}",
+                                 "reg": round(reg, 2), "obj": round(obj, 2), "falta": falta,
+                                 "texto": f"{_horas(reg)} de {_horas(obj)}", "falta_txt": _horas(falta),
+                                 "vacio": not ap, "guardia": core.es_guardia(iso),
+                                 "teletrabajo": core.es_teletrabajo(iso)})
+                elif obj and ap:
+                    modelo = iso
+            d += dt.timedelta(days=1)
+        return {**base, "dias": dias, "n": len(dias), "falta": _horas(total), "modelo": modelo}
+
+    def completar_dias(self, dias_iso, wp_id, actividad="", comentario=""):
+        """Completa cada dia con UNA tarea: a cada uno, justo lo que le falta
+        (no unas horas fijas). Lo que falta se calcula ahora, con lo que haya
+        en ProyectosTIC (no con lo que se pinto hace un rato). Todo va en una
+        sola accion de Deshacer."""
+        dias = sorted({str(i) for i in dias_iso or []})
+        if not dias:
+            return {"error": "Marca al menos un día."}
+        try:
+            wp = int(wp_id)
+        except (TypeError, ValueError):
+            return {"error": "Elige la tarea con la que completar."}
+        try:
+            apuntes = core.entradas_rango(dias[0], dias[-1])
+        except Exception as e:
+            return {"error": diagnostico_conexion(e)["titulo"]}
+        por_dia = {}
+        for a in apuntes:
+            por_dia.setdefault(a["fecha"], []).append(a)
+        acts = actividades_de_permiso()
+        con_inari = destinos.configurado()
+        comentario = (comentario or "").strip()
+        guardia_auto = comentario == core.comentario_guardia()
+        creados = saltados = errores = 0
+        ultimo, horas, fallidos, hechos, deshacer = "", 0.0, [], [], []
+        for iso in dias:
+            d = dt.date.fromisoformat(iso)
+            ap = por_dia.get(iso, [])
+            if d.weekday() >= 5 or core.es_no_laborable(iso) or (con_inari and core.es_teletrabajo(iso)):
+                saltados += 1
+                continue
+            self._cache[iso] = [dict(a, destino="op") for a in ap]
+            # con una actividad de permiso, el objetivo es el de la jornada oficial
+            obj = objetivo_dia(d, ap + [{"actividad": actividad}], acts)
+            falta = round(obj - sum(a["horas"] for a in ap), 2)
+            if falta <= 0.001:
+                saltados += 1
+                continue
+            if core.es_guardia(iso):
+                com = comentario or core.comentario_guardia()
+            else:
+                com = "" if guardia_auto else comentario
+            try:
+                nuevo = core.crear_entrada(iso, wp, falta, com, actividad or None)
+                if nuevo:
+                    deshacer.append({"tipo": "borrar", "id": nuevo})
+                creados += 1
+                horas += falta
+                hechos.append(iso)
+            except Exception as e:
+                errores += 1
+                ultimo = str(e)
+                fallidos.append(_dia_corto(iso))
+        if creados:
+            self._recordar(wp, comentario, actividad)
+        self._apilar(f"completar {creados} días ({_horas(horas)})" if creados > 1
+                     else f"completar el {_dia_corto((hechos or dias)[0])}", deshacer)
+        return {"creados": creados, "saltados": saltados, "errores": errores, "ultimo": ultimo,
+                "fallidos": fallidos, "horas": _horas(horas),
+                "puede_deshacer": bool(deshacer), "quedan": len(self._pila)}
+
     # ---- resumen del mes (una consulta por rango, no una por dia) ----
     def resumen_mes(self, anio, mes):
         anio, mes = int(anio), int(mes)

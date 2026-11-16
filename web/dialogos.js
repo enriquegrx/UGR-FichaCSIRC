@@ -501,6 +501,371 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
   return { mover, cargar };
 }
 
+// ================================================================ por completar
+
+// Pestaña "Por completar" (botón 🧩 junto a Estadísticas): los días del año sin
+// imputar del todo, hasta ayer, por meses, para marcar uno, varios o todos y
+// rellenarlos de una vez. Tres maneras: completar lo que le falta a cada uno
+// con una tarea, aplicar una plantilla o copiar un día. Antes de hacerlo, un
+// resumen; después, todo el bloque se deshace de una vez. Devuelve
+// {mover(n), cargar()}: las flechas de arriba cambian de año.
+const MESES_LARGOS = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
+                      "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDatos = () => {} } = {}) {
+  let anio = Number(hoyIso().slice(0, 4)), seq = 0, datos = null, ancla = null;
+  const marcados = new Set();
+  const cuerpo = el("div", { class: "pend" });
+  const cifras = el("span", { class: "pend-cifras" });
+  const bDeshacer = el("button", { class: "b-deshacer-pend", onclick: () => deshacer() },
+    "↶ Deshacer", el("span", { class: "n-deshacer" }));
+  const todos = el("input", { type: "checkbox", "aria-label": "Marcar todos los días",
+    onchange: () => marcar((datos?.dias || []).map((x) => x.iso), todos.checked) });
+  const nMarcados = el("span", { class: "pend-marcados" });
+  const acciones = [
+    el("button", { class: "primario", text: "＋ Completar lo que falta…",
+                   title: "A cada día marcado, justo las horas que le faltan, de una tarea",
+                   onclick: () => accion(dlgCompletarPend) }),
+    el("button", { text: "▤ Aplicar plantilla…", title: "Los apuntes de una plantilla en cada día marcado",
+                   onclick: () => accion(dlgPlantillaPend) }),
+    el("button", { text: "⧉ Copiar un día…", title: "Los apuntes de un día en cada día marcado",
+                   onclick: () => accion(dlgCopiarPend) }),
+  ];
+  const barra = el("div", { class: "pend-barra" },
+    el("label", { class: "check" }, todos, " Todos"), nMarcados, el("span", { class: "pend-hueco" }), ...acciones);
+  cont.replaceChildren(
+    el("div", { class: "cabeza-seccion" },
+      el("div", { class: "fila pend-cabeza" },
+        el("h2", { text: "🧩 Por completar" }), cifras, el("span", { class: "pend-hueco" }), bDeshacer)),
+    barra, cuerpo);
+  pintarDeshacerPend();
+
+  function mover(n) {
+    if (n === 0) anio = Number(hoyIso().slice(0, 4));
+    else if (n < 0 && datos && !datos.anterior) { estado("No se puede ir más atrás."); return; }
+    else if (n > 0 && datos && !datos.siguiente) { estado("Los días que vienen se completan en su ficha."); return; }
+    else anio += n;
+    marcados.clear();
+    cargar();
+  }
+
+  async function cargar() {
+    const mio = ++seq;
+    cuerpo.replaceChildren(nota("Buscando los días sin completar…"));
+    let r;
+    try { r = await llamar("por_completar", anio); } catch (_e) { return; }
+    if (mio !== seq) return;
+    datos = r;
+    anio = r.anio;
+    alTitulo(r.titulo);
+    alDatos(r);
+    if (r.error) { cuerpo.replaceChildren(nota(r.error, "rojo")); barra.hidden = true; cifras.textContent = ""; return; }
+    const hay = new Set(r.dias.map((x) => x.iso));
+    for (const i of [...marcados]) if (!hay.has(i)) marcados.delete(i);
+    pintar();
+  }
+
+  function marcar(isos, si) {
+    for (const i of isos) { if (si) marcados.add(i); else marcados.delete(i); }
+    pintarMarcas();
+  }
+
+  function pintarMarcas() {
+    for (const c of cuerpo.querySelectorAll("input[data-iso]")) {
+      c.checked = marcados.has(c.dataset.iso);
+      c.closest(".pend-dia").classList.toggle("marcado", c.checked);
+    }
+    for (const c of cuerpo.querySelectorAll("input[data-mes]")) {
+      const del = datos.dias.filter((x) => x.mes === Number(c.dataset.mes));
+      const n = del.filter((x) => marcados.has(x.iso)).length;
+      c.checked = n === del.length;
+      c.indeterminate = n > 0 && n < del.length;
+    }
+    const elegidos = datos.dias.filter((x) => marcados.has(x.iso));
+    todos.checked = !!datos.dias.length && elegidos.length === datos.dias.length;
+    todos.indeterminate = elegidos.length > 0 && !todos.checked;
+    nMarcados.textContent = elegidos.length
+      ? `${elegidos.length} ${elegidos.length === 1 ? "día marcado" : "días marcados"} · faltan ${fmtHoras(elegidos.reduce((s, x) => s + x.falta, 0))}h`
+      : "Marca los días que quieras rellenar (Mayús+clic, un rango)";
+    nMarcados.classList.toggle("tenue", !elegidos.length);
+    for (const b of acciones) b.disabled = !elegidos.length;
+  }
+
+  function pintar() {
+    const r = datos;
+    cifras.textContent = r.n ? `${r.n} ${r.n === 1 ? "día" : "días"} · faltan ${r.falta}` : "";
+    barra.hidden = !r.n;
+    if (!r.n) {
+      cuerpo.replaceChildren(el("div", { class: "pend-vacio" },
+        el("b", { text: "✔ Todo completo" }),
+        el("span", { text: ` en ${r.anio}${r.siguiente ? "" : " hasta ayer"}.` })));
+      return;
+    }
+    const orden = r.dias.map((x) => x.iso);
+    const porMes = new Map();
+    for (const x of r.dias) { if (!porMes.has(x.mes)) porMes.set(x.mes, []); porMes.get(x.mes).push(x); }
+    const meses = [...porMes].map(([mes, lista]) => {
+      const cMes = el("input", { type: "checkbox", "data-mes": String(mes),
+        "aria-label": `Marcar todo ${MESES_LARGOS[mes - 1].toLowerCase()}`,
+        onchange: (e) => marcar(lista.map((x) => x.iso), e.target.checked) });
+      const falta = fmtHoras(lista.reduce((s, x) => s + x.falta, 0));
+      return el("section", { class: "pend-mes" },
+        el("label", { class: "pend-mes-cab" }, cMes,
+          el("b", { text: MESES_LARGOS[mes - 1] }),
+          el("span", { class: "tenue", text: `${lista.length} ${lista.length === 1 ? "día" : "días"} · faltan ${falta}h` })),
+        ...lista.map((x) => {
+          const c = el("input", { type: "checkbox", "data-iso": x.iso, "aria-label": x.dia });
+          c.addEventListener("click", (e) => {
+            // Mayus+clic: todo el rango desde el ultimo pulsado
+            if (e.shiftKey && ancla && ancla !== x.iso) {
+              const [a, b] = [orden.indexOf(ancla), orden.indexOf(x.iso)].sort((p, q) => p - q);
+              if (a >= 0) marcar(orden.slice(a, b + 1), c.checked);
+            } else {
+              marcar([x.iso], c.checked);
+            }
+            ancla = x.iso;
+          });
+          const pct = x.obj ? Math.round((100 * x.reg) / x.obj) : 0;
+          return el("label", { class: `pend-dia${x.vacio ? " vacio" : ""}` }, c,
+            el("b", { class: "pend-fecha", text: x.dia }),
+            el("span", { class: "pend-mini", title: x.texto }, el("i", { style: `--w:${pct}%` })),
+            el("span", { class: "pend-texto", text: x.vacio ? `sin apuntes · ${x.texto}` : x.texto }),
+            el("span", { class: "pend-falta", text: `faltan ${x.falta_txt}` }),
+            el("span", { class: "pend-marcas" },
+              x.guardia ? el("span", { class: "chip-marca guardia", text: "Guardia" }) : null,
+              x.teletrabajo ? el("span", { class: "chip-marca tele", text: "Teletrabajo" }) : null),
+            el("button", { class: "enlace pend-ir", text: "Ir al día →", title: "Abrir su semana con el día marcado",
+                           onclick: (e) => { e.preventDefault(); e.stopPropagation(); alIrADia(x.iso); } }));
+        }));
+    });
+    cuerpo.replaceChildren(
+      nota("Días laborables con menos horas que su jornada, hasta ayer (hoy se completa en su ficha). "
+           + "Festivos, vacaciones y permisos no salen."),
+      ...meses);
+    pintarMarcas();
+  }
+
+  // Lo que se haga, sobre los marcados; luego, la lista otra vez (lo
+  // completado desaparece) y fuera las marcas.
+  async function accion(fn) {
+    const elegidos = (datos?.dias || []).filter((x) => marcados.has(x.iso));
+    if (!elegidos.length) { await avisar("Por completar", "Marca al menos un día."); return; }
+    if (!(await fn(elegidos, datos))) return;
+    marcados.clear();
+    ancla = null;
+    await cargar();
+  }
+
+  cargar();
+  return { mover, cargar };
+}
+
+// El Deshacer del panel: el mismo que el de la caja Días (que aquí no se ve).
+function pintarDeshacerPend() {
+  const b = document.querySelector("#estadisticas .b-deshacer-pend");
+  if (!b) return;
+  const g = $("b-deshacer");
+  b.hidden = g.hidden;
+  b.title = g.title;
+  b.querySelector(".n-deshacer").textContent = g.querySelector(".n-deshacer").textContent;
+}
+
+const listaDias = (dias, horas = true, max = 8) =>
+  dias.slice(0, max).map((x) => `  · ${x.dia}${horas ? `  +${x.falta_txt}` : ""}`).join("\n")
+  + (dias.length > max ? `\n  … y ${dias.length - max} más` : "");
+
+// Completar lo que falta: UNA tarea (de las habituales o cualquier otra) y a
+// cada dia, justo lo que le falta. El resumen se ve antes de pulsar.
+function dlgCompletarPend(dias) {
+  const total = fmtHoras(dias.reduce((s, x) => s + x.falta, 0));
+  const isos = dias.map((x) => x.iso);
+  const habituales = (st.habituales?.filas || []).slice(0, 5);
+  return new Promise((resolver) => {
+    let elegida = habituales[0] ? { wp_id: habituales[0].wp_id, tarea: habituales[0].tarea, actividad: habituales[0].actividad } : null;
+    let comAuto = "", seqAct = 0;
+    const act = el("select");
+    const com = entrada("", { class: "ancho", placeholder: "Opcional" });
+    const resumen = el("div", { class: "pend-resumen" });
+    const opciones = el("div", { class: "pend-tareas", role: "radiogroup", "aria-label": "Tarea" });
+    const radio = (valor, texto, extra = null) => {
+      const r = el("input", { type: "radio", name: "pend-tarea", value: valor });
+      return el("label", { class: "pend-op" }, r, el("span", { text: texto }), extra);
+    };
+    habituales.forEach((h, i) => {
+      const op = radio(String(i), `${h.tarea}${h.actividad ? ` · ${h.actividad}` : ""}`);
+      op.querySelector("input").addEventListener("change", () => elegir({ wp_id: h.wp_id, tarea: h.tarea, actividad: h.actividad }));
+      opciones.append(op);
+    });
+    const otra = entrada("", { class: "ancho", placeholder: "Busca por nombre o número de tarea" });
+    const opOtra = radio("otra", "Otra tarea:", otra);
+    opOtra.classList.add("pend-op-otra");
+    opciones.append(opOtra);
+    buscadorTarea(otra, { alElegir: (t) => {
+      otra.value = `${t.id} - ${t.nombre}`;
+      opOtra.querySelector("input").checked = true;
+      elegir({ wp_id: t.id, tarea: t.nombre, actividad: "" });
+    } });
+    otra.addEventListener("focus", () => { opOtra.querySelector("input").checked = true; });
+
+    let fin = () => {};
+    const d = dialogo({ titulo: "Completar lo que falta", ancho: 640, botones: [
+      { texto: "Cancelar", accion: () => fin(false) },
+      { texto: `Completar ${dias.length} ${dias.length === 1 ? "día" : "días"}`, clase: "primario", id: "ok", accion: completar }] });
+    const cerrarDialogo = d.cerrar;
+    let hecho = false;
+    // trabajo: lo que se hace ya sin el dialogo; el panel se recarga despues
+    fin = async (v, trabajo = null) => {
+      if (hecho) return;
+      hecho = true;
+      cerrarDialogo();
+      try { if (trabajo) await trabajo(); } finally { resolver(v); }
+    };
+    d.cerrar = () => fin(false);
+    d.cuerpo.append(
+      nota(`A cada uno de los ${dias.length} días marcados se le añade justo lo que le falta, de la tarea que elijas.`),
+      el("h4", { class: "pend-sub", text: "Tarea" }), opciones,
+      rejilla(["Actividad", act], ["Comentario", com]),
+      resumen);
+    if (habituales.length) opciones.querySelector("input").checked = true;
+    act.addEventListener("change", pintarResumen);
+    if (elegida) elegir(elegida); else pintarResumen();
+
+    async function elegir(t) {
+      elegida = t;
+      pintarResumen();
+      const mio = ++seqAct;
+      const r = await llamar("actividades", t.wp_id).catch(() => null);
+      if (!r || mio !== seqAct) return;
+      act.replaceChildren(...r.nombres.map((n) => el("option", { value: n, text: n })));
+      const quiero = (t.actividad || r.preferida || "").toLowerCase();
+      const i = r.nombres.findIndex((n) => n.toLowerCase() === quiero);
+      act.selectedIndex = i >= 0 ? i : 0;
+      // el comentario habitual de la tarea, si no se ha escrito otro
+      if (!com.value || com.value === comAuto) { com.value = comAuto = r.comentario || ""; }
+      pintarResumen();
+    }
+
+    function pintarResumen() {
+      d.botones.ok.disabled = !elegida;
+      resumen.replaceChildren(
+        el("p", {}, el("b", { text: `Se añadirán ${total}h en ${dias.length} ${dias.length === 1 ? "día" : "días"}` }),
+          elegida ? ` a «${corto(elegida.tarea, 60)}»${act.value ? ` · ${act.value}` : ""}.` : ": elige la tarea."),
+        el("pre", { class: "pend-lista", text: listaDias(dias) }),
+        nota("Después, «Deshacer» lo quita todo de una vez."));
+    }
+
+    async function completar() {
+      if (!elegida) { await avisar("Completar", "Elige la tarea con la que completar."); return; }
+      estado("Completando…");
+      const r = await llamar("completar_dias", isos, elegida.wp_id, act.value || "", com.value.trim());
+      if (r.error) { await avisar("No se pudo", r.error); return; }
+      const tarea = elegida.tarea;
+      if (r.fallidos?.length) {
+        r.ultimo = `${r.ultimo}\n\nSin imputar: ${r.fallidos.join(", ")}. Si ese mes ya está cerrado en ProyectosTIC, no admite cambios.`;
+      }
+      await fin(true, () => informarLote(r, {
+        hecho: (n) => `Completados ${n} ${n === 1 ? "día" : "días"} con «${corto(tarea, 40)}»: ${r.horas}.`,
+        nada: "No se añadió nada: esos días ya estaban completos.",
+        saltados: (n) => ` Saltados ${n} (ya completos o no laborables).` }));
+    }
+  });
+}
+
+// Una plantilla en todos los marcados. Si alguno ya tiene horas, se avisa:
+// la plantilla es un dia entero y se puede pasar de la jornada.
+async function dlgPlantillaPend(dias) {
+  const ps = await llamar("plantillas");
+  if (!ps.length) {
+    await avisar("Aplicar plantilla", "Todavía no tienes plantillas. Para crear una: botón derecho sobre un día "
+                 + "con las horas que quieras guardar → Guardar este día como plantilla.");
+    return false;
+  }
+  const isos = dias.map((x) => x.iso);
+  const conHoras = dias.filter((x) => !x.vacio);
+  return new Promise((resolver) => {
+    const lista = el("select", { size: String(Math.min(8, Math.max(3, ps.length))), class: "lista" },
+      ...ps.map((p, i) => el("option", { value: String(i), text: `${p.nombre}  (${p.n} apuntes, ${p.total})` })));
+    lista.selectedIndex = 0;
+    const resumen = el("div", { class: "pend-resumen" });
+    let fin = () => {};
+    const d = dialogo({ titulo: "Aplicar plantilla", ancho: 600, botones: [
+      { texto: "Cancelar", accion: () => fin(false) },
+      { texto: `Aplicar a ${dias.length} ${dias.length === 1 ? "día" : "días"}`, clase: "primario", accion: aplicar }] });
+    const cerrarDialogo = d.cerrar;
+    let hecho = false;
+    // trabajo: lo que se hace ya sin el dialogo; el panel se recarga despues
+    fin = async (v, trabajo = null) => {
+      if (hecho) return;
+      hecho = true;
+      cerrarDialogo();
+      try { if (trabajo) await trabajo(); } finally { resolver(v); }
+    };
+    d.cerrar = () => fin(false);
+    const pintarResumen = () => {
+      const p = ps[lista.selectedIndex];
+      resumen.replaceChildren(
+        el("p", {}, el("b", { text: `«${p.nombre}» (${p.n} apuntes, ${p.total})` }),
+          ` en ${dias.length} ${dias.length === 1 ? "día" : "días"}. Se saltan las tareas que ya tengan apunte ese día.`),
+        el("pre", { class: "pend-lista", text: listaDias(dias, false) }),
+        conHoras.length ? nota(`${conHoras.length} de esos días ya tienen horas: con la plantilla podrías pasarte `
+                               + "de la jornada. Para esos, mejor «Completar lo que falta».", "ambar") : null,
+        nota("Después, «Deshacer» lo quita todo de una vez."));
+    };
+    lista.addEventListener("change", pintarResumen);
+    lista.addEventListener("dblclick", aplicar);
+    d.cuerpo.append(nota("Elige la plantilla:"), lista, resumen);
+    pintarResumen();
+    lista.focus();
+
+    async function aplicar() {
+      const p = ps[lista.selectedIndex];
+      if (!p) return;
+      await fin(true, async () => {
+        estado("Aplicando plantilla…");
+        await informarLote(await llamar("aplicar_plantilla", p.nombre, isos), {
+          hecho: (n) => `Plantilla «${corto(p.nombre, 40)}» aplicada: ${n} apuntes.`,
+          nada: "No se añadió nada: esas tareas ya estaban." });
+      });
+    }
+  });
+}
+
+// Copiar un dia en todos los marcados: por defecto, el ultimo completo. El
+// resumen (sus apuntes y a cuantos dias) lo pregunta "Copiar día" de siempre.
+function dlgCopiarPend(dias, datos) {
+  const isos = dias.map((x) => x.iso);
+  return new Promise((resolver) => {
+    const fecha = el("input", { type: "date", max: hoyIso() });
+    fecha.value = datos?.modelo || "";
+    let fin = () => {};
+    const d = dialogo({ titulo: "Copiar un día", ancho: 520, botones: [
+      { texto: "Cancelar", accion: () => fin(false) },
+      { texto: "Siguiente…", clase: "primario", accion: siguiente }] });
+    const cerrarDialogo = d.cerrar;
+    let hecho = false;
+    // trabajo: lo que se hace ya sin el dialogo; el panel se recarga despues
+    fin = async (v, trabajo = null) => {
+      if (hecho) return;
+      hecho = true;
+      cerrarDialogo();
+      try { if (trabajo) await trabajo(); } finally { resolver(v); }
+    };
+    d.cerrar = () => fin(false);
+    const [, m, dd] = (datos?.modelo || "--").split("-");
+    d.cuerpo.append(
+      nota(`Los apuntes del día que elijas se copian a los ${dias.length} días marcados. `
+           + "Se saltan las tareas que ya tengan apunte ese día."),
+      rejilla(["Día a copiar", fecha]),
+      datos?.modelo ? nota(`Propuesto: el último día completo (${dd}/${m}).`) : null);
+    fecha.focus();
+
+    async function siguiente() {
+      if (!fecha.value) { await avisar("Copiar un día", "Elige el día que quieres copiar."); return; }
+      await fin(true, () => dlgCopiarDia(isos, fecha.value));
+    }
+  });
+}
+
 // ================================================================ diagnostico
 
 // Ayuda > Copiar diagnostico: para pegar en un correo cuando algo no va. Sin

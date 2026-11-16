@@ -710,7 +710,65 @@ body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #esta
             border: 1px solid color-mix(in srgb, var(--aviso) 45%, var(--panel)); }
 .chip-dia:hover { border-color: var(--aviso); background: color-mix(in srgb, var(--aviso) 12%, var(--panel)); }
 .chip-dia b { font-weight: 600; }
-#b-estad.activo { background: var(--seleccion); border-color: var(--primario); color: var(--primario); font-weight: 600; }
+#b-estad.activo, #b-pend.activo { background: var(--seleccion); border-color: var(--primario); color: var(--primario); font-weight: 600; }
+
+/* ---- por completar: los dias sin imputar del año, para rellenarlos en bloque ---- */
+#b-pend .n-pend { display: inline-block; min-width: 20px; margin-left: 2px; padding: 0 6px; border-radius: 999px;
+                  font-size: 12px; font-weight: 700; line-height: 18px; text-align: center;
+                  background: var(--aviso); color: #fff; font-variant-numeric: tabular-nums; }
+#b-pend .n-pend:empty { display: none; }
+#b-pend.al-dia { color: var(--tenue); }
+#b-pend.al-dia .n-pend { background: transparent; color: var(--exito); padding: 0 2px; }
+.pend-cabeza { gap: 14px; align-items: baseline; }
+.pend-cifras { font-size: 15px; font-weight: 600; color: var(--aviso); font-variant-numeric: tabular-nums; }
+.pend-hueco { flex: 1; }
+.b-deshacer-pend { font-weight: 600; border-color: var(--primario); color: var(--primario); }
+.b-deshacer-pend .n-deshacer:not(:empty) { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 12px;
+                                           background: var(--primario); color: #fff; }
+/* la barra de acciones se queda a la vista al bajar por la lista */
+.pend-barra { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+              margin: 10px 0 6px; padding: 10px 12px; border-radius: 10px; background: var(--panel-alt); }
+.pend-marcados { font-size: 13px; font-variant-numeric: tabular-nums; }
+.pend-marcados:not(.tenue) { font-weight: 600; }
+.pend-mes { margin-top: 14px; }
+.pend-mes-cab { display: flex; align-items: center; gap: 10px; padding: 4px 4px 6px; border-bottom: 1px solid var(--borde-suave);
+                font-size: 14px; cursor: pointer; }
+.pend-mes-cab b { color: var(--texto-fuerte); }
+.pend-mes-cab .tenue { font-size: 12px; }
+.pend-dia { display: grid; grid-template-columns: 18px 130px 90px minmax(0, 1fr) 90px auto auto; align-items: center;
+            gap: 4px 12px; padding: 6px 4px; border-bottom: 1px solid var(--borde-suave); font-size: 13px; cursor: pointer; }
+.pend-dia:hover { background: var(--apunte-hover); }
+.pend-dia.marcado { background: var(--seleccion); }
+.pend-fecha { font-weight: 600; font-variant-numeric: tabular-nums; }
+.pend-mini { height: 8px; border-radius: 4px; background: var(--barra-fondo); overflow: hidden; }
+.pend-mini > i { display: block; height: 100%; width: var(--w); background: var(--aviso); border-radius: 4px; }
+.pend-texto { color: var(--tenue); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pend-dia.vacio .pend-texto { color: var(--aviso); }
+.pend-falta { font-weight: 600; color: var(--aviso); text-align: right; font-variant-numeric: tabular-nums; }
+.pend-marcas { display: inline-flex; gap: 4px; }
+.chip-marca { font-size: 11px; padding: 0 7px; border-radius: 999px; }
+.chip-marca.guardia { background: var(--guardia-bg); color: var(--guardia-fg); }
+.chip-marca.tele { background: var(--tele-bg); color: var(--tele-fg); }
+.pend-ir { font-size: 12px; white-space: nowrap; }
+.pend-vacio { margin: 18px 0; padding: 18px; border-radius: 12px; font-size: 15px;
+              background: color-mix(in srgb, var(--exito) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--exito) 30%, var(--panel)); }
+.pend-vacio b { color: var(--exito); }
+/* dialogos de Por completar */
+.pend-sub { margin: 10px 0 4px; font-size: 13px; color: var(--texto-fuerte); }
+.pend-tareas { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.pend-op { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--borde-suave); cursor: pointer; }
+.pend-op:has(input:checked) { border-color: var(--primario); background: var(--seleccion); }
+.pend-op > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pend-op-otra > span { flex: none; }
+.pend-op-otra > input.ancho { flex: 1; min-width: 0; }
+.pend-resumen { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--panel-alt); }
+.pend-resumen p { margin: 0 0 6px; }
+.pend-lista { margin: 0 0 6px; font: inherit; font-size: 12px; white-space: pre-wrap; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.nota.ambar { color: var(--aviso); }
+@media (max-width: 900px) {
+  .pend-dia { grid-template-columns: 18px 110px minmax(0, 1fr) 80px; }
+  .pend-mini, .pend-marcas, .pend-ir { display: none; }
+}
 
 .estad-nav { gap: 8px; margin-bottom: 4px; }
 .estad-titulo { font-size: 16px; min-width: 220px; text-align: center; }

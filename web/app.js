@@ -165,7 +165,7 @@ function diasMarcados() {
 
 // Resultado de crear apuntes en lote (anadir, copiar, plantilla): avisa de
 // los errores, recarga la semana y deja el resumen en la barra de estado.
-async function informarLote(r, { hecho, nada }) {
+async function informarLote(r, { hecho, nada, saltados = (n) => ` Saltados ${n} (ya existían).` }) {
   if (r.error) { await avisar("No se pudo", r.error); return; }
   if (r.errores && !r.creados) {
     await avisar("No se creó ningún apunte", `Detalle: ${r.ultimo}`);
@@ -175,7 +175,7 @@ async function informarLote(r, { hecho, nada }) {
   }
   await cargarSemana();
   if (r.creados) {
-    trasCambio(r, `${hecho(r.creados)}${r.saltados ? ` Saltados ${r.saltados} (ya existían).` : ""}`);
+    trasCambio(r, `${hecho(r.creados)}${r.saltados ? saltados(r.saltados) : ""}`);
   } else if (!r.errores) {
     estado(nada);
   }
@@ -193,6 +193,7 @@ function ponerDeshacer(quedan, siguiente = "") {
   b.hidden = !quedan;
   b.querySelector(".n-deshacer").textContent = quedan > 1 ? String(quedan) : "";
   b.title = siguiente ? `Deshacer: ${siguiente} (Ctrl+Z)` : "Deshacer el último cambio (Ctrl+Z)";
+  pintarDeshacerPend();
 }
 function trasCambio(r, texto) {
   estado(texto);
@@ -246,6 +247,7 @@ const MENUS = {
     { texto: "Exportar a CSV…", accion: dlgExportar },
     { texto: "Resumen del mes", accion: () => entrarEstadisticas("mes") },
     { texto: "Estadísticas", accion: () => entrarEstadisticas() },
+    { texto: "Días por completar", accion: () => entrarPendientes() },
   ],
   ver: () => [
     ...PANELES.map(([id, nombre]) => ({
@@ -388,6 +390,7 @@ async function arrancar() {
   avisarSemanaAnterior();
   avisarCierreMes();
   refrescarFranja();
+  refrescarPendientes(0);
   if (st.tareas.size) elegirTarea();
   llamar("usuario").then((n) => { $("usuario").textContent = n || ""; }).catch(() => {});
   // A partir del 1 de enero: ofrecer (una vez, opcional) los permisos del año.
@@ -437,7 +440,7 @@ async function cargarSemana({ marcarHoy = false, marcar = null } = {}) {
   pintarVista(datos, marcarHoy, marcar);
   // Navegar (marcarHoy/marcar) no cambia los datos; recargar tras añadir,
   // borrar, editar, copiar o F5 si: entonces se rehace la franja.
-  if (!marcarHoy && !marcar) refrescarFranja();
+  if (!marcarHoy && !marcar) { refrescarFranja(); refrescarPendientes(); }
 }
 
 // Repinta sin red tras una marca local (festivo, guardia, permiso...).
@@ -1035,11 +1038,14 @@ function pintarSelectorVista() {
   $("b-ant").title = st.vista === "mes" ? "Mes anterior (Ctrl+←)" : "Semana anterior (Ctrl+←)";
   $("b-sig").title = st.vista === "mes" ? "Mes siguiente (Ctrl+→)" : "Semana siguiente (Ctrl+→)";
   $("b-hoy").title = st.vista === "mes" ? "Volver al mes actual" : "Volver a la semana actual";
-  $("b-estad").classList.toggle("activo", !!st.estad);
-  $("b-estad").setAttribute("aria-pressed", String(!!st.estad));
+  for (const [id, tipo] of [["b-estad", "estad"], ["b-pend", "pend"]]) {
+    $(id).classList.toggle("activo", st.estad?.tipo === tipo);
+    $(id).setAttribute("aria-pressed", String(st.estad?.tipo === tipo));
+  }
   if (st.estad) {
-    $("b-ant").title = "Periodo anterior (Ctrl+←)";
-    $("b-sig").title = "Periodo siguiente (Ctrl+→)";
+    const anio = st.estad.tipo === "pend";
+    $("b-ant").title = anio ? "Año anterior (Ctrl+←)" : "Periodo anterior (Ctrl+←)";
+    $("b-sig").title = anio ? "Año siguiente (Ctrl+→)" : "Periodo siguiente (Ctrl+→)";
     $("b-hoy").title = "Volver a la semana de hoy";
   }
 }
@@ -1050,18 +1056,57 @@ function pintarSelectorVista() {
 // paneles de abajo (los esconde el CSS con body.modo-estad); el titulo de
 // arriba dice el periodo y las flechas / "Hoy" lo mueven.
 function entrarEstadisticas(periodo = "anio") {
-  if (st.estad) return;
+  if (st.estad?.tipo === "estad") return;
+  if (st.estad) salirEstadisticas();
   const ref = st.vista === "mes" ? `${st.mesSel.anio}-${String(st.mesSel.mes).padStart(2, "0")}-01` : st.lunes;
   document.body.classList.add("modo-estad");
   $("estadisticas").hidden = false;
   // se abre en el año: la vista de conjunto; Semanal y Mensual, a un clic
-  st.estad = montarEstadisticas($("estadisticas"), {
+  st.estad = { tipo: "estad", ...montarEstadisticas($("estadisticas"), {
     periodo, ref,
     alTitulo: (t) => { $("titulo-semana").textContent = t; },
     // un dia por completar: a su semana (o su mes), con el dia marcado
     alIrADia: (iso) => { salirEstadisticas(); pintarSelectorVista(); irADia(iso); },
-  });
+  }) };
   pintarSelectorVista();
+}
+
+// La pestaña "Por completar": en el mismo sitio que Estadisticas (las flechas
+// cambian de año; "Hoy", a la semana de hoy).
+function entrarPendientes() {
+  if (st.estad?.tipo === "pend") return;
+  if (st.estad) salirEstadisticas();
+  document.body.classList.add("modo-estad");
+  $("estadisticas").hidden = false;
+  st.estad = { tipo: "pend", ...montarPendientes($("estadisticas"), {
+    alTitulo: (t) => { $("titulo-semana").textContent = t; },
+    alIrADia: (iso) => { salirEstadisticas(); pintarSelectorVista(); irADia(iso); },
+    alDatos: ponerContadorPendientes,
+  }) };
+  pintarSelectorVista();
+}
+
+// El numero del boton 🧩: los dias por completar de este año. Tras cada
+// cambio (con un respiro, que un cambio trae otro) y sin avisos si falla.
+let pendT = null, pendSeq = 0;
+function refrescarPendientes(retraso = 1500) {
+  clearTimeout(pendT);
+  pendT = setTimeout(async () => {
+    if (st.estad?.tipo === "pend") return;          // el panel ya lo pone al cargar
+    const mio = ++pendSeq;
+    let r;
+    try { r = await api().por_completar(null); } catch (_e) { return; }
+    if (mio === pendSeq) ponerContadorPendientes(r);
+  }, retraso);
+}
+function ponerContadorPendientes(r) {
+  if (!r || r.error || r.anio !== Number(hoyIso().slice(0, 4))) return;
+  const b = $("b-pend");
+  b.classList.toggle("al-dia", !r.n);
+  b.querySelector(".n-pend").textContent = r.n ? String(r.n) : "✔";
+  b.title = r.n ? `${r.n} ${r.n === 1 ? "día" : "días"} de ${r.anio} sin completar (faltan ${r.falta}): `
+                  + "márcalos y rellénalos de una vez"
+                : `Todo completo en ${r.anio} hasta ayer`;
 }
 
 function salirEstadisticas() {
@@ -1489,6 +1534,7 @@ async function deshacer() {
     const r = await llamar("deshacer");
     ponerDeshacer(r.quedan, r.siguiente);
     await cargarSemana();
+    if (st.estad?.tipo === "pend") st.estad.cargar();
     if (r.pendiente) {
       estado(`No se pudo deshacer todo «${r.texto}» (${r.ultimo || "sin conexión"}). Pulsa Ctrl+Z para reintentarlo.`);
     } else if (r.texto) {
@@ -1539,7 +1585,14 @@ $("b-hoy").onclick = () => navegar(0);
 $("b-recargar").onclick = () => (st.estad ? st.estad.cargar() : cargarSemana());
 // Estadisticas: entra en el panel; pulsado otra vez, vuelve a las fichas
 $("b-estad").onclick = async () => {
-  if (!st.estad) { entrarEstadisticas(); return; }
+  if (st.estad?.tipo !== "estad") { entrarEstadisticas(); return; }
+  salirEstadisticas();
+  pintarSelectorVista();
+  await cargarSemana();
+};
+// Por completar: igual (otra pulsacion, a las fichas)
+$("b-pend").onclick = async () => {
+  if (st.estad?.tipo !== "pend") { entrarPendientes(); return; }
   salirEstadisticas();
   pintarSelectorVista();
   await cargarSemana();

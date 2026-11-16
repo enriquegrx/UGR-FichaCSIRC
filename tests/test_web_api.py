@@ -463,7 +463,11 @@ class TestBorrarYMarcas(Base):
 
     def test_fichar_desde_el_aviso(self):
         hoy = dt.date.today()
+        # el laborable anterior: un lunes, "ayer" seria domingo y no cuenta
+        # para las habituales (el test fallaba los lunes)
         ayer = hoy - dt.timedelta(days=1)
+        while ayer.weekday() >= 5:
+            ayer -= dt.timedelta(days=1)
         self.api._pendientes = [(ayer, 5.0, 7.0), (hoy, 0.0, 7.0)]
         with mock.patch.object(core, "entradas_rango", return_value=[
                  {"fecha": ayer.isoformat(), "horas": 5, "wp_id": "10", "wp_titulo": "T",
