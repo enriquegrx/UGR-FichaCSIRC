@@ -673,7 +673,9 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .barra-tareas > .meta { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px;
                         background: var(--texto-fuerte); border-radius: 1px; }
 .dia.marcado .barra-tareas > .seg + .seg { box-shadow: inset 2px 0 0 var(--seleccion); }
-.punto { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--c); align-self: center; }
+/* i.punto: el puntito de color (leyendas); sin la "i" pisaba los p.punto de
+   Novedades y Tecnología, que se quedaban en 8px de ancho */
+i.punto { flex: none; width: 8px; height: 8px; border-radius: 2px; background: var(--c); align-self: center; }
 .dia .linea-act { padding-left: 54px; }
 
 /* ---- mes: calendario de calor ---- */

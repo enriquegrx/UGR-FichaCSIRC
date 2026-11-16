@@ -68,9 +68,12 @@ jobs:
         working-directory: tauri
         run: cargo test
 
+      # De PRUEBAS: con nombre propio (FichaCSIRC-Rust) para no pisar el acceso
+      # ni el "Desinstalar" de la 3.x. El de produccion (4.0) se compila sin
+      # tauri.pruebas.json y con --features produccion.
       - name: Compilar e instalador
         working-directory: tauri
-        run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.paquetes }}
+        run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.paquetes }} --config tauri.pruebas.json
 
       - uses: actions/upload-artifact@v5
         with:
