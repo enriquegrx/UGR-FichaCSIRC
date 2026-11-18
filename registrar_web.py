@@ -2804,6 +2804,17 @@ class Api:
                                         al_por_completar=por_completar)
         self._bandeja.arrancar()
 
+    def _otra_copia(self, args):
+        """Se ha pulsado el acceso con esta ya abierta (quiza escondida en la
+        bandeja): mostrar la ventana, y abrir Por completar si lo pide."""
+        if getattr(self, "_bandeja", None):
+            self._bandeja.mostrar()
+        elif self._ventana is not None:
+            self._ventana.show()
+            self._ventana.restore()
+        if "--por-completar" in args and self._ventana is not None:
+            self._ventana.evaluate_js("entrarPendientes()")
+
     def bandeja_pendientes(self, n):
         """El numero de "Por completar (n)" en el menu del icono."""
         b = getattr(self, "_bandeja", None)
@@ -3040,6 +3051,13 @@ def main():
     # Sin config.json (primera vez): el propio asistente, no un mensaje de error.
     # --configurar: el acceso "FichaCSIRC - Configurar" del menu Inicio.
     asistente = core is None or "--configurar" in sys.argv[1:]
+    # Una sola abierta: si ya hay una (p. ej. escondida en la bandeja), se le
+    # pide que se muestre y esta copia sale. Antes, el acceso del escritorio
+    # arrancaba otra que no llegaba a verse.
+    import instancia
+    carpeta_config = os.path.dirname(ccore.CONFIG_PATH)
+    if not asistente and instancia.avisar_a_la_abierta(carpeta_config, sys.argv[1:]):
+        return
     pagina = "configurar.html" if asistente else "index.html"
     con_bandeja = _usar_bandeja(asistente)
     # --minimizado (inicio con Windows): nace escondida en la bandeja.
@@ -3056,6 +3074,11 @@ def main():
             core.LOG.warning("No se pudo poner el icono en la bandeja: %s", e)
             if escondida:
                 api._ventana.show()
+    if not asistente:
+        try:
+            instancia.escuchar(carpeta_config, api._otra_copia)
+        except OSError as e:               # sin ello, solo se pierde lo de "una sola"
+            core.LOG.warning("No se pudo vigilar otras copias abiertas: %s", e)
     webview.start()
 
 

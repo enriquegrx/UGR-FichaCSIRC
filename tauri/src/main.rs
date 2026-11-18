@@ -48,7 +48,24 @@ fn main() {
             _ => return,
         }
     }
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // Una sola abierta: con la ventana escondida en la bandeja, el acceso del
+    // escritorio arrancaba otra copia que no llegaba a verse. Ahora la nueva
+    // le pide a la abierta que se muestre (y que abra Por completar, si viene
+    // del aviso diario) y sale. El aviso diario (--recordatorio) es aparte:
+    // tiene que poder salir aunque la app este abierta.
+    if !recordatorio {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            sistema::mostrar(app);
+            if args.iter().any(|a| a == "--por-completar") {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("principal") {
+                    let _ = w.eval("entrarPendientes()");
+                }
+            }
+        }));
+    }
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(estado)

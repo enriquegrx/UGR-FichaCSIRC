@@ -968,11 +968,40 @@ class TestArranque(unittest.TestCase):
             with mock.patch.dict(sys.modules, {"webview": webview}), \
                  mock.patch.object(web, "core", core if con_motor else None), \
                  mock.patch.object(web, "EXPERIMENTO", False), \
-                 mock.patch("recordatorio.reparar_recordatorio"):
+                 mock.patch("recordatorio.reparar_recordatorio"), \
+                 mock.patch("instancia.avisar_a_la_abierta", return_value=False), \
+                 mock.patch("instancia.escuchar") as escuchar:
                 web.main()
+            self.escuchar = escuchar
         finally:
             sys.argv = argv_antes
         return webview
+
+    def test_ya_abierta_no_arranca_otra(self):
+        """Con una abierta (p. ej. escondida en la bandeja), el acceso del
+        escritorio le pide que se muestre y no arranca otra copia."""
+        webview = mock.MagicMock()
+        argv_antes = sys.argv
+        sys.argv = ["FichaCSIRC.exe"]
+        try:
+            with mock.patch.dict(sys.modules, {"webview": webview}), \
+                 mock.patch.object(web, "core", core), \
+                 mock.patch.object(web, "EXPERIMENTO", False), \
+                 mock.patch("recordatorio.reparar_recordatorio"), \
+                 mock.patch("instancia.avisar_a_la_abierta", return_value=True) as avisar:
+                web.main()
+        finally:
+            sys.argv = argv_antes
+        avisar.assert_called_once()
+        webview.create_window.assert_not_called()
+
+    def test_la_abierta_se_muestra(self):
+        api = web.Api()
+        api._ventana = mock.MagicMock()
+        api._bandeja = mock.MagicMock()
+        api._otra_copia(["--por-completar"])
+        api._bandeja.mostrar.assert_called_once()
+        api._ventana.evaluate_js.assert_called_once_with("entrarPendientes()")
 
     def test_instalacion_nueva_abre_el_asistente(self):
         # Como en un equipo recien instalado: importar bandeja (que importa el
@@ -1006,6 +1035,7 @@ class TestArranque(unittest.TestCase):
         args, _kwargs = webview.create_window.call_args
         self.assertTrue(args[1].endswith("index.html"), args)
         webview.start.assert_called_once()
+        self.escuchar.assert_called_once()           # pasa a ser la que escucha
 
     def test_bandeja_rota_no_tumba_la_app(self):
         with mock.patch("bandeja.activa", side_effect=SystemExit("pystray")):
