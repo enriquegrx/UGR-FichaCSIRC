@@ -215,8 +215,17 @@
         concesiones: p.concesiones.map((c) => ({ horas: hhmm(c.horas), fecha_limite: c.fecha_limite,
           estado: c.fecha_limite === "2026-11-10" ? "por_caducar" : "" })) };
     }) });
-  let avisoPend = [{ iso: d(2), nombre: "Miércoles", fecha: "28/10", falta: 6.5, falta_txt: "6,5h" },
-                   { iso: d(3), nombre: "Jueves", fecha: "29/10", falta: 0.5, falta_txt: "0,5h" }];
+  // el aviso diario: los dos laborables anteriores y hoy, sin fichar
+  const diaAviso = (atras) => {
+    const x = new Date();
+    for (let n = atras; n > 0;) { x.setDate(x.getDate() - 1); if (x.getDay() % 6) n--; }
+    return { iso: iso(x), nombre: ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"][x.getDay()],
+             fecha: `${String(x.getDate()).padStart(2, "0")}/${String(x.getMonth() + 1).padStart(2, "0")}`,
+             falta: 6.5, falta_txt: "6,5h" };
+  };
+  let avisoPend = [diaAviso(2), diaAviso(1), diaAviso(0)];
+  // la campana: en la ventanita del aviso ya esta puesto (por eso ha saltado)
+  const recDemo = { activo: document.body.classList.contains("aviso"), hora: "14:00", ofrecido: false };
   const avisoDemo = () => ({
     texto: avisoPend.length ? `Te faltan horas por fichar esta semana (${fmt(avisoPend.reduce((s, x) => s + x.falta, 0))} en total):` : "",
     minutos: 10, dias: avisoPend, pin: /[?&]pin\b/.test(location.search),
@@ -506,6 +515,7 @@
     abrir_github: () => espera({ ok: true }),
     // ---- asistente, actualizaciones, aviso ----
     cfg_cargar: () => espera({ primera_vez: /[?&]primera\b/.test(location.search), aviso: "", experimento: true,
+      aviso_soportado: true,
       ruta_config: "C:\\Users\\demo\\AppData\\Roaming\\FichaCSIRC",
       logo: "", url: "https://proyectostic.ugr.es", hay_key: true, jornada: "7", desayuno_si: true,
       desayuno: "0,5", verano_si: true, verano: "5", verano_inicio: "16/06", verano_fin: "15/09",
@@ -531,9 +541,15 @@
       : { al_dia: true, version: "2.9.2" }),
     instalar_actualizacion: () => espera({ error: "El prototipo no instala actualizaciones." }),
     abrir_pagina_actualizacion: () => espera({ ok: true }),
-    recordatorio_estado: () => espera({ soportado: true, activo: false, experimento: true }),
-    recordatorio_activar: () => espera({ error: "En el prototipo no se programa el aviso." }),
-    recordatorio_desactivar: () => espera({ error: "En el prototipo no se toca el aviso." }),
+    recordatorio_estado: () => espera({ soportado: true, activo: recDemo.activo, hora: recDemo.activo ? recDemo.hora : "",
+                                        por_defecto: "14:00", experimento: false, ofrecer: !recDemo.activo && !recDemo.ofrecido }),
+    recordatorio_activar: (hora) => {
+      if (!/^\d\d:\d\d$/.test(hora || "")) return espera({ error: "Escribe la hora como HH:MM (ej. 14:00)." });
+      Object.assign(recDemo, { activo: true, hora, ofrecido: true });
+      return espera({ ok: true, hora });
+    },
+    recordatorio_desactivar: () => { recDemo.activo = false; return espera({ ok: true }); },
+    recordatorio_ofrecido: () => { recDemo.ofrecido = true; return espera({ ok: true }); },
     aviso_datos: () => espera(avisoDemo()),
     aviso_fichar: (iso) => { avisoPend = avisoPend.filter((x) => x.iso !== iso); return espera({ ok: true, ...avisoDemo() }); },
     aviso_responder: () => espera({ ok: true }),

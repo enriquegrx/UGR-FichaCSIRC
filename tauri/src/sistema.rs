@@ -20,6 +20,9 @@ const HORAS_ENTRE_CHEQUEOS: i64 = 4;
 
 const CLAVE_RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 pub const AVISO_MINUTOS: u64 = 10;
+/// Hora que se propone al activar el aviso diario: a las 14:00 pilla en el
+/// puesto; a las 16:00 (la de antes) mucha gente ya habia apagado el equipo.
+pub const HORA_POR_DEFECTO: &str = "14:00";
 
 /// Un programa del sistema sin abrir una consola negra.
 fn ejecutar(programa: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
@@ -120,16 +123,120 @@ pub fn abrir_pagina_actualizacion(e: &Estado, app: &AppHandle) -> Value {
 
 // ---------------------------------------------------------------- aviso diario
 
-pub fn recordatorio_estado() -> Value {
+/// Salida de `schtasks /xml`: en la codificacion de la consola o en UTF-16.
+/// De aqui se usa con fiabilidad la HORA (ASCII); la ruta puede traer las
+/// tildes mal.
+fn decodificar(datos: &[u8]) -> String {
+    let utf16 = |d: &[u8], be: bool| {
+        let u: Vec<u16> = d.chunks_exact(2)
+            .map(|c| if be { u16::from_be_bytes([c[0], c[1]]) } else { u16::from_le_bytes([c[0], c[1]]) }).collect();
+        String::from_utf16_lossy(&u)
+    };
+    if datos.starts_with(&[0xff, 0xfe]) {
+        return utf16(&datos[2..], false);
+    }
+    if datos.starts_with(&[0xfe, 0xff]) {
+        return utf16(&datos[2..], true);
+    }
+    if datos.iter().take(200).any(|b| *b == 0) {
+        return utf16(datos, false);
+    }
+    String::from_utf8_lossy(datos).into_owned()
+}
+
+/// (hora "HH:MM", ejecutable) de la tarea programada, a partir de su XML.
+fn programado_de(xml: &str) -> Option<(String, String)> {
+    let entre = |a: &str, b: &str| {
+        let i = xml.find(a)? + a.len();
+        let j = xml[i..].find(b)? + i;
+        Some(&xml[i..j])
+    };
+    let inicio = entre("<StartBoundary>", "</StartBoundary>")?;
+    let t = inicio.find('T')? + 1;
+    let hora = inicio.get(t..t + 5)?;
+    chrono::NaiveTime::parse_from_str(hora, "%H:%M").ok()?;
+    let cmd = entre("<Command>", "</Command>")?
+        .replace("&quot;", "\"").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+    Some((hora.to_string(), cmd.trim().trim_matches('"').to_string()))
+}
+
+fn programado() -> Option<(String, String)> {
+    let o = ejecutar("schtasks", &["/query", "/tn", modo::tarea_recordatorio(), "/xml"]).ok()?;
+    if !o.status.success() {
+        return None;
+    }
+    programado_de(&decodificar(&o.stdout))
+}
+
+fn misma_ruta(a: &str, b: &str) -> bool {
+    let n = |s: &str| s.trim().trim_matches('"').replace('/', r"\").to_lowercase();
+    n(a) == n(b)
+}
+
+/// Para la campana de la ventana y el aviso: si esta puesto, a que hora y si
+/// toca ofrecerlo (una sola vez, a quien nunca lo ha tenido).
+pub fn recordatorio_estado(cfg: &Cfg) -> Value {
     let soportado = cfg!(windows);
-    let activo = soportado && ejecutar("schtasks", &["/query", "/tn", modo::tarea_recordatorio()]).is_ok_and(|o| o.status.success());
-    json!({"soportado": soportado, "activo": activo, "experimento": false})
+    let prog = if soportado { programado() } else { None };
+    // con la tarea pero sin poder leerle la hora, sigue estando activo
+    let activo = prog.is_some()
+        || (soportado && ejecutar("schtasks", &["/query", "/tn", modo::tarea_recordatorio()]).is_ok_and(|o| o.status.success()));
+    let ofrecido = cfg.get("aviso_diario_ofrecido").and_then(Value::as_bool).unwrap_or(false);
+    json!({"soportado": soportado, "activo": activo, "hora": prog.map(|p| p.0).unwrap_or_default(),
+           "por_defecto": HORA_POR_DEFECTO, "experimento": false, "ofrecer": soportado && !activo && !ofrecido})
+}
+
+/// Ya se le ha ofrecido (lo active o no): no se vuelve a preguntar.
+pub fn recordatorio_ofrecido() -> Value {
+    let mut m = Map::new();
+    m.insert("aviso_diario_ofrecido".into(), json!(true));
+    let _ = config::guardar_valores(m);
+    json!({"ok": true})
+}
+
+/// A que ejecutable apunta la tarea (para reparar_recordatorio).
+fn anotar_recordatorio() {
+    let mut m = Map::new();
+    m.insert("recordatorio_ejecutable".into(), json!(exe()));
+    m.insert("aviso_diario_ofrecido".into(), json!(true));
+    let _ = config::guardar_valores(m);
+}
+
+/// Si la tarea del aviso apunta a un ejecutable que ya no es este (la 3.x al
+/// pasar a la 4.0, u otra carpeta de instalacion), se reprograma a LA MISMA
+/// hora: el aviso se queda como se dejo hasta que su dueño lo cambie o lo
+/// quite. Como reparar_recordatorio de la app de Python. Se llama al arrancar.
+pub fn reparar_recordatorio() -> bool {
+    // compilada para desarrollo no se toca: apuntaria la tarea a target/debug
+    if cfg!(debug_assertions) || !cfg!(windows) {
+        return false;
+    }
+    let este = exe();
+    if config::leer().is_ok_and(|c| c.texto("recordatorio_ejecutable") == este) {
+        return false;
+    }
+    let Some((hora, apunta_a)) = programado() else { return false };
+    if misma_ruta(&apunta_a, &este) {
+        let mut m = Map::new();
+        m.insert("recordatorio_ejecutable".into(), json!(este));
+        let _ = config::guardar_valores(m);      // ya estaba bien: solo anotarlo
+        return false;
+    }
+    recordatorio_activar(&hora).get("ok").is_some()
+}
+
+/// Alto de la ventanita del aviso segun los dias que trae (de 1 a 5): que
+/// quepan sin barra de desplazamiento. Como alto_aviso de la app de Python.
+pub fn alto_aviso(n_dias: usize) -> f64 {
+    let n = n_dias.clamp(1, 5);
+    // titulo y pie + un renglon por dia + (con varios) el rotulo y «Fichar todo»
+    (210 + 55 * n + if n > 1 { 70 } else { 0 }).max(300) as f64
 }
 
 pub fn recordatorio_activar(hora: &str) -> Value {
     let hora = hora.trim();
     if chrono::NaiveTime::parse_from_str(hora, "%H:%M").is_err() {
-        return json!({"error": "Escribe la hora como HH:MM (ej. 16:00)."});
+        return json!({"error": "Escribe la hora como HH:MM (ej. 14:00)."});
     }
     if !cfg!(windows) {
         return json!({"error": "De momento, el aviso diario de esta versión solo está en Windows."});
@@ -137,7 +244,12 @@ pub fn recordatorio_activar(hora: &str) -> Value {
     let comando = format!("\"{}\" --recordatorio", exe());
     match ejecutar("schtasks", &["/create", "/tn", modo::tarea_recordatorio(), "/tr", &comando, "/sc", "weekly",
                                  "/d", "MON,TUE,WED,THU,FRI", "/st", hora, "/f"]) {
-        Ok(o) if o.status.success() => json!({"ok": true}),
+        // se queda a esa hora hasta que se cambie o se quite: la tarea no
+        // caduca, y si el ejecutable cambia de sitio se reprograma igual
+        Ok(o) if o.status.success() => {
+            anotar_recordatorio();
+            json!({"ok": true, "hora": hora})
+        }
         Ok(o) => json!({"error": String::from_utf8_lossy(if o.stderr.is_empty() { &o.stdout } else { &o.stderr }).trim().to_string()}),
         Err(x) => json!({"error": x.to_string()}),
     }
@@ -493,6 +605,35 @@ pub fn quitar_bandeja(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn la_hora_y_el_ejecutable_de_la_tarea() {
+        let xml = "<Task><Triggers><CalendarTrigger><StartBoundary>2026-11-18T14:00:00</StartBoundary></CalendarTrigger></Triggers>\
+                   <Actions><Exec><Command>\"C:/Programas/Ficha &amp; CSIRC/FichaCSIRC.exe\"</Command>\
+                   <Arguments>--recordatorio</Arguments></Exec></Actions></Task>";
+        let (hora, exe) = programado_de(xml).unwrap();
+        assert_eq!(hora, "14:00");
+        assert_eq!(exe, "C:/Programas/Ficha & CSIRC/FichaCSIRC.exe");
+        assert_eq!(programado_de("<Task></Task>"), None);
+        assert_eq!(programado_de("<StartBoundary>mal</StartBoundary><Command>x</Command>"), None);
+        // schtasks redirigido puede salir en UTF-16
+        let u16le: Vec<u8> = [0xff, 0xfe].into_iter().chain(xml.encode_utf16().flat_map(u16::to_le_bytes)).collect();
+        assert_eq!(programado_de(&decodificar(&u16le)).unwrap().0, "14:00");
+        assert_eq!(programado_de(&decodificar(xml.as_bytes())).unwrap().0, "14:00");
+    }
+
+    #[test]
+    fn la_tarea_apunta_a_este_ejecutable() {
+        assert!(misma_ruta("\"C:/Users/Ana/App/FichaCSIRC.exe\"", r"c:\users\ana\app\fichacsirc.exe"));
+        assert!(!misma_ruta(r"C:\Viejo\FichaCSIRC.exe", r"C:\Nuevo\FichaCSIRC.exe"));
+    }
+
+    #[test]
+    fn el_aviso_crece_con_los_dias() {
+        assert!(alto_aviso(1) < alto_aviso(3) && alto_aviso(3) < alto_aviso(5));
+        assert_eq!(alto_aviso(5), alto_aviso(9));          // mas de cinco no hay
+        assert_eq!(alto_aviso(0), alto_aviso(1));
+    }
 
     #[test]
     fn versiones() {

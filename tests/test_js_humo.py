@@ -63,6 +63,10 @@ class TestHumoWeb(unittest.TestCase):
             asistente = f.read().replace("</body>", '<script src="humo.js"></script>\n</body>')
         with open(os.path.join(cls.web, "humo_asistente.html"), "w", encoding="utf-8") as f:
             f.write(asistente)
+        with open(os.path.join(cls.web, "aviso.html"), encoding="utf-8") as f:
+            aviso = f.read().replace("</body>", '<script src="humo.js"></script>\n</body>')
+        with open(os.path.join(cls.web, "humo_aviso.html"), "w", encoding="utf-8") as f:
+            f.write(aviso)
 
     @classmethod
     def tearDownClass(cls):
@@ -99,6 +103,10 @@ class TestHumoWeb(unittest.TestCase):
     def test_asistente(self):
         lineas = self._correr("demo&humo", "humo_asistente.html")
         self.assertTrue(any("todos los pasos" in ln for ln in lineas if ln.startswith("OK")))
+
+    def test_aviso_diario(self):
+        lineas = self._correr("demo&humo", "humo_aviso.html")
+        self.assertGreaterEqual(sum(1 for ln in lineas if ln.startswith("OK")), 4)
 
     def test_pantalla_del_pin(self):
         lineas = self._correr("demo&humo&pin")

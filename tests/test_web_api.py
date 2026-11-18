@@ -461,6 +461,50 @@ class TestBorrarYMarcas(Base):
             self.assertEqual(self.api.tema(), "sistema")
         self.assertIn("error", self.api.guardar_tema("rosa"))
 
+    def test_campana_del_aviso_diario(self):
+        """Lo que pinta la campana: apagada (y ofreciendolo una sola vez), o
+        encendida con su hora, que se queda hasta que se cambie o se quite."""
+        import recordatorio
+        cfg = {}
+        comunes = (mock.patch.object(core, "config_valor", lambda c, d=None: cfg.get(c, d)),
+                   mock.patch.object(core, "guardar_config_valor", lambda k, v: cfg.update({k: v})),
+                   mock.patch.object(recordatorio, "recordatorios_soportados", return_value=True))
+        for p in comunes:
+            p.start()
+            self.addCleanup(p.stop)
+        with mock.patch.object(recordatorio, "recordatorio_activo", return_value=False), \
+             mock.patch.object(recordatorio, "activar_recordatorio") as m_act:
+            e = self.api.recordatorio_estado()
+            self.assertEqual((e["activo"], e["hora"], e["por_defecto"], e["ofrecer"]),
+                             (False, "", "14:00", True))
+            self.assertIn("error", self.api.recordatorio_activar("a las dos"))
+            m_act.assert_not_called()
+            self.assertEqual(self.api.recordatorio_activar(" 14:00 "), {"ok": True, "hora": "14:00"})
+            m_act.assert_called_once_with("14:00")
+            # ya se le ofrecio: aunque luego lo quite, no se le vuelve a preguntar
+            self.assertFalse(self.api.recordatorio_estado()["ofrecer"])
+        with mock.patch.object(recordatorio, "recordatorio_activo", return_value=True), \
+             mock.patch.object(recordatorio, "hora_programada", return_value="13:30"):
+            e = self.api.recordatorio_estado()
+            self.assertEqual((e["activo"], e["hora"], e["ofrecer"]), (True, "13:30", False))
+
+    def test_decir_que_no_al_aviso_no_vuelve_a_ofrecerlo(self):
+        import recordatorio
+        cfg = {}
+        with mock.patch.object(core, "config_valor", lambda c, d=None: cfg.get(c, d)), \
+             mock.patch.object(core, "guardar_config_valor", lambda k, v: cfg.update({k: v})), \
+             mock.patch.object(recordatorio, "recordatorios_soportados", return_value=True), \
+             mock.patch.object(recordatorio, "recordatorio_activo", return_value=False):
+            self.assertTrue(self.api.recordatorio_estado()["ofrecer"])
+            self.assertEqual(self.api.recordatorio_ofrecido(), {"ok": True})
+            self.assertFalse(self.api.recordatorio_estado()["ofrecer"])
+
+    def test_la_ventanita_del_aviso_crece_con_los_dias(self):
+        altos = [web.alto_aviso(n) for n in range(1, 6)]
+        self.assertEqual(altos, sorted(set(altos)))            # cada dia, mas alta
+        self.assertEqual(web.alto_aviso(9), web.alto_aviso(5))  # la semana tiene cinco
+        self.assertEqual(web.alto_aviso(0), web.alto_aviso(1))
+
     def test_fichar_desde_el_aviso(self):
         hoy = dt.date.today()
         # el laborable anterior: un lunes, "ayer" seria domingo y no cuenta
@@ -1127,7 +1171,7 @@ class TestExperimento(unittest.TestCase):
         with mock.patch.object(web, "EXPERIMENTO", False), \
              mock.patch.object(recordatorio, "activar_recordatorio") as m_act:
             self.assertIn("error", self.api.recordatorio_activar("25:99"))
-            self.assertEqual(self.api.recordatorio_activar("16:30"), {"ok": True})
+            self.assertEqual(self.api.recordatorio_activar("16:30"), {"ok": True, "hora": "16:30"})
         m_act.assert_called_once_with("16:30")
 
     def test_pagina_de_actualizacion_solo_github(self):

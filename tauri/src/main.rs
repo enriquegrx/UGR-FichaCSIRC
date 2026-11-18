@@ -40,11 +40,15 @@ fn main() {
     let minimizado = args.iter().any(|a| a == "--minimizado");
     // --recordatorio: lo lanza la tarea programada. Si no falta nada (o no hay
     // red), se sale en silencio; si falta, una ventanita encima de todo.
+    let mut dias_aviso = 0;
     if recordatorio {
         let Ok(cfg) = config::leer() else { return };
         let hoy = chrono::Local::now().date_naive();
         match tauri::async_runtime::block_on(sistema::dias_pendientes(&estado, &cfg, hoy)) {
-            Some(p) if !p.is_empty() => estado.preparar_aviso(p),
+            Some(p) if !p.is_empty() => {
+                dias_aviso = p.len();
+                estado.preparar_aviso(p)
+            }
             _ => return,
         }
     }
@@ -85,7 +89,8 @@ fn main() {
             if recordatorio {
                 tauri::WebviewWindowBuilder::new(app, "aviso", tauri::WebviewUrl::App("aviso.html".into()))
                     .title("FichaCSIRC - Recordatorio")
-                    .inner_size(600.0, 470.0)
+                    // tan alta como dias trae: sin barra de desplazamiento
+                    .inner_size(660.0, sistema::alto_aviso(dias_aviso))
                     .resizable(false)
                     .always_on_top(true)
                     .build()?;
@@ -127,6 +132,13 @@ fn main() {
                 .build()?;
             if bandeja {
                 sistema::poner_bandeja(app.handle())?;
+            }
+            // el aviso diario sigue a su hora aunque el ejecutable haya cambiado
+            // de sitio (al actualizar): se reprograma solo, a la misma hora
+            if !asistente {
+                std::thread::spawn(|| {
+                    sistema::reparar_recordatorio();
+                });
             }
             Ok(())
         })

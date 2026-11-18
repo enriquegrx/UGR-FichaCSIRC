@@ -8,21 +8,40 @@
 </head>
 <body class="aviso">
 <main>
-  <h2>⏰ Te faltan horas por fichar</h2>
-  <p id="texto" class="texto-aviso">Comprobando…</p>
-  <!-- Un renglon por dia con huecos: tarea habitual + "Fichar 2h". Fichas
-       desde aqui, sin abrir la app; cuando no queda nada, se cierra sola. -->
+  <h2 id="titulo-aviso">⏰ Te faltan horas por fichar</h2>
+  <p id="sub-aviso" class="tenue sub-aviso">Comprobando…</p>
+  <!-- Un renglon por dia con huecos (hoy, el primero): tarea habitual +
+       "Fichar 2h". Fichas desde aqui, sin abrir la app; cuando no queda nada,
+       se cierra sola. -->
   <div id="dias-aviso" class="dias-aviso"></div>
+  <!-- con varios dias: todos de una vez, cada uno como dice su renglon -->
+  <div id="todo-aviso" class="todo-aviso" hidden>
+    <span class="tenue pequeno">Cada día, con la tarea y las horas de su fila.</span>
+    <button id="b-todo" class="primario">Fichar todo</button>
+  </div>
   <p id="hecho" class="hecho-aviso" hidden>✔ Todo fichado. ¡Hasta mañana!</p>
   <!-- y lo que queda sin completar en el año: un clic y se abre ese panel -->
   <p id="pend-aviso" class="pend-aviso" hidden></p>
-  <p class="tenue pequeno">Para otra tarea u otras horas, abre FichaCSIRC.</p>
-  <p id="cierre" class="tenue pequeno"></p>
 </main>
 <footer class="pie-aviso">
+  <!-- la campana: a que hora avisa; un clic para cambiarla o quitar el aviso -->
+  <button id="b-campana" class="campana-aviso" hidden title="Cambiar la hora del aviso o desactivarlo"></button>
+  <span id="cierre" class="tenue pequeno cierre-aviso"></span>
   <button id="b-no">Ahora no</button>
   <button id="b-si">Abrir FichaCSIRC</button>
 </footer>
+<div id="ajuste" class="modal" hidden>
+  <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="ajuste-titulo">
+    <h3 id="ajuste-titulo">🔔 Aviso diario de fichaje</h3>
+    <p class="tenue">Te aviso los días laborables a esta hora, solo si te faltan horas por fichar. Se queda así hasta que lo cambies o lo quites.</p>
+    <label class="ajuste-hora">¿A qué hora? <input id="ajuste-hora" type="time"></label>
+    <div class="modal-botones">
+      <button id="ajuste-quitar" class="peligro a-la-izquierda">Desactivar aviso</button>
+      <button id="ajuste-no">Cancelar</button>
+      <button id="ajuste-si" class="primario">Guardar</button>
+    </div>
+  </div>
+</div>
 <div id="modal" class="modal" hidden>
   <div class="modal-caja" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
     <h3 id="modal-titulo"></h3>

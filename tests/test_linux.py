@@ -46,8 +46,10 @@ class TestRecordatorioLinux(unittest.TestCase):
             self.assertIn("ExecStart=/home/ana/Apps/FichaCSIRC.AppImage --recordatorio", f.read())
         self.assertIn(["systemctl", "--user", "enable", "--now", "fichacsirc-recordatorio.timer"], self.llamadas)
         self.assertTrue(recordatorio.recordatorio_activo())
+        self.assertEqual(recordatorio.hora_programada(), "14:30")     # la que dice la campana
         recordatorio.desactivar_recordatorio()
         self.assertFalse(recordatorio.recordatorio_activo())
+        self.assertEqual(recordatorio.hora_programada(), "")
 
     def test_rutas_con_espacios_entre_comillas(self):
         with mock.patch.dict(os.environ, {"FICHACSIRC_LANZADOR": "/home/ana/Mis apps/FichaCSIRC.AppImage"}):

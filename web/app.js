@@ -405,6 +405,7 @@ async function arrancar() {
   avisarCierreMes();
   refrescarFranja();
   refrescarPendientes(0);
+  pintarCampana();
   // "Abrir «Por completar»" desde el aviso diario
   if (ini.abrir_pendientes) entrarPendientes();
   if (st.tareas.size) elegirTarea();
@@ -429,6 +430,59 @@ async function arrancar() {
   setTimeout(() => dlgActualizacion({ forzar: false }), 1500);
   // Mac: avisar si la app no esta en Aplicaciones (una vez por ruta).
   llamar("aviso_aplicaciones").then((m) => { if (m) dlgAplicaciones(m); }).catch(() => {});
+  // A quien nunca ha tenido el aviso diario: ofrecerlo (una vez) bajo la campana.
+  setTimeout(() => pintarCampana({ ofrecer: true }), 2600);
+}
+
+// ---------------------------------------------------------------- campana del aviso diario
+
+// El boton de la barra dice si el aviso diario esta puesto y a que hora
+// ("🔔 14:00") o que se puede activar ("🔕 Activar aviso"). Un clic abre el
+// formulario para cambiar la hora o quitarlo. Se repinta al volver a la
+// ventana: la hora tambien se cambia desde la ventanita del propio aviso.
+let campanaT = 0;
+async function pintarCampana({ ofrecer = false } = {}) {
+  let e;
+  try {
+    e = await api().recordatorio_estado();
+  } catch (_e) { return; }
+  campanaT = Date.now();
+  const b = $("b-aviso");
+  b.hidden = !e.soportado || !!e.experimento;
+  b.textContent = e.activo ? `🔔 ${e.hora || "Aviso"}` : "🔕 Activar aviso";
+  b.classList.toggle("apagado", !e.activo);
+  b.title = e.activo
+    ? `Aviso diario a las ${e.hora || "su hora"}, de lunes a viernes, si te faltan horas por fichar. Pulsa para cambiar la hora o quitarlo.`
+    : "Que FichaCSIRC te avise cada día laborable si te faltan horas por fichar";
+  if (ofrecer && e.ofrecer && !b.hidden) globoAviso(e);
+}
+
+// La primera vez (a quien nunca ha tenido el aviso): un globo bajo la campana
+// que lo ofrece a las 14:00. Se conteste lo que se conteste, no vuelve a salir.
+function globoAviso(e) {
+  if ($("globo-aviso") || (typeof pila !== "undefined" && pila.length) || !$("modal").hidden) return;
+  const hora = e.por_defecto || "14:00";
+  const cerrar = () => {
+    g.remove();
+    try { api().recordatorio_ofrecido()?.catch?.(() => {}); } catch (_e) { /* nada */ }
+  };
+  const g = el("div", { id: "globo-aviso", class: "globo-aviso", role: "dialog", "aria-label": "Aviso diario de fichaje" },
+    el("button", { class: "cerrar-aviso", title: "Cerrar", "aria-label": "Cerrar", text: "×", onclick: cerrar }),
+    el("p", {}, el("b", { text: `¿Te aviso a las ${hora} si te faltan horas por fichar?` })),
+    el("p", { class: "tenue", text: "Solo los días laborables, y solo si falta algo. La hora se cambia, o el aviso se quita, aquí en la campana." }),
+    el("div", { class: "fila globo-botones" },
+      el("button", { text: "Ahora no", onclick: cerrar }),
+      el("button", { class: "primario", text: `Activar a las ${hora}`, onclick: async () => {
+        g.remove();
+        const r = await llamar("recordatorio_activar", hora);
+        if (r.error) { await avisar("No se pudo activar", r.error); return; }
+        estado(`Aviso diario activado: los días laborables a las ${hora}, si te faltan horas por fichar.`);
+        pintarCampana();
+      } })));
+  const r = $("b-aviso").getBoundingClientRect();
+  g.style.top = `${Math.round(r.bottom + 10)}px`;
+  g.style.right = `${Math.max(8, Math.round(innerWidth - r.right - 40))}px`;
+  document.body.append(g);
 }
 
 // ---------------------------------------------------------------- semana / mes
@@ -1638,6 +1692,11 @@ $("b-pend").onclick = async () => {
   pintarSelectorVista();
   await cargarSemana();
 };
+$("b-aviso").onclick = () => { $("globo-aviso")?.remove(); dlgRecordatorio(); };
+// al volver a la ventana (p. ej. tras cambiar la hora desde el propio aviso)
+for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
+  quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
+}
 $("b-exportar").onclick = () => dlgExportar();
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [

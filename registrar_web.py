@@ -2744,6 +2744,11 @@ class Api:
             "hay_pin": "pin" in previa,
             "aviso": ERROR_ARRANQUE if ERROR_ARRANQUE and "No encuentro" not in ERROR_ARRANQUE else "",
             "experimento": EXPERIMENTO,
+            # para ofrecer el aviso diario en el resumen (sin importar el
+            # motor, que sin config aun no existe)
+            "aviso_soportado": not EXPERIMENTO and (
+                os.name == "nt" or sys.platform == "darwin"
+                or (sys.platform.startswith("linux") and bool(shutil.which("systemctl")))),
             "logo": logo,
             "url": previa.get("base_url", "https://proyectostic.ugr.es"),
             "hay_key": bool(previa.get("api_key")),
@@ -3036,9 +3041,24 @@ class Api:
     # =============================================================== aviso diario
 
     def recordatorio_estado(self):
+        """Para la campana de la ventana y el aviso: si esta puesto, a que hora
+        y si toca ofrecerlo (una sola vez, a quien nunca lo ha tenido)."""
         import recordatorio
-        return {"soportado": recordatorio.recordatorios_soportados(),
-                "activo": recordatorio.recordatorio_activo(), "experimento": EXPERIMENTO}
+        soportado = recordatorio.recordatorios_soportados()
+        activo = bool(soportado and recordatorio.recordatorio_activo())
+        ofrecido = bool(core.config_valor("aviso_diario_ofrecido")) if core else True
+        return {"soportado": soportado, "activo": activo,
+                "hora": recordatorio.hora_programada() if activo else "",
+                "por_defecto": recordatorio.HORA_POR_DEFECTO, "experimento": EXPERIMENTO,
+                "ofrecer": bool(soportado and not activo and not EXPERIMENTO and not ofrecido)}
+
+    def recordatorio_ofrecido(self):
+        """Ya se le ha ofrecido (lo activara o no): no se vuelve a preguntar."""
+        try:
+            core.guardar_config_valor("aviso_diario_ofrecido", True)
+        except Exception:
+            pass
+        return {"ok": True}
 
     def recordatorio_activar(self, hora):
         if EXPERIMENTO:
@@ -3048,9 +3068,13 @@ class Api:
         try:
             dt.datetime.strptime(hora, "%H:%M")
         except ValueError:
-            return {"error": "Escribe la hora como HH:MM (ej. 16:00)."}
+            return {"error": "Escribe la hora como HH:MM (ej. 14:00)."}
+        # se queda a esa hora hasta que se cambie o se quite: la tarea
+        # programada no caduca, y si el ejecutable cambia de sitio se
+        # reprograma a la misma hora (reparar_recordatorio)
         recordatorio.activar_recordatorio(hora)
-        return {"ok": True}
+        self.recordatorio_ofrecido()
+        return {"ok": True, "hora": hora}
 
     def recordatorio_desactivar(self):
         if EXPERIMENTO:
@@ -3159,6 +3183,14 @@ def _fondo_ventana(claro):
     return "#14181d" if (ccore.cargar_previa() or {}).get("tema") == "oscuro" else claro
 
 
+def alto_aviso(n_dias):
+    """Alto del contenido de la ventanita del aviso segun los dias que trae
+    (de 1 a 5): que quepan sin barra de desplazamiento."""
+    n = max(1, min(int(n_dias), 5))
+    # titulo y pie + un renglon por dia + (con varios) el rotulo y «Fichar todo»
+    return max(300, 210 + 55 * n + (70 if n > 1 else 0))
+
+
 def _main_recordatorio(webview):
     """--recordatorio: lo lanza la tarea programada. Si no falta nada (o no hay
     red), sale en silencio; si falta, una ventanita propia (encima de todo, que
@@ -3174,7 +3206,8 @@ def _main_recordatorio(webview):
     api._pendientes = pendientes
     api._ventana = webview.create_window(
         "FichaCSIRC - Recordatorio", _recurso("web", "aviso.html"), js_api=api,
-        width=600, height=470, resizable=False, on_top=True, background_color=_fondo_ventana("#ffffff"))
+        width=660, height=alto_aviso(len(pendientes)) + 40, resizable=False, on_top=True,
+        background_color=_fondo_ventana("#ffffff"))
     webview.start()
 
 

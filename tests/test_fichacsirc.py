@@ -492,6 +492,26 @@ class TestRepararRecordatorio(unittest.TestCase):
         self.assertTrue(hecho)
         m_act.assert_called_once_with("16:30")
 
+    def test_la_hora_a_la_que_esta_puesto(self):
+        """La campana la lee de la tarea programada de verdad (vale tambien
+        para quien lo activo con una version anterior)."""
+        import recordatorio
+        self.assertEqual(recordatorio.HORA_POR_DEFECTO, "14:00")
+        with mock.patch.object(recordatorio.sys, "platform", "win32"), \
+             mock.patch.object(recordatorio.os, "name", "nt"), \
+             mock.patch.object(recordatorio.subprocess, "run",
+                               return_value=mock.Mock(returncode=0, stdout=self._xml(self.NUEVO))):
+            self.assertEqual(recordatorio.hora_programada(), "16:30")
+        with mock.patch.object(recordatorio.sys, "platform", "win32"), \
+             mock.patch.object(recordatorio.os, "name", "nt"), \
+             mock.patch.object(recordatorio.subprocess, "run",
+                               return_value=mock.Mock(returncode=1, stdout=b"")):
+            self.assertEqual(recordatorio.hora_programada(), "")      # sin tarea
+        with mock.patch.object(recordatorio.sys, "platform", "win32"), \
+             mock.patch.object(recordatorio.os, "name", "nt"), \
+             mock.patch.object(recordatorio.subprocess, "run", side_effect=OSError("sin schtasks")):
+            self.assertEqual(recordatorio.hora_programada(), "")      # ni se cae
+
     def test_windows_ruta_buena_no_toca_nada(self):
         cfg = {}
         hecho, m_act = self._reparar(self._xml(self.NUEVO), cfg=cfg)

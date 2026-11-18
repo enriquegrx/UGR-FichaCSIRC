@@ -2391,25 +2391,34 @@ async function dlgRecordatorio() {
   if (!e.soportado) {
     return avisar("Aviso diario de fichaje", "El aviso diario solo está disponible en Windows, macOS y Linux con systemd.");
   }
-  if (e.activo) {
-    if (await preguntar("Aviso diario",
-        "El aviso diario de fichaje está ACTIVO (lunes a viernes).\n\n¿Quieres desactivarlo?")) {
+  // Un solo formulario para activarlo, cambiarle la hora o quitarlo (el mismo
+  // que abre la campana de la barra). Propone las 14:00, o la hora que tenga.
+  const campana = () => { if (typeof pintarCampana === "function") pintarCampana(); };
+  const hora = entrada((e.activo && e.hora) || e.por_defecto || "14:00", { type: "time" });
+  const d = dialogo({ titulo: "Aviso diario de fichaje", ancho: 480, botones: [
+    e.activo ? { texto: "Desactivar aviso", clase: "peligro", izquierda: true, accion: async (dd) => {
+      if (!(await preguntar("Desactivar el aviso", "No volveré a avisarte de las horas que falten.\n\n"
+          + "Puedes activarlo otra vez cuando quieras con la campana 🔔.", { si: "Desactivar", no: "Cancelar" }))) return;
       const r = await llamar("recordatorio_desactivar");
-      await avisar("Aviso diario", r.error || "Aviso desactivado.");
-    }
-    return;
-  }
-  const hora = entrada("16:00", { type: "time" });
-  const d = dialogo({ titulo: "Aviso diario de fichaje", ancho: 460, botones: [cancelarBoton,
-    { texto: "Activar", clase: "primario", accion: async (dd) => {
+      if (r.error) { await avisar("No se pudo desactivar", r.error); return; }
+      dd.cerrar();
+      estado("Aviso diario desactivado.");
+      campana();
+    } } : null,
+    cancelarBoton,
+    { texto: e.activo ? "Guardar" : "Activar", clase: "primario", accion: async (dd) => {
+      if (!hora.value) { hora.focus(); return; }
       const r = await llamar("recordatorio_activar", hora.value);
       if (r.error) { await avisar("No se pudo activar", r.error); return; }
       dd.cerrar();
-      await avisar("Aviso diario", `Listo. Te avisaré los días laborables a las ${hora.value} si te faltan horas por fichar.`);
-    } }] });
-  d.cuerpo.append(nota("FichaCSIRC puede avisarte cada día laborable si te faltan horas por fichar "
-                       + "(solo aparece si hay algo pendiente)."),
-                  rejilla(["¿A qué hora?", hora]));
+      estado(`Aviso diario: los días laborables a las ${hora.value}, si te faltan horas por fichar.`);
+      campana();
+    } }].filter(Boolean) });
+  d.cuerpo.append(
+    nota(e.activo ? `El aviso está activo${e.hora ? `, a las ${e.hora}` : ""}. Cámbiale la hora aquí o desactívalo.`
+      : "FichaCSIRC puede avisarte cada día laborable si te faltan horas por fichar (solo aparece si hay algo pendiente)."),
+    rejilla(["¿A qué hora?", hora]),
+    nota("Se queda a esa hora hasta que la cambies o lo quites."));
   hora.focus();
 }
 

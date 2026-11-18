@@ -93,6 +93,7 @@ pub fn cfg_cargar(e: &Estado, cfg: &Cfg, hay_config: bool) -> Value {
         "hay_pin": cfg.0.contains_key("pin"),
         "aviso": "",
         "experimento": false,
+        "aviso_soportado": cfg!(windows),
         "logo": format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(LOGO_UGR)),
         "url": url,
         "hay_key": !cfg.texto("api_key").is_empty(),

@@ -537,10 +537,36 @@
         ok(!dlg(), "no cierra");
       });
     }
-    await prueba("aviso diario (en la demo, un aviso)", async () => {
-      dlgRecordatorio();
-      ok(await hasta(() => !document.getElementById("modal").hidden), "no sale nada");
-      document.getElementById("modal-si").click();
+    await prueba("campana del aviso diario: el globo lo activa a las 14:00, se cambia la hora y se quita", async () => {
+      const b = $("b-aviso");
+      ok(await hasta(() => !b.hidden), "sin campana en la barra");
+      $("globo-aviso")?.remove();
+      ok(/Activar aviso/.test(b.textContent), `apagada dice: ${b.textContent}`);
+      // la primera vez lo ofrece un globo bajo la campana
+      globoAviso({ por_defecto: "14:00" });
+      ok($("globo-aviso"), "no sale el globo");
+      [...$("globo-aviso").querySelectorAll("button")].find((x) => x.textContent.startsWith("Activar")).click();
+      ok(await hasta(() => b.textContent.includes("14:00")), `tras activar: ${b.textContent}`);
+      ok(!$("globo-aviso"), "el globo no se va");
+      // ya ofrecido: no vuelve a salir
+      await pintarCampana({ ofrecer: true });
+      ok(!$("globo-aviso"), "el globo vuelve a salir");
+      // la campana abre el formulario: otra hora, y el boton la dice
+      b.click();
+      ok(await hasta(() => dlg()), "la campana no abre el formulario");
+      ok(dlg().querySelector("input[type=time]").value === "14:00", "no trae la hora que tiene");
+      dlg().querySelector("input[type=time]").value = "13:30";
+      botonDlg("Guardar");
+      ok(await hasta(() => b.textContent.includes("13:30")), `tras cambiar la hora: ${b.textContent}`);
+      ok(!dlg(), "el formulario no se cierra");
+      // y se quita
+      b.click();
+      ok(await hasta(() => dlg()), "no abre");
+      botonDlg("Desactivar aviso");
+      ok(await hasta(() => !$("modal").hidden), "no pregunta antes de desactivar");
+      $("modal-si").click();
+      ok(await hasta(() => /Activar aviso/.test(b.textContent)), `tras quitar: ${b.textContent}`);
+      cerrarTodo();
     });
     await prueba("sin errores de JS por el camino", async () => {
       ok(!lineas.some((l) => l.startsWith("FALLO error") || l.startsWith("FALLO promesa")), "hubo errores");
@@ -569,6 +595,57 @@
     apuntar("HUMO-FIN");
   }
 
+  // La ventanita del aviso diario: hoy el primero, sin la lista repetida,
+  // fichar un dia o todos, y la campana para cambiar la hora o quitarlo.
+  async function escenarioAviso() {
+    const renglones = () => [...document.querySelectorAll(".aviso-dia")];
+    await prueba("aviso: el total en el título, hoy el primero y todo con coma", async () => {
+      ok(await hasta(() => renglones().length === 3), "no pinta los tres días");
+      ok(/Te faltan 19,5h por fichar esta semana/.test($("titulo-aviso").textContent), `título: ${$("titulo-aviso").textContent}`);
+      ok(renglones()[0].classList.contains("hoy") && renglones()[0].textContent.includes("Hoy"), "hoy no va el primero");
+      ok(renglones().every((r) => /faltan 6,5h/.test(r.textContent)), "no dice lo que falta cada día");
+      const textos = $("titulo-aviso").textContent + renglones().map((r) => r.querySelector(".aviso-dia-nombre").textContent).join(" ");
+      ok(!/\d\.\d/.test(textos), `decimales con punto: ${textos}`);
+      ok(!/null|undefined/.test(document.body.textContent), "escribe null/undefined");
+      ok(!$("todo-aviso").hidden && $("b-todo").textContent === "Fichar todo (19,5h)", `fichar todo: ${$("b-todo").textContent}`);
+    });
+    await prueba("aviso: la campana cambia la hora y lo desactiva", async () => {
+      const b = $("b-campana");
+      ok(await hasta(() => !b.hidden && b.textContent.includes("14:00")), `campana: ${b.textContent}`);
+      b.click();
+      ok(await hasta(() => !$("ajuste").hidden), "no abre el ajuste");
+      ok($("ajuste-hora").value === "14:00", `hora que trae: ${$("ajuste-hora").value}`);
+      $("ajuste-hora").value = "13:30";
+      $("ajuste-si").click();
+      ok(await hasta(() => !$("modal").hidden), "no confirma el cambio");
+      $("modal-si").click();
+      ok(await hasta(() => b.textContent.includes("13:30")), `tras cambiar: ${b.textContent}`);
+      ok($("ajuste").hidden, "el ajuste no se cierra");
+      b.click();
+      ok(await hasta(() => !$("ajuste").hidden && !$("ajuste-quitar").hidden), "sin «Desactivar aviso»");
+      $("ajuste-quitar").click();
+      ok(await hasta(() => !$("modal").hidden), "no pregunta antes de desactivar");
+      $("modal-si").click();
+      ok(await hasta(() => b.textContent.includes("desactivado")), `tras quitar: ${b.textContent}`);
+    });
+    await prueba("aviso: fichar hoy y luego todo lo demás", async () => {
+      document.querySelector(".aviso-dia.hoy button").click();
+      ok(await hasta(() => renglones().length === 2), "no quita el día fichado");
+      ok(/Te faltan 13h/.test($("titulo-aviso").textContent), `título: ${$("titulo-aviso").textContent}`);
+      $("b-todo").click();
+      ok(await hasta(() => !$("modal").hidden), "«Fichar todo» no pregunta");
+      ok(/13h en 2 días/.test($("modal-texto").textContent), `pregunta: ${$("modal-texto").textContent}`);
+      $("modal-si").click();
+      ok(await hasta(() => !$("hecho").hidden), "no dice que está todo fichado");
+      ok($("todo-aviso").hidden && $("dias-aviso").hidden, "siguen los renglones");
+    });
+    await prueba("sin errores de JS por el camino", async () => {
+      ok(!lineas.some((l) => l.startsWith("FALLO error") || l.startsWith("FALLO promesa")), "hubo errores");
+    });
+    apuntar("HUMO-FIN");
+  }
+
   cuandoListo(() => setTimeout(() => (document.body.classList.contains("asistente") ? escenarioAsistente()
+    : document.body.classList.contains("aviso") ? escenarioAviso()
     : /[?&]pin\b/.test(location.search) ? escenarioPin() : escenarioPrincipal()), 50));
 })();

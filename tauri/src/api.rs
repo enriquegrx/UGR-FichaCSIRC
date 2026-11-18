@@ -652,7 +652,8 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         }
         "abrir_pagina_actualizacion" => Ok(sistema::abrir_pagina_actualizacion(e, &app)),
         "instalar_actualizacion" => Ok(sistema::instalar_actualizacion(e).await),
-        "recordatorio_estado" => Ok(sistema::recordatorio_estado()),
+        "recordatorio_estado" => Ok(sistema::recordatorio_estado(&cfg)),
+        "recordatorio_ofrecido" => Ok(sistema::recordatorio_ofrecido()),
         "recordatorio_activar" => {
             e.exigir_desbloqueo(&cfg)?;
             Ok(sistema::recordatorio_activar(&arg(&args, 0)))

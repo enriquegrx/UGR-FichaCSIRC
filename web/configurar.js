@@ -263,6 +263,13 @@ function pResumen() {
     ["PIN de acceso", W.ini.hay_pin ? "el que ya tienes" : (d.pin_si ? "sí (se pedirá al abrir)" : "no")],
   ];
   const MAX = 10;   // no alargar el resumen sin fin si hay muchas favoritas
+  // Instalacion nueva: el aviso diario viene marcado, a las 14:00 (se programa
+  // al finalizar; luego se cambia o se quita con la campana de la ventana).
+  const conAviso = !!(W.ini.primera_vez && W.ini.aviso_soportado);
+  if (conAviso && d.aviso_si === undefined) d.aviso_si = true;
+  const siAviso = el("input", { type: "checkbox", id: "r-aviso" });
+  siAviso.checked = !!d.aviso_si;
+  siAviso.onchange = () => { d.aviso_si = siAviso.checked; };
   poner(
     el("h2", { text: "Resumen" }),
     el("table", { class: "tabla-dlg" }, el("tbody", {},
@@ -270,6 +277,9 @@ function pResumen() {
     el("ul", { class: "favs-resumen" },
       ...d.favoritos.slice(0, MAX).map((f) => el("li", { text: `${f.id}  ${f.nombre}` })),
       d.favoritos.length > MAX ? el("li", { class: "tenue", text: `… y ${d.favoritos.length - MAX} más` }) : null),
+    conAviso ? el("label", { class: "check bloque" }, siAviso,
+      " 🔔 Avisarme los días laborables a las 14:00 si me faltan horas por fichar") : null,
+    conAviso ? el("p", { class: "tenue pequeno", text: "La hora se cambia, o el aviso se quita, con la campana de la ventana principal." }) : null,
     el("p", { class: "nota-local" }, "🖥 Se guardará ", el("b", { text: "solo en este equipo" }),
       W.ini.ruta_config ? ` (${W.ini.ruta_config})` : "", ". ProyectosTIC no cambia."),
     el("p", { class: "tenue", text: "Pulsa «Finalizar» para guardar." }));
@@ -300,6 +310,14 @@ async function finalizar() {
   try {
     const r = await llamar("cfg_guardar", W.d);
     if (r.error) { await avisar("No se pudo guardar", r.error); return; }
+    // el aviso diario (casilla del resumen): se programa ya. Si no se puede,
+    // en silencio: lo ofrecera la campana de la ventana principal.
+    if (W.d.aviso_si !== undefined) {
+      try {
+        if (W.d.aviso_si) await api().recordatorio_activar("14:00");
+        else await api().recordatorio_ofrecido();
+      } catch (_e) { /* nada */ }
+    }
     if (W.ini.primera_vez) await avisar("Configuración guardada", "Listo. Ya puedes registrar horas.");
     location.href = "index.html";
   } finally {

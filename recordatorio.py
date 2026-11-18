@@ -34,6 +34,10 @@ LAUNCHD_LABEL = "es.ugr.fichacsirc.recordatorio"
 # no puede quedarse vivo dias bloqueando FichaCSIRC.exe (impedia actualizar
 # y desinstalar la aplicacion).
 AVISO_TIMEOUT_MIN = 10
+# Hora que se propone al activarlo. A las 14:00 pilla en el puesto, antes de
+# irse; a las 16:00 (la de antes) mucha gente ya habia apagado el equipo y la
+# tarea programada no saltaba. Quien lo tuviera a otra hora la conserva.
+HORA_POR_DEFECTO = "14:00"
 
 
 def recordatorios_soportados():
@@ -206,7 +210,7 @@ def _recordar_ejecutable(ruta=None):
         pass
 
 
-def activar_recordatorio(hora="16:00"):
+def activar_recordatorio(hora=HORA_POR_DEFECTO):
     """Programa el aviso (lun-vie a la hora indicada) en Windows o macOS."""
     if sys.platform == "darwin":
         ruta = _plist_path()
@@ -262,6 +266,29 @@ def desactivar_recordatorio():
     if r.returncode != 0 and "no existe" not in (r.stderr or r.stdout or "").lower():
         raise RuntimeError((r.stderr or r.stdout or "").strip() or "schtasks fallo")
     core.LOG.info("Recordatorio diario desactivado")
+
+
+# ----------------------- a que hora esta puesto -----------------------
+
+def hora_programada():
+    """'HH:MM' a la que esta programado el aviso, o '' si no lo esta (o no se
+    puede saber). Se lee de lo programado de verdad (tarea, LaunchAgent o
+    temporizador), no de la config: es lo que manda, y asi vale tambien para
+    quien lo activo con una version anterior."""
+    try:
+        if sys.platform == "darwin":
+            prog = _programado_mac()
+        elif _es_linux_systemd():
+            with open(os.path.join(_dir_systemd(), f"{UNIDAD_LINUX}.timer"), encoding="utf-8") as f:
+                m = re.search(r"OnCalendar=.*?(\d{2}):(\d{2}):\d{2}", f.read())
+            return f"{m.group(1)}:{m.group(2)}" if m else ""
+        elif os.name == "nt":
+            prog = _programado_windows()
+        else:
+            return ""
+    except Exception:
+        return ""
+    return prog[0] if prog else ""
 
 
 # ----------------------- reparacion -----------------------
