@@ -186,6 +186,17 @@ def repartir(falta, pesos):
     return out
 
 
+def texto_fichar_hoy(r, tarea):
+    """Lo que dice el aviso tras "Completar hoy con ..." desde la bandeja."""
+    if r.get("error"):
+        return f"No se pudo fichar: {r['error']}"
+    if r.get("creados"):
+        return f"Hoy: {r['horas']} en «{tarea}». Para quitarlo, Deshacer en FichaCSIRC."
+    if r.get("errores"):
+        return f"No se pudo fichar: {r.get('ultimo') or 'error'}"
+    return "Hoy no falta nada por fichar."
+
+
 def objetivo_dia(d, apuntes, acts_permiso=None):
     """Objetivo del dia contando los permisos IMPUTADOS como actividad.
 
@@ -1794,9 +1805,74 @@ class Api:
 
     # ---- plantillas ----
     def plantillas(self):
-        return [{"nombre": p["nombre"], "n": len(p.get("apuntes", [])),
-                 "total": _horas(sum(a.get("horas", 0) for a in p.get("apuntes", [])))}
-                for p in core.PLANTILLAS]
+        """De dia (apuntes) y de semana (dias: lunes..viernes)."""
+        out = []
+        for p in core.PLANTILLAS:
+            semana = bool(p.get("semana"))
+            aps = ([a for d in p.get("dias", []) for a in d] if semana else p.get("apuntes", []))
+            out.append({"nombre": p["nombre"], "n": len(aps), "semana": semana,
+                        "total": _horas(sum(a.get("horas", 0) for a in aps))})
+        return out
+
+    def guardar_plantilla_semana(self, lunes_iso, nombre):
+        """La semana (lunes a viernes) tal como esta en ProyectosTIC, cada dia
+        con sus apuntes: para aplicarla entera a otra semana."""
+        nombre = (nombre or "").strip()
+        if not nombre:
+            return {"error": "Ponle un nombre a la plantilla."}
+        try:
+            lunes = dt.date.fromisoformat(lunes_iso)
+        except (TypeError, ValueError):
+            return {"error": "Semana no válida."}
+        lunes -= dt.timedelta(days=lunes.weekday())
+        try:
+            apuntes = core.entradas_rango(lunes.isoformat(), (lunes + dt.timedelta(days=4)).isoformat())
+        except Exception as e:
+            return {"error": diagnostico_conexion(e)["titulo"]}
+        if not apuntes:
+            return {"error": "Esa semana no tiene apuntes de ProyectosTIC que guardar."}
+        dias = [[] for _ in range(5)]
+        for a in apuntes:
+            i = (dt.date.fromisoformat(a["fecha"]) - lunes).days
+            if 0 <= i < 5:
+                dias[i].append({"id": a["wp_id"], "nombre": a["wp_titulo"], "horas": a["horas"],
+                                "comentario": a["comentario"], "actividad": a["actividad"]})
+        core.guardar_plantilla_semana(nombre, dias)
+        return {"ok": True, "n": sum(len(d) for d in dias),
+                "total": _horas(sum(a["horas"] for d in dias for a in d))}
+
+    def aplicar_plantilla_semana(self, nombre, lunes_iso):
+        """Cada dia de la plantilla, a su dia de esa semana. Como al copiar la
+        semana anterior: se saltan los dias no laborables y las tareas que ya
+        tengan apunte ese dia. Un solo Deshacer."""
+        p = next((x for x in core.PLANTILLAS if x.get("nombre") == nombre and x.get("semana")), None)
+        if p is None:
+            return {"error": "Esa plantilla de semana ya no existe."}
+        try:
+            lunes = dt.date.fromisoformat(lunes_iso)
+        except (TypeError, ValueError):
+            return {"error": "Semana no válida."}
+        lunes -= dt.timedelta(days=lunes.weekday())
+        fechas = [(lunes + dt.timedelta(days=i)).isoformat() for i in range(5)]
+        # lo que ya hay esa semana, leido ahora (puede no ser la que esta en pantalla)
+        try:
+            por_dia = {}
+            for a in core.entradas_rango(fechas[0], fechas[-1]):
+                por_dia.setdefault(a["fecha"], []).append(a)
+        except Exception as e:
+            return {"error": diagnostico_conexion(e)["titulo"]}
+        con_inari = destinos.configurado()
+        pares = []
+        for iso, dia in zip(fechas, (p.get("dias") or []) + [[]] * 5):
+            if not dia or (con_inari and core.es_teletrabajo(iso)):
+                continue
+            self._cache[iso] = [dict(a, destino="op") for a in por_dia.get(iso, [])]
+            pares.append((iso, [{"wp_id": a["id"], "horas": a["horas"],
+                                 "comentario": a.get("comentario", ""), "actividad": a.get("actividad")}
+                                for a in dia]))
+        if not pares:
+            return {"error": "Esa plantilla no tiene apuntes para los días de esa semana."}
+        return self._copiar(pares, True)
 
     def guardar_plantilla_dia(self, iso, nombre):
         nombre = (nombre or "").strip()
@@ -1814,6 +1890,8 @@ class Api:
         p = next((x for x in core.PLANTILLAS if x.get("nombre") == nombre), None)
         if p is None:
             return {"error": "Esa plantilla ya no existe."}
+        if p.get("semana"):
+            return {"error": "Esa plantilla es de una semana entera: aplícala a la semana."}
         if not dias_iso:
             return {"error": "Marca al menos un día de destino."}
         apuntes = [{"wp_id": a["id"], "horas": a["horas"],
@@ -2008,6 +2086,8 @@ class Api:
                 # laborable que no es de guardia): a menudo, un apunte repetido
                 if ap and reg > obj + 0.001 and (obj or not core.es_guardia(iso)):
                     excesos.append(self._exceso(d, ap, reg, obj))
+                    # en la cache: quitar un apunte desde la lista se puede deshacer
+                    self._cache[iso] = [dict(a, destino="op") for a in ap]
             d += dt.timedelta(days=1)
         obj_t = sum(obj_mes.values())
         return {**base, "dias": dias, "n": len(dias), "falta": _horas(total), "modelo": modelo,
@@ -2025,8 +2105,13 @@ class Api:
                 "sobra_txt": _horas(reg - obj), "texto": f"{_horas(reg)} de {_horas(obj)}",
                 "nolab": not obj, "motivo": (core.motivo_no_laborable(iso) or "permiso") if not obj else "",
                 "duplicado": any(n > 1 for n in veces.values()),
-                "apuntes": [{"tarea": a.get("wp_titulo", ""), "horas_txt": _horas(a["horas"]),
-                             "actividad": a.get("actividad") or ""} for a in ap]}
+                # repetido: la misma tarea y actividad mas de una vez ese dia;
+                # justo: quitandolo, el dia queda en su jornada exacta
+                "apuntes": [{"id": str(a.get("id", "")), "tarea": a.get("wp_titulo", ""),
+                             "horas": a["horas"], "horas_txt": _horas(a["horas"]),
+                             "actividad": a.get("actividad") or "", "comentario": a.get("comentario") or "",
+                             "repetido": veces[(str(a.get("wp_id")), a.get("actividad") or "")] > 1,
+                             "justo": abs(a["horas"] - (reg - obj)) < 0.001} for a in ap]}
 
     def _fichas_meses(self, anio, hasta, obj_mes, cub_mes, n_mes, falta_mes):
         """Una ficha por mes: 'pendiente' (con dias por completar), 'completo',
@@ -2305,6 +2390,32 @@ class Api:
         if not copias.es_exportacion(datos):
             return {"error": "Ese archivo no es una configuración de FichaCSIRC."}
         return self._aplicar_config(datos)
+
+    MAX_INFORME = 2 * 1024 * 1024
+
+    def abrir_informe(self, html, nombre=""):
+        """El informe de Estadisticas (una pagina HTML que monta la interfaz)
+        a un fichero temporal, abierto en el navegador: desde ahi se imprime o
+        se guarda como PDF. La ruta la decide esto, no el JS."""
+        import re
+        import tempfile
+        html = str(html or "")
+        if not html.strip() or len(html.encode("utf-8")) > self.MAX_INFORME:
+            return {"error": "No se pudo preparar el informe."}
+        limpio = re.sub(r"[^A-Za-z0-9_-]+", "-", str(nombre or "")).strip("-")[:60] or "informe"
+        ruta = os.path.join(tempfile.gettempdir(), f"FichaCSIRC-{limpio}.html")
+        try:
+            with open(ruta, "w", encoding="utf-8") as fh:
+                fh.write(html)
+            if os.name == "nt":
+                os.startfile(ruta)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", ruta])
+            else:
+                subprocess.Popen(["xdg-open", ruta])
+        except OSError as e:
+            return {"error": f"No se pudo abrir el informe: {e}"}
+        return {"ok": True, "ruta": ruta}
 
     def abrir_exportacion(self):
         """Abre el ultimo CSV exportado con su programa (Excel). Solo ese: el JS
@@ -2801,8 +2912,55 @@ class Api:
         def por_completar():
             self._ventana.evaluate_js("entrarPendientes()")
         self._bandeja = bandeja.Bandeja(self._ventana, al_fichar_hoy=fichar_hoy,
-                                        al_por_completar=por_completar)
+                                        al_por_completar=por_completar,
+                                        al_completar_hoy=self._completar_hoy_bandeja)
+        self._bandeja.poner_habituales(getattr(self, "_hab_bandeja", []))
         self._bandeja.arrancar()
+
+    MAX_HAB_BANDEJA = 3
+
+    def bandeja_habituales(self, filas):
+        """Las tareas habituales que ofrece el menu del icono para completar
+        hoy con un clic (las manda la ventana cuando las calcula)."""
+        limpias = []
+        for f in (filas or [])[:self.MAX_HAB_BANDEJA]:
+            try:
+                limpias.append({"wp_id": int(f["wp_id"]), "tarea": str(f.get("tarea") or ""),
+                                "actividad": str(f.get("actividad") or "")})
+            except (KeyError, TypeError, ValueError, AttributeError):
+                continue
+        self._hab_bandeja = limpias
+        b = getattr(self, "_bandeja", None)
+        if b:
+            b.poner_habituales(limpias)
+        return {"ok": True}
+
+    def _completar_hoy_bandeja(self, indice):
+        """Menu del icono > "Completar hoy con ...": lo que le falta a hoy, en
+        esa tarea, sin abrir la ventana. Devuelve el texto del aviso (y lo
+        ensena junto al reloj). Con PIN y bloqueada, abre la ventana."""
+        b = getattr(self, "_bandeja", None)
+        if not self._desbloqueada:
+            if b:
+                b.mostrar()
+            return ""
+        hab = getattr(self, "_hab_bandeja", [])
+        if not 0 <= indice < len(hab):
+            return ""
+        h = hab[indice]
+        try:
+            r = self.completar_dias([dt.date.today().isoformat()], h["wp_id"], h["actividad"], "")
+        except Exception as e:
+            r = {"error": str(e)}
+        texto = texto_fichar_hoy(r, h["tarea"])
+        if b:
+            b.notificar(texto)
+        if r.get("creados") and self._ventana is not None:
+            try:      # la ventana (si esta a la vista) se pone al dia, con su Deshacer
+                self._ventana.evaluate_js(f"alFicharFuera({json.dumps(r)}, {json.dumps(texto)})")
+            except Exception:
+                pass
+        return texto
 
     def _otra_copia(self, args):
         """Se ha pulsado el acceso con esta ya abierta (quiza escondida en la

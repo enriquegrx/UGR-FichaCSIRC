@@ -50,16 +50,65 @@ def icono_imagen(tam=64):
 class Bandeja:
     """Icono de la bandeja ligado a la ventana de pywebview."""
 
-    def __init__(self, ventana, al_fichar_hoy=None, al_por_completar=None):
+    def __init__(self, ventana, al_fichar_hoy=None, al_por_completar=None, al_completar_hoy=None):
         self.ventana = ventana
         self.al_fichar_hoy = al_fichar_hoy
         self.al_por_completar = al_por_completar
+        self.al_completar_hoy = al_completar_hoy
+        self._habituales = []        # [{wp_id, tarea, actividad}] para "Completar hoy con ..."
         self._icono = None
         self._saliendo = False
         self._pendientes = 0
 
     def texto_pendientes(self, *_a):
         return f"Por completar ({self._pendientes})" if self._pendientes else "Por completar ✔"
+
+    def poner_habituales(self, lista):
+        """Las tareas de "Completar hoy con ..." (las pone la ventana)."""
+        self._habituales = list(lista or [])
+        if self._icono:
+            try:
+                self._icono.update_menu()
+            except Exception:
+                pass
+
+    @staticmethod
+    def texto_habitual(h):
+        t = h.get("tarea") or "tarea"
+        t = t if len(t) <= 34 else t[:33] + "…"
+        return f"Completar hoy con «{t}»" + (f" · {h['actividad']}" if h.get("actividad") else "")
+
+    def completar_hoy(self, indice):
+        """En un hilo: habla con ProyectosTIC y no debe parar el menu."""
+        if self.al_completar_hoy:
+            threading.Thread(target=self.al_completar_hoy, args=(indice,), daemon=True,
+                             name="completar-hoy").start()
+
+    def notificar(self, texto):
+        """Un aviso junto al reloj (lo hecho desde el menu, sin abrir la ventana)."""
+        if self._icono and texto:
+            try:
+                self._icono.notify(texto, "FichaCSIRC")
+            except Exception:
+                pass
+
+    def _items(self):
+        """El menu, cada vez que se abre: con las habituales del momento."""
+        import pystray
+        items = [pystray.MenuItem("Abrir FichaCSIRC", self.mostrar, default=True),
+                 pystray.MenuItem("Fichar hoy", self.fichar_hoy)]
+        if self._habituales:
+            items.append(pystray.Menu.SEPARATOR)
+            # pystray solo admite acciones de (icono, item): el indice va cerrado dentro
+            def accion(i):
+                return lambda _icono, _item: self.completar_hoy(i)
+            for i, h in enumerate(self._habituales):
+                items.append(pystray.MenuItem(self.texto_habitual(h), accion(i)))
+        items += [pystray.Menu.SEPARATOR,
+                  pystray.MenuItem(self.texto_pendientes, self.por_completar),
+                  pystray.Menu.SEPARATOR,
+                  pystray.MenuItem("Salir", self.salir)]
+        return items
 
     def poner_pendientes(self, n):
         """Lo pone la ventana cada vez que cuenta los dias por completar."""
@@ -72,12 +121,8 @@ class Bandeja:
 
     def arrancar(self):
         import pystray
-        menu = pystray.Menu(
-            pystray.MenuItem("Abrir FichaCSIRC", self.mostrar, default=True),
-            pystray.MenuItem("Fichar hoy", self.fichar_hoy),
-            pystray.MenuItem(self.texto_pendientes, self.por_completar),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Salir", self.salir))
+        # dinamico: las habituales de "Completar hoy con ..." cambian
+        menu = pystray.Menu(self._items)
         self._icono = pystray.Icon("FichaCSIRC", icono_imagen(), "FichaCSIRC", menu)
         # En Windows el icono vive en su propio hilo con su bucle de mensajes;
         # el principal es de pywebview.

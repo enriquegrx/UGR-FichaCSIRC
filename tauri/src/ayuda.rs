@@ -130,6 +130,39 @@ pub async fn exportar_csv(e: &Estado, cfg: &Cfg, app: &AppHandle, desde: &str, h
 }
 
 /// Abre el ultimo CSV exportado con su programa (solo ese).
+pub const MAX_INFORME: usize = 2 * 1024 * 1024;
+
+/// "noviembre 2026/../x" -> "noviembre-2026-x": solo letras, numeros, _ y -.
+pub fn nombre_informe(nombre: &str) -> String {
+    let mut out = String::new();
+    for c in nombre.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+            out.push(c);
+        } else if !out.ends_with('\u{1}') {
+            out.push('\u{1}');
+        }
+    }
+    let limpio: String = out.replace('\u{1}', "-").trim_matches('-').chars().take(60).collect();
+    if limpio.is_empty() { "informe".into() } else { limpio }
+}
+
+/// El informe de Estadisticas (una pagina HTML que monta la interfaz) a un
+/// fichero temporal, abierto en el navegador: desde ahi se imprime o se
+/// guarda como PDF. La ruta la decide esto, no el JS.
+pub fn abrir_informe(app: &AppHandle, html: &str, nombre: &str) -> Value {
+    if html.trim().is_empty() || html.len() > MAX_INFORME {
+        return json!({"error": "No se pudo preparar el informe."});
+    }
+    let ruta = std::env::temp_dir().join(format!("FichaCSIRC-{}.html", nombre_informe(nombre)));
+    if let Err(x) = std::fs::write(&ruta, html) {
+        return json!({"error": format!("No se pudo abrir el informe: {x}")});
+    }
+    match app.opener().open_path(ruta.display().to_string(), None::<&str>) {
+        Ok(()) => json!({"ok": true, "ruta": ruta.display().to_string()}),
+        Err(x) => json!({"error": format!("No se pudo abrir el informe: {x}")}),
+    }
+}
+
 pub fn abrir_exportacion(e: &Estado, app: &AppHandle) -> Value {
     match candado(&e.ultima_exportacion).clone().filter(|r| r.exists()) {
         Some(r) => {
@@ -305,6 +338,13 @@ pub async fn diagnostico() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nombre_del_informe_sin_rutas_raras() {
+        assert_eq!(nombre_informe("noviembre 2026/../x"), "noviembre-2026-x");
+        assert_eq!(nombre_informe("../.."), "informe");
+        assert_eq!(nombre_informe(&"a".repeat(100)).len(), 60);
+    }
 
     #[test]
     fn bloques_de_markdown() {

@@ -256,6 +256,17 @@
                                                       dias: [{ iso: d(2), texto: `miércoles ${d(2).slice(8)}/${d(2).slice(5, 7)} (1h de 7h)` }] }),
     aviso_mes_visto: () => { avisoMesVisto = true; return espera({ ok: true }); },
     bandeja_pendientes: () => espera({ ok: true }),
+    bandeja_habituales: () => espera({ ok: true }),
+    abrir_informe: (html) => { window.__informe = html; return espera({ ok: true, ruta: "C:\\Temp\\FichaCSIRC-informe.html" }); },
+    guardar_plantilla_semana: (lunes, nombre) => {
+      const [a, m, dd] = lunes.split("-").map(Number);
+      const dias = [0, 1, 2, 3, 4].map((n) => (apuntes[iso(new Date(a, m - 1, dd + n))] || []).map((x) => ({ id: x.wp_id, horas: x.horas })));
+      const n = dias.reduce((t, x) => t + x.length, 0);
+      if (!n) return espera({ error: "Esa semana no tiene apuntes de ProyectosTIC que guardar." });
+      plantillas.push({ nombre, semana: true, dias });
+      return espera({ ok: true, n, total: fmt(dias.flat().reduce((t, x) => t + x.horas, 0)) });
+    },
+    aplicar_plantilla_semana: () => espera({ creados: 3, saltados: 1, errores: 0, ultimo: "" }),
     buscar_apuntes: (texto, anio) => {
       const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const palabras = norm(texto).split(/\s+/).filter(Boolean);
@@ -288,7 +299,10 @@
           excesos.push({ iso: i, mes: x.getMonth() + 1, dia: `${["Domingo", ...DIAS][x.getDay()]} ${i.slice(8)}/${i.slice(5, 7)}`,
                          reg, obj: 7, sobra: reg - 7, sobra_txt: fmt(reg - 7), texto: `${fmt(reg)} de 7h`, nolab: false, motivo: "",
                          duplicado: new Set(ap.map((y) => y.wp_id + y.actividad)).size < ap.length,
-                         apuntes: ap.map((y) => ({ tarea: y.tarea, horas_txt: fmt(y.horas), actividad: y.actividad })) });
+                         apuntes: ap.map((y) => ({ id: String(y.id), tarea: y.tarea, horas: y.horas, horas_txt: fmt(y.horas),
+                           actividad: y.actividad, comentario: y.comentario || "",
+                           repetido: ap.filter((z) => z.wp_id === y.wp_id && z.actividad === y.actividad).length > 1,
+                           justo: Math.abs(y.horas - (reg - 7)) < 0.001 })) });
         }
         if (reg >= 7) { modelo = i; continue; }
         dias.push({ iso: i, mes: x.getMonth() + 1, dia: `${["Domingo", ...DIAS][x.getDay()]} ${i.slice(8)}/${i.slice(5, 7)}`,
@@ -426,8 +440,10 @@
       }
       return espera({ creados, saltados: 0, errores: 0, ultimo: "" });
     },
-    plantillas: () => espera(plantillas.map((p) => ({ nombre: p.nombre, n: p.apuntes.length,
-      total: fmt(p.apuntes.reduce((s, a) => s + a.horas, 0)) }))),
+    plantillas: () => espera(plantillas.map((p) => {
+      const aps = p.semana ? p.dias.flat() : p.apuntes;
+      return { nombre: p.nombre, n: aps.length, semana: !!p.semana, total: fmt(aps.reduce((s, a) => s + a.horas, 0)) };
+    })),
     guardar_plantilla_dia: (i, nombre) => {
       plantillas.push({ nombre, apuntes: (apuntes[i] || []).map((a) => ({ id: a.wp_id, horas: a.horas })) });
       return espera({ ok: true, n: (apuntes[i] || []).length });

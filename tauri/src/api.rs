@@ -66,7 +66,8 @@ pub struct Estado {
     pub(crate) actividades: Mutex<HashMap<String, Vec<(String, String)>>>,
     /// "Por completar (n)" del menu de la bandeja
     pub(crate) n_pendientes: Mutex<u64>,
-    pub(crate) item_pendientes: Mutex<Option<tauri::menu::MenuItem<tauri::Wry>>>,
+    /// "Completar hoy con ..." del menu de la bandeja: (tarea, nombre, actividad)
+    pub(crate) hab_bandeja: Mutex<Vec<(String, String, String)>>,
 }
 
 pub(crate) fn candado<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -100,6 +101,10 @@ impl Estado {
     fn desbloqueada(&self, cfg: &Cfg) -> bool {
         let mut d = candado(&self.desbloqueada);
         *d.get_or_insert_with(|| pin::guardado(cfg).is_none())
+    }
+    /// Para lo que no llega por el comando "api" (el menu de la bandeja).
+    pub(crate) fn esta_desbloqueada(&self, cfg: &Cfg) -> bool {
+        self.desbloqueada(cfg)
     }
     fn exigir_desbloqueo(&self, cfg: &Cfg) -> Result<(), String> {
         if self.desbloqueada(cfg) { Ok(()) } else { Err("FichaCSIRC está bloqueada: escribe tu PIN.".into()) }
@@ -271,6 +276,19 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             herr::eliminar_plantilla(&arg(&args, 0))
         }
+        "guardar_plantilla_semana" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::guardar_plantilla_semana(e, &cfg, &arg(&args, 0), &arg(&args, 1)).await
+        }
+        "aplicar_plantilla_semana" => {
+            e.exigir_desbloqueo(&cfg)?;
+            herr::aplicar_plantilla_semana(e, &cfg, &arg(&args, 0), &arg(&args, 1)).await
+        }
+        "abrir_informe" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(ayuda::abrir_informe(&app, &arg(&args, 0), &arg(&args, 1)))
+        }
+        "bandeja_habituales" => Ok(sistema::bandeja_habituales(&app, &arg_lista(&args, 0))),
         "aplicar_plantilla" => {
             e.exigir_desbloqueo(&cfg)?;
             let dias: Vec<String> = arg_lista(&args, 1).iter().filter_map(|d| d.as_str().map(String::from)).collect();

@@ -460,6 +460,58 @@
       $("b-hoy").click();
       ok(await hasta(() => document.querySelector(".dia.hoy")), "no vuelve a hoy");
     });
+    await prueba("quitar el apunte que sobra, informe, plantilla de semana y bandeja", async () => {
+      // Te pasas > Quitar apunte: el que deja el dia justo, y el dia sale de la lista
+      $("b-pend").click();
+      const p = $("estadisticas");
+      const bPasas = () => [...p.querySelectorAll(".pend-modo button")].find((x) => x.textContent.startsWith("Te pasas"));
+      ok(await hasta(bPasas), "no se ve el panel");
+      bPasas().click();
+      ok(await hasta(() => p.querySelector(".pend-quitar")), "sin «Quitar apunte» en los días en que te pasas");
+      p.querySelector(".pend-quitar").click();
+      ok(!$("menu").hidden, "«Quitar apunte» no abre el menú");
+      pulsarMenu("deja el día justo");
+      ok(await hasta(() => !$("modal").hidden), "no pide confirmación antes de quitar");
+      $("modal-si").click();
+      ok(await hasta(() => !p.querySelector(".pend-dia.exceso")), "el día sigue en «Te pasas» tras quitar el apunte");
+      ok(/Quitadas 2h/.test($("estado").textContent), `no dice lo quitado: ${$("estado").textContent}`);
+      $("b-pend").click();
+      ok(await hasta(() => $("estadisticas").hidden), "no vuelve a las fichas");
+      // Estadisticas > Informe: una pagina suelta, sin scripts y con su boton de imprimir
+      $("b-estad").click();
+      ok(await hasta(() => { const b = [...$("estadisticas").querySelectorAll("button")].find((x) => x.textContent.includes("Informe")); return b && !b.disabled; }),
+         "sin botón de informe");
+      [...$("estadisticas").querySelectorAll("button")].find((x) => x.textContent.includes("Informe")).click();
+      ok(await hasta(() => window.__informe), "no prepara el informe");
+      const inf = window.__informe;
+      ok(inf.startsWith("<!doctype html>") && inf.includes("Horas por tarea") && inf.includes("Persona de Prueba"), "al informe le falta contenido");
+      ok(!/<script/i.test(inf) && inf.includes('onclick="window.print()"'), "el informe lleva scripts o le falta Imprimir");
+      ok(!/\bnull\b|undefined|NaN/.test(inf.replace(/<style>[\s\S]*?<\/style>/, "")), "el informe escribe null/undefined/NaN");
+      $("b-estad").click();
+      ok(await hasta(() => $("estadisticas").hidden && dias().length === 5), "no vuelve a las fichas desde Estadísticas");
+      // Plantillas: guardar la semana y aplicarla
+      dlgPlantillas();
+      ok(await hasta(() => dlg()), "no abre Plantillas");
+      botonDlg("Guardar esta semana");
+      ok(await hasta(() => document.querySelectorAll(".dlg").length === 2), "no pide el nombre de la plantilla de semana");
+      botonDlg("Guardar");
+      ok(await hasta(() => [...document.querySelectorAll(".dlg select.lista option")].some((o) => o.textContent.startsWith("📅 Semana tipo"))),
+         "la plantilla de semana no sale en la lista");
+      const lista = dlg().querySelector("select.lista");
+      lista.selectedIndex = [...lista.options].findIndex((o) => o.textContent.startsWith("📅"));
+      lista.dispatchEvent(new Event("change"));
+      const bAplicar = [...document.querySelectorAll(".dlg-pie button")].find((x) => x.textContent.startsWith("Aplicar a la semana del"));
+      ok(bAplicar, "el botón no dice a qué semana se aplica");
+      bAplicar.click();
+      ok(await hasta(() => !$("modal").hidden), "no pregunta antes de aplicar la semana");
+      $("modal-si").click();
+      ok(await hasta(() => /Plantilla de semana aplicada: 3 apuntes/.test($("estado").textContent)), `no dice lo aplicado: ${$("estado").textContent}`);
+      ok(!dlg(), "el diálogo de plantillas no se cierra");
+      // lo fichado desde el icono de la bandeja llega a la ventana, con su Deshacer
+      await alFicharFuera({ creados: 1, horas: "7h", puede_deshacer: true, quedan: 1 }, "Hoy: 7h en «Mantenimientos».");
+      ok(!$("aviso-deshacer").hidden && $("aviso-deshacer").textContent.includes("Hoy: 7h"), "lo fichado desde la bandeja no se ve en la ventana");
+      ocultarAviso();
+    });
     await prueba("vista mensual", async () => {
       document.querySelector('.selector-vista [data-vista="mes"]').click();
       ok(await hasta(() => document.querySelectorAll(".celda").length >= 20), "sin celdas");

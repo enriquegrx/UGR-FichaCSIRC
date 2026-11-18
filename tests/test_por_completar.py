@@ -142,6 +142,74 @@ class TestPorCompletar(unittest.TestCase):
         self.assertEqual(self.api.buscar_apuntes("05/11", 2026, hoy=HOY)["n"], 1)   # por fecha
         self.assertEqual(self.api.buscar_apuntes(" ", 2026, hoy=HOY)["n"], 0)
 
+    def test_te_pasas_dice_que_apunte_sobra(self):
+        self.apuntes += [dict(ap("2026-11-10", "10", 2), id=77)]            # el 10: 7 + 2 de la misma tarea
+        x = self.api.por_completar(2026, hoy=HOY)["excesos"][0]
+        self.assertEqual([(a["id"], a["repetido"], a["justo"]) for a in x["apuntes"]],
+                         [("1", True, False), ("77", True, True)])           # quitando el de 2h queda justo
+        # y el dia queda en la cache: quitarlo desde la lista se puede deshacer
+        self.assertEqual(len(self.api._cache["2026-11-10"]), 2)
+
+    def test_plantilla_de_semana(self):
+        guardadas = []
+        with mock.patch.object(core, "PLANTILLAS", guardadas), \
+             mock.patch.object(core, "guardar_config_valor", lambda k, v: None):
+            r = self.api.guardar_plantilla_semana("2026-11-04", "Semana tipo")   # miercoles: su lunes es el 2
+            self.assertEqual((r["n"], r["total"]), (4, "24,5h"))
+            p = guardadas[0]
+            self.assertTrue(p["semana"])
+            self.assertEqual([len(d) for d in p["dias"]], [1, 1, 0, 1, 1])
+            lista = self.api.plantillas()
+            self.assertEqual((lista[0]["semana"], lista[0]["n"], lista[0]["total"]), (True, 4, "24,5h"))
+            # a la semana siguiente (9-13): el 9, 10 y 11 ya tienen esa tarea; se crean jueves y viernes
+            r = self.api.aplicar_plantilla_semana("Semana tipo", "2026-11-09")
+            self.assertEqual((r["creados"], r["saltados"]), (2, 2))
+            self.assertEqual([(c[0], c[2]) for c in self.creados], [("2026-11-12", 7), ("2026-11-13", 6.5)])
+            # una de semana no se aplica a dias sueltos, ni una que no existe
+            self.assertIn("error", self.api.aplicar_plantilla("Semana tipo", ["2026-11-12"]))
+            self.assertIn("error", self.api.aplicar_plantilla_semana("Otra", "2026-11-09"))
+            self.assertIn("error", self.api.guardar_plantilla_semana("2026-11-04", " "))
+
+    def test_informe_a_un_fichero_temporal(self):
+        with mock.patch.object(web.os, "startfile", create=True) as abrir, \
+             mock.patch.object(web.subprocess, "Popen") as popen:
+            r = self.api.abrir_informe("<!doctype html><title>x</title>", "noviembre 2026/../x")
+        self.assertTrue(r["ok"])
+        self.addCleanup(os.remove, r["ruta"])
+        self.assertTrue(abrir.called or popen.called)
+        self.assertEqual(os.path.basename(r["ruta"]), "FichaCSIRC-noviembre-2026-x.html")   # sin rutas raras
+        self.assertIn("error", self.api.abrir_informe("", "x"))
+        self.assertIn("error", self.api.abrir_informe("x" * (web.Api.MAX_INFORME + 1), "x"))
+
+    def test_completar_hoy_desde_la_bandeja(self):
+        self.api._bandeja = mock.MagicMock()
+        self.api._ventana = mock.MagicMock()
+        self.api.bandeja_habituales([{"wp_id": "20", "tarea": "Mantenimientos", "actividad": "Soporte"},
+                                     {"wp_id": "x"}, {"wp_id": 30, "tarea": "Proxmox"}])
+        self.assertEqual([h["wp_id"] for h in self.api._hab_bandeja], [20, 30])     # la mal formada, fuera
+        self.api._bandeja.poner_habituales.assert_called_once()
+
+        class Hoy(dt.date):
+            @classmethod
+            def today(cls):
+                return cls(2026, 11, 4)                                    # miercoles vacio, de guardia
+        with mock.patch.object(web.dt, "date", Hoy):
+            texto = self.api._completar_hoy_bandeja(0)
+        self.assertEqual(texto, "Hoy: 7h en «Mantenimientos». Para quitarlo, Deshacer en FichaCSIRC.")
+        self.assertEqual(self.creados[0][:3], ("2026-11-04", 20, 7.0))
+        self.api._bandeja.notificar.assert_called_once_with(texto)
+        self.assertIn("alFicharFuera(", self.api._ventana.evaluate_js.call_args[0][0])
+        # con PIN y bloqueada: abre la ventana y no ficha nada
+        self.api._desbloqueada = False
+        self.assertEqual(self.api._completar_hoy_bandeja(1), "")
+        self.api._bandeja.mostrar.assert_called_once()
+        self.assertEqual(len(self.creados), 1)
+
+    def test_textos_del_aviso(self):
+        self.assertEqual(web.texto_fichar_hoy({"creados": 0, "saltados": 1}, "T"), "Hoy no falta nada por fichar.")
+        self.assertIn("No se pudo", web.texto_fichar_hoy({"error": "sin conexión"}, "T"))
+        self.assertIn("No se pudo", web.texto_fichar_hoy({"creados": 0, "errores": 1, "ultimo": "x"}, "T"))
+
 
 class TestBandejaPendientes(unittest.TestCase):
     def test_texto(self):
@@ -150,6 +218,22 @@ class TestBandejaPendientes(unittest.TestCase):
         self.assertEqual(b.texto_pendientes(), "Por completar ✔")
         b.poner_pendientes(5)
         self.assertEqual(b.texto_pendientes(), "Por completar (5)")
+
+    def test_menu_con_las_habituales(self):
+        import bandeja
+        hechos = []
+        b = bandeja.Bandeja(ventana=None, al_completar_hoy=hechos.append)
+        self.assertEqual(b.texto_habitual({"tarea": "Mantenimientos", "actividad": "Soporte"}),
+                         "Completar hoy con «Mantenimientos» · Soporte")
+        self.assertLessEqual(len(b.texto_habitual({"tarea": "x" * 80, "actividad": ""})), 60)
+        b.poner_habituales([{"wp_id": 1, "tarea": "A", "actividad": ""}])
+        try:
+            import pystray  # noqa: F401
+        except Exception:
+            self.skipTest("sin pystray")
+        textos = [str(i.text) for i in b._items()]
+        self.assertIn("Completar hoy con «A»", textos)
+        self.assertEqual(textos[0], "Abrir FichaCSIRC")
 
 
 if __name__ == "__main__":

@@ -319,21 +319,119 @@ pub fn mostrar(app: &AppHandle) {
 
 /// El icono junto al reloj: abrir, fichar hoy y salir. Con el, cerrar la
 /// ventana solo la esconde.
-pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
+/// "Completar hoy con «tarea» · actividad" (la tarea, recortada).
+pub fn texto_habitual(tarea: &str, actividad: &str) -> String {
+    let t = if tarea.is_empty() { "tarea" } else { tarea };
+    let t: String = if t.chars().count() <= 34 { t.to_string() } else { format!("{}…", t.chars().take(33).collect::<String>()) };
+    if actividad.is_empty() { format!("Completar hoy con «{t}»") } else { format!("Completar hoy con «{t}» · {actividad}") }
+}
+
+/// Lo que dice el aviso tras "Completar hoy con ..." (como texto_fichar_hoy de Python).
+pub fn texto_fichar_hoy(r: &Value, tarea: &str) -> String {
+    if let Some(e) = r["error"].as_str() {
+        return format!("No se pudo fichar: {e}");
+    }
+    if r["creados"].as_u64().unwrap_or(0) > 0 {
+        return format!("Hoy: {} en «{tarea}». Para quitarlo, Deshacer en FichaCSIRC.", r["horas"].as_str().unwrap_or(""));
+    }
+    if r["errores"].as_u64().unwrap_or(0) > 0 {
+        return format!("No se pudo fichar: {}", r["ultimo"].as_str().filter(|u| !u.is_empty()).unwrap_or("error"));
+    }
+    "Hoy no falta nada por fichar.".into()
+}
+
+/// El menu del icono: abrir, ir a hoy, completar hoy con una habitual, por
+/// completar y salir. Se rehace cuando cambian las habituales o el contador.
+fn menu_bandeja(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    let e = app.state::<Estado>();
+    let menu = Menu::new(app)?;
+    menu.append(&MenuItem::with_id(app, "abrir", "Abrir FichaCSIRC", true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "hoy", "Fichar hoy", true, None::<&str>)?)?;
+    let hab = candado(&e.hab_bandeja).clone();
+    if !hab.is_empty() {
+        menu.append(&PredefinedMenuItem::separator(app)?)?;
+        for (i, (_wp, tarea, act)) in hab.iter().enumerate() {
+            menu.append(&MenuItem::with_id(app, format!("hab{i}"), texto_habitual(tarea, act), true, None::<&str>)?)?;
+        }
+    }
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    let n = *candado(&e.n_pendientes);
+    menu.append(&MenuItem::with_id(app, "pend", texto_pendientes(n), true, None::<&str>)?)?;
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?)?;
+    Ok(menu)
+}
+
+fn rehacer_menu(app: &AppHandle) {
+    if let Some(t) = app.tray_by_id("bandeja") {
+        if let Ok(m) = menu_bandeja(app) {
+            let _ = t.set_menu(Some(m));
+        }
+    }
+}
+
+pub const MAX_HAB_BANDEJA: usize = 3;
+
+/// Las habituales validas de lo que manda la ventana: (tarea, nombre, actividad).
+pub fn habituales_de(filas: &[Value]) -> Vec<(String, String, String)> {
+    let txt = |v: &Value| match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        _ => String::new(),
+    };
+    filas.iter().take(MAX_HAB_BANDEJA).filter_map(|f| {
+        let wp = txt(&f["wp_id"]);
+        wp.parse::<i64>().ok().map(|_| (wp, txt(&f["tarea"]), txt(&f["actividad"])))
+    }).collect()
+}
+
+/// Las tareas que ofrece el menu para completar hoy con un clic.
+pub fn bandeja_habituales(app: &AppHandle, filas: &[Value]) -> Value {
+    let nuevas = habituales_de(filas);
+    let e = app.state::<Estado>();
+    let cambia = *candado(&e.hab_bandeja) != nuevas;
+    if cambia {
+        *candado(&e.hab_bandeja) = nuevas;
+        rehacer_menu(app);
+    }
+    json!({"ok": true})
+}
+
+/// Menu del icono > "Completar hoy con ...": lo que le falta a hoy, en esa
+/// tarea, sin abrir la ventana; el resultado, en un aviso junto al reloj.
+/// Con PIN y bloqueada, abre la ventana (para pedirlo).
+async fn completar_hoy(app: &AppHandle, i: usize) {
+    use tauri_plugin_notification::NotificationExt;
+    let e = app.state::<Estado>();
+    let Ok(cfg) = crate::config::leer() else { return };
+    if !e.esta_desbloqueada(&cfg) {
+        mostrar(app);
+        return;
+    }
+    let Some((wp, tarea, act)) = candado(&e.hab_bandeja).get(i).cloned() else { return };
+    let hoy = Local::now().date_naive().to_string();
+    let r = match crate::completar::completar_dias(&e, &cfg, &[hoy], &wp, &act, "", &[]).await {
+        Ok(r) => r,
+        Err(x) => json!({"error": x}),
+    };
+    let texto = texto_fichar_hoy(&r, &tarea);
+    let _ = app.notification().builder().title("FichaCSIRC").body(&texto).show();
+    if r["creados"].as_u64().unwrap_or(0) > 0 {
+        // la ventana (si esta a la vista) se pone al dia, con su Deshacer
+        if let Some(w) = app.get_webview_window("principal") {
+            let _ = w.eval(format!("alFicharFuera({r}, {})", json!(texto)));
+        }
+    }
+}
+
+pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
     app.state::<Estado>().con_bandeja.store(true, std::sync::atomic::Ordering::SeqCst);
     if app.tray_by_id("bandeja").is_some() {
         return Ok(());
     }
-    let abrir = MenuItem::with_id(app, "abrir", "Abrir FichaCSIRC", true, None::<&str>)?;
-    let hoy = MenuItem::with_id(app, "hoy", "Fichar hoy", true, None::<&str>)?;
-    let n = *candado(&app.state::<Estado>().n_pendientes);
-    let pend = MenuItem::with_id(app, "pend", texto_pendientes(n), true, None::<&str>)?;
-    let sep = PredefinedMenuItem::separator(app)?;
-    let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&abrir, &hoy, &pend, &sep, &salir])?;
-    *candado(&app.state::<Estado>().item_pendientes) = Some(pend);
+    let menu = menu_bandeja(app)?;
     let mut b = TrayIconBuilder::with_id("bandeja").tooltip(format!("FichaCSIRC{}", modo::sufijo())).menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
@@ -351,6 +449,13 @@ pub fn poner_bandeja(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
             "salir" => app.exit(0),
+            // "Completar hoy con ...": habla con ProyectosTIC, fuera del hilo del menu
+            id if id.starts_with("hab") => {
+                if let Ok(i) = id[3..].parse::<usize>() {
+                    let app = app.clone();
+                    tauri::async_runtime::spawn(async move { completar_hoy(&app, i).await; });
+                }
+            }
             _ => {}
         })
         .on_tray_icon_event(|t, ev| {
@@ -372,9 +477,10 @@ pub fn texto_pendientes(n: u64) -> String {
 /// El numero de "Por completar (n)" en el menu del icono (lo pone la ventana).
 pub fn bandeja_pendientes(app: &AppHandle, n: u64) -> Value {
     let e = app.state::<Estado>();
-    *candado(&e.n_pendientes) = n;
-    if let Some(item) = candado(&e.item_pendientes).as_ref() {
-        let _ = item.set_text(texto_pendientes(n));
+    let cambia = *candado(&e.n_pendientes) != n;
+    if cambia {
+        *candado(&e.n_pendientes) = n;
+        rehacer_menu(app);
     }
     json!({"ok": true})
 }
@@ -382,7 +488,6 @@ pub fn bandeja_pendientes(app: &AppHandle, n: u64) -> Value {
 pub fn quitar_bandeja(app: &AppHandle) {
     app.state::<Estado>().con_bandeja.store(false, std::sync::atomic::Ordering::SeqCst);
     let _ = app.remove_tray_by_id("bandeja");
-    candado(&app.state::<Estado>().item_pendientes).take();
 }
 
 #[cfg(test)]
@@ -405,5 +510,13 @@ mod tests {
         assert_eq!(mensaje_pendientes(&[]), "");
         assert_eq!(texto_pendientes(5), "Por completar (5)");
         assert_eq!(texto_pendientes(0), "Por completar ✔");
+        assert_eq!(texto_habitual("Mantenimientos", "Soporte"), "Completar hoy con «Mantenimientos» · Soporte");
+        assert!(texto_habitual(&"x".repeat(80), "").chars().count() <= 60);
+        let h = habituales_de(&[json!({"wp_id": "20", "tarea": "A", "actividad": "S"}), json!({"wp_id": "x"}),
+                                json!({"wp_id": 30, "tarea": "B"})]);
+        assert_eq!(h, vec![("20".to_string(), "A".to_string(), "S".to_string()), ("30".to_string(), "B".to_string(), String::new())]);
+        assert_eq!(texto_fichar_hoy(&json!({"creados": 1, "horas": "7h"}), "A"), "Hoy: 7h en «A». Para quitarlo, Deshacer en FichaCSIRC.");
+        assert_eq!(texto_fichar_hoy(&json!({"creados": 0, "saltados": 1}), "A"), "Hoy no falta nada por fichar.");
+        assert!(texto_fichar_hoy(&json!({"error": "sin conexión"}), "A").starts_with("No se pudo"));
     }
 }

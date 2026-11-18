@@ -638,7 +638,7 @@ class TestDialogos(Base):
         with mock.patch.object(core, "PLANTILLAS", []), \
              mock.patch.object(core, "guardar_config_valor"):
             self.assertEqual(self.api.guardar_plantilla_dia(L.isoformat(), "Tipo"), {"ok": True, "n": 2})
-            self.assertEqual(self.api.plantillas(), [{"nombre": "Tipo", "n": 2, "total": "7h"}])
+            self.assertEqual(self.api.plantillas(), [{"nombre": "Tipo", "n": 2, "semana": False, "total": "7h"}])
             self.assertIn("error", self.api.guardar_plantilla_dia(M.isoformat(), "Vacio"))
             creados = []
             with mock.patch.object(core, "crear_entrada", lambda iso, *a: creados.append(iso)):

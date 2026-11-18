@@ -68,6 +68,7 @@ fn main() {
     builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(estado)
         .on_window_event(|w, ev| {
             // con icono en la bandeja, cerrar la ventana principal solo la esconde

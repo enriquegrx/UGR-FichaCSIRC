@@ -214,12 +214,110 @@ pub async fn tarea_ausencia(e: &Estado, cfg: &Cfg, motivo: &str, habituales: &[V
 
 // ---------------------------------------------------------------- plantillas y copiar
 
+/// De dia (apuntes) y de semana (dias: lunes..viernes).
 pub fn plantillas(cfg: &Cfg) -> Value {
     json!(cfg.lista("plantillas").iter().map(|p| {
-        let aps = p["apuntes"].as_array().cloned().unwrap_or_default();
+        let semana = p["semana"].as_bool().unwrap_or(false);
+        let aps: Vec<Value> = if semana {
+            p["dias"].as_array().map(|ds| ds.iter().flat_map(|d| d.as_array().cloned().unwrap_or_default()).collect()).unwrap_or_default()
+        } else {
+            p["apuntes"].as_array().cloned().unwrap_or_default()
+        };
         let total: f64 = aps.iter().filter_map(|a| a["horas"].as_f64()).sum();
-        json!({"nombre": p["nombre"], "n": aps.len(), "total": fmt_horas(total)})
+        json!({"nombre": p["nombre"], "n": aps.len(), "semana": semana, "total": fmt_horas(total)})
     }).collect::<Vec<_>>())
+}
+
+/// Los apuntes de una semana (lunes a viernes) repartidos por dia, como se guardan.
+pub fn dias_de_semana(aps: &[Apunte], lunes: NaiveDate) -> Vec<Vec<Value>> {
+    let mut dias: Vec<Vec<Value>> = vec![Vec::new(); 5];
+    for a in aps {
+        let Ok(d) = fecha(&a.fecha) else { continue };
+        let i = (d - lunes).num_days();
+        if (0..5).contains(&i) {
+            dias[i as usize].push(json!({"id": a.wp_id, "nombre": a.wp_titulo, "horas": a.horas,
+                                         "comentario": a.comentario, "actividad": a.actividad}));
+        }
+    }
+    dias
+}
+
+/// La semana tal como esta en ProyectosTIC, cada dia con sus apuntes.
+pub async fn guardar_plantilla_semana(e: &Estado, cfg: &Cfg, lunes_iso: &str, nombre: &str) -> Result<Value, String> {
+    let nombre = nombre.trim();
+    if nombre.is_empty() {
+        return Ok(json!({"error": "Ponle un nombre a la plantilla."}));
+    }
+    let Ok(d) = fecha(lunes_iso) else { return Ok(json!({"error": "Semana no válida."})) };
+    let lunes = d - Duration::days(d.weekday().num_days_from_monday() as i64);
+    let leido = async {
+        let cli = Cliente::desde(cfg)?;
+        let uid = e.uid(&cli).await?;
+        cli.entradas_rango(&uid, &lunes.to_string(), &(lunes + Duration::days(4)).to_string()).await
+    }.await;
+    let aps = match leido {
+        Ok(a) => a,
+        Err(err) => return Ok(json!({"error": crate::openproject::diagnostico(&err).await["titulo"]})),
+    };
+    if aps.is_empty() {
+        return Ok(json!({"error": "Esa semana no tiene apuntes de ProyectosTIC que guardar."}));
+    }
+    let dias = dias_de_semana(&aps, lunes);
+    let n: usize = dias.iter().map(Vec::len).sum();
+    let total: f64 = dias.iter().flatten().filter_map(|a| a["horas"].as_f64()).sum();
+    let nueva = json!({"nombre": nombre, "semana": true, "dias": dias});
+    config::modificar(|cfg| {
+        let mut ps: Vec<Value> = cfg.get("plantillas").and_then(Value::as_array).cloned().unwrap_or_default();
+        ps.retain(|p| p["nombre"].as_str() != Some(nombre));
+        ps.push(nueva);
+        cfg.insert("plantillas".into(), Value::Array(ps));
+    })?;
+    Ok(json!({"ok": true, "n": n, "total": fmt_horas(total)}))
+}
+
+/// Cada dia de la plantilla, a su dia de esa semana: como al copiar la semana
+/// anterior (se saltan los no laborables y las tareas que ya esten ese dia).
+pub async fn aplicar_plantilla_semana(e: &Estado, cfg: &Cfg, nombre: &str, lunes_iso: &str) -> Result<Value, String> {
+    let Some(p) = cfg.lista("plantillas").into_iter()
+        .find(|p| p["nombre"].as_str() == Some(nombre) && p["semana"].as_bool().unwrap_or(false)) else {
+        return Ok(json!({"error": "Esa plantilla de semana ya no existe."}));
+    };
+    let Ok(d) = fecha(lunes_iso) else { return Ok(json!({"error": "Semana no válida."})) };
+    let lunes = d - Duration::days(d.weekday().num_days_from_monday() as i64);
+    let fechas: Vec<String> = (0..5).map(|i| (lunes + Duration::days(i)).to_string()).collect();
+    // lo que ya hay esa semana, leido ahora (puede no ser la que esta en pantalla)
+    let leido = async {
+        let cli = Cliente::desde(cfg)?;
+        let uid = e.uid(&cli).await?;
+        cli.entradas_rango(&uid, &fechas[0], &fechas[4]).await
+    }.await;
+    let aps = match leido {
+        Ok(a) => a,
+        Err(err) => return Ok(json!({"error": crate::openproject::diagnostico(&err).await["titulo"]})),
+    };
+    let mut por_dia: HashMap<String, Vec<Apunte>> = HashMap::new();
+    for a in aps {
+        por_dia.entry(a.fecha.clone()).or_default().push(a);
+    }
+    let reglas = Reglas::desde(cfg);
+    let con_inari = crate::inari::configurado(cfg);
+    let dias = p["dias"].as_array().cloned().unwrap_or_default();
+    let mut pares = Vec::new();
+    for (i, iso) in fechas.iter().enumerate() {
+        let dia = dias.get(i).and_then(Value::as_array).cloned().unwrap_or_default();
+        if dia.is_empty() || (con_inari && reglas.es_teletrabajo(iso)) {
+            continue;
+        }
+        candado(&e.cache).insert(iso.clone(), Some(por_dia.remove(iso).unwrap_or_default()));
+        pares.push((iso.clone(), dia.iter().map(|a| Apunte {
+            wp_id: texto(&a["id"]), horas: a["horas"].as_f64().unwrap_or(0.0),
+            comentario: texto(&a["comentario"]), actividad: texto(&a["actividad"]), ..Default::default()
+        }).collect::<Vec<Apunte>>()));
+    }
+    if pares.is_empty() {
+        return Ok(json!({"error": "Esa plantilla no tiene apuntes para los días de esa semana."}));
+    }
+    copiar(e, cfg, pares, true).await
 }
 
 pub fn guardar_plantilla_dia(e: &Estado, iso: &str, nombre: &str) -> Result<Value, String> {
@@ -293,6 +391,9 @@ pub async fn aplicar_plantilla(e: &Estado, cfg: &Cfg, nombre: &str, dias: &[Stri
     let Some(p) = cfg.lista("plantillas").into_iter().find(|p| p["nombre"].as_str() == Some(nombre)) else {
         return Ok(json!({"error": "Esa plantilla ya no existe."}));
     };
+    if p["semana"].as_bool().unwrap_or(false) {
+        return Ok(json!({"error": "Esa plantilla es de una semana entera: aplícala a la semana."}));
+    }
     if dias.is_empty() {
         return Ok(json!({"error": "Marca al menos un día de destino."}));
     }
@@ -485,6 +586,21 @@ pub async fn resumen_mes(e: &Estado, cfg: &Cfg, anio: i32, mes: u32, hoy: NaiveD
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Los mismos casos que test_plantilla_de_semana (Python)
+    #[test]
+    fn plantilla_de_semana() {
+        let ap = |f: &str, h: f64| Apunte { wp_id: "10".into(), wp_titulo: "T10".into(), horas: h, fecha: f.into(), ..Default::default() };
+        let aps = vec![ap("2026-11-02", 7.0), ap("2026-11-03", 4.0), ap("2026-11-05", 7.0), ap("2026-11-06", 6.5)];
+        let dias = dias_de_semana(&aps, NaiveDate::from_ymd_opt(2026, 11, 2).unwrap());
+        assert_eq!(dias.iter().map(Vec::len).collect::<Vec<_>>(), vec![1, 1, 0, 1, 1]);
+        assert_eq!(dias[1][0]["horas"], 4.0);
+        let cfg = Cfg(json!({"plantillas": [{"nombre": "Semana tipo", "semana": true, "dias": dias},
+                                             {"nombre": "Día", "apuntes": [{"id": "10", "horas": 7.0}]}]}).as_object().unwrap().clone());
+        let l = plantillas(&cfg);
+        assert_eq!((l[0]["semana"].as_bool(), l[0]["n"].as_u64(), l[0]["total"].as_str()), (Some(true), Some(4), Some("24,5h")));
+        assert_eq!((l[1]["semana"].as_bool(), l[1]["n"].as_u64()), (Some(false), Some(1)));
+    }
 
     #[test]
     fn sin_tildes_como_python() {

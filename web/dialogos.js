@@ -406,12 +406,18 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
   let seq = 0;
   const cuerpo = el("div", { class: "estad" });
   const botones = PERIODOS_ESTAD.map(([p, t]) => el("button", { text: t, onclick: () => { periodo = p; cargar(); } }));
+  let ultimo = null;       // lo ultimo pintado: de ahi sale el informe
+  const bInforme = el("button", { text: "🖨 Informe…", disabled: true,
+    title: "Este periodo en una página para imprimir o guardar como PDF (se abre en el navegador)",
+    onclick: () => { if (ultimo) abrirInforme(ultimo); } });
   cont.replaceChildren(
     el("div", { class: "cabeza-seccion" },
       // el periodo, bien a la vista junto al titulo: Semanal | Mensual | Anual
       el("div", { class: "fila estad-cabeza" },
         el("h2", { text: "Estadísticas" }),
-        el("div", { class: "pills-periodo", role: "group", "aria-label": "Periodo de las estadísticas" }, ...botones))),
+        el("div", { class: "pills-periodo", role: "group", "aria-label": "Periodo de las estadísticas" }, ...botones),
+        el("span", { class: "pend-hueco" }),
+        bInforme)),
     cuerpo);
 
   function mover(n) {
@@ -433,8 +439,10 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
     let r;
     try { r = await llamar("estadisticas", periodo, ref); } catch (_e) { return; }
     if (mio !== seq) return;
-    if (r.error) { cuerpo.replaceChildren(nota(r.error, "rojo")); return; }
+    if (r.error) { cuerpo.replaceChildren(nota(r.error, "rojo")); ultimo = null; bInforme.disabled = true; return; }
     alTitulo(r.titulo);
+    ultimo = r;
+    bInforme.disabled = false;
     pintar(r);
   }
 
@@ -501,6 +509,86 @@ function montarEstadisticas(cont, { periodo = "mes", ref = hoyIso(), alTitulo = 
   }
   cargar();
   return { mover, cargar };
+}
+
+// ================================================================ informe para imprimir
+
+// El periodo de Estadisticas en una pagina suelta (HTML sin nada de fuera),
+// que el motor guarda en un temporal y abre en el navegador: desde ahi se
+// imprime o se guarda como PDF. Se monta con el() (textContent): un comentario
+// o una tarea con "<" no puede colar HTML.
+const CSS_INFORME = `
+  body { font: 14px/1.45 "Segoe UI", system-ui, sans-serif; color: #1f2933; margin: 32px auto; max-width: 820px; padding: 0 24px; }
+  h1 { font-size: 22px; margin: 0; } h2 { font-size: 16px; margin: 26px 0 8px; border-bottom: 2px solid #0b66c3; padding-bottom: 4px; }
+  .sub { color: #64707d; margin: 4px 0 0; } .estado { font-size: 16px; font-weight: 700; margin: 18px 0 2px; }
+  .ok { color: #248a46; } .falta { color: #b7791f; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0; }
+  .kpi { border: 1px solid #d7dce2; border-radius: 8px; padding: 8px 12px; } .kpi small { display: block; color: #64707d; font-size: 12px; }
+  .kpi b { font-size: 20px; }
+  table { border-collapse: collapse; width: 100%; } th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid #e5e7eb; }
+  th { font-size: 12px; color: #64707d; } td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  ul { margin: 6px 0; padding-left: 20px; } .pie { color: #64707d; font-size: 12px; margin-top: 28px; }
+  .imprimir { float: right; font: inherit; padding: 6px 14px; border: 1px solid #0b66c3; border-radius: 6px; background: #0b66c3; color: #fff; cursor: pointer; }
+  @media print { .imprimir { display: none; } body { margin: 0; max-width: none; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
+`;
+
+function htmlInforme(r, { usuario = "", version = "" } = {}) {
+  const c = r.como_va, dt = r.detalles;
+  const del = { semana: "de la semana", mes: "del mes", anio: "del año" }[r.periodo];
+  const hoy = hoyIso().split("-").reverse().join("/");
+  const tabla = (cab, filas) => el("table", {},
+    el("thead", {}, el("tr", {}, ...cab.map(([t, n]) => el("th", { class: n ? "n" : null, text: t })))),
+    el("tbody", {}, ...filas.map((f) => el("tr", {}, ...f.map((t, i) => el("td", { class: cab[i][1] ? "n" : null, text: String(t) }))))));
+  const kpi = (e, v) => el("div", { class: "kpi" }, el("small", { text: e }), el("b", { text: v }));
+  // el() pondria "onclick" como evento de ESTA pagina: aqui tiene que viajar como atributo
+  const bImprimir = el("button", { class: "imprimir", text: "Imprimir / guardar PDF" });
+  bImprimir.setAttribute("onclick", "window.print()");
+  const cuerpo = el("body", {},
+    bImprimir,
+    el("h1", { text: "FichaCSIRC · Informe de horas" }),
+    el("p", { class: "sub", text: `${r.titulo}${usuario ? ` · ${usuario}` : ""} · generado el ${hoy}` }),
+    el("p", { class: `estado ${c.al_dia ? "ok" : "falta"}`, text: c.estado }),
+    el("p", { class: "sub", text: `${r.total} registradas · objetivo hasta hoy ${c.objetivo_hoy} · objetivo ${del} ${c.objetivo_periodo}` }),
+    el("div", { class: "kpis" },
+      kpi("Horas imputadas", r.total), kpi("Jornada cumplida", r.cumplida === null ? "—" : `${r.cumplida}%`),
+      kpi("Media por día", r.media), kpi("Horas de más", r.exceso === "0h" ? "0h" : `+${r.exceso}`)));
+  if (r.tareas.length) {
+    cuerpo.append(el("h2", { text: "Horas por tarea" }),
+      tabla([["Tarea"], ["Horas", 1], ["%", 1]], r.tareas.map((t) => [t.nombre, t.horas_txt, `${t.pct}%`])),
+      el("h2", { text: "Horas por actividad" }),
+      tabla([["Actividad"], ["Horas", 1], ["%", 1]], r.actividades.map((a) => [a.nombre, a.horas_txt, `${a.pct}%`])));
+  } else {
+    cuerpo.append(el("p", { text: "No hay apuntes en este periodo." }));
+  }
+  if (r.meses.length) {
+    cuerpo.append(el("h2", { text: "El año, mes a mes" }),
+      tabla([["Mes"], ["Registradas de objetivo", 1], ["Estado"]],
+        r.meses.map((m) => [m.mes, m.texto || "—",
+          { completo: "Completo", parcial: "Incompleto", futuro: "—", nolab: "Sin días laborables" }[m.estado] || ""])));
+  }
+  cuerpo.append(el("h2", { text: "Detalles" }), el("ul", {},
+    el("li", { text: `Teletrabajo: ${dt.teletrabajo} ${dt.teletrabajo === 1 ? "día" : "días"} · Guardias: ${dt.guardias} ${dt.guardias === 1 ? "día" : "días"}` }),
+    el("li", { text: dt.incompletos ? `${dt.incompletos} ${dt.incompletos === 1 ? "día incompleto" : "días incompletos"} (faltan ${dt.faltan} en total)`
+                                    : "Ningún día incompleto" }),
+    dt.permisos !== "0h" ? el("li", { text: `Permisos usados: ${dt.permisos}` }) : null));
+  if (c.incompletos.length) {
+    cuerpo.append(el("h2", { text: "Días por completar" }),
+      tabla([["Día"], ["Registradas / jornada", 1]], c.incompletos.map((x) => [x.dia, x.horas])));
+  }
+  cuerpo.append(el("p", { class: "pie", text: `Generado por FichaCSIRC${version ? ` ${version}` : ""} a partir de los apuntes de ProyectosTIC.` }));
+  const doc = el("html", { lang: "es" },
+    el("head", {}, el("meta", { charset: "utf-8" }), el("title", { text: `FichaCSIRC · ${r.titulo}` }),
+      el("style", { text: CSS_INFORME })),
+    cuerpo);
+  return `<!doctype html>\n${doc.outerHTML}`;
+}
+
+async function abrirInforme(r) {
+  estado("Preparando el informe…");
+  const html = htmlInforme(r, { usuario: $("usuario")?.textContent || "", version: st.ini?.version ? `v${st.ini.version}` : "" });
+  const res = await llamar("abrir_informe", html, `informe-${r.periodo}-${r.desde || ""}`);
+  if (res.error) { await avisar("Informe", res.error); estado(""); return; }
+  estado("Informe abierto en el navegador: desde ahí, Imprimir o Guardar como PDF.");
 }
 
 // ================================================================ por completar
@@ -804,9 +892,45 @@ function montarPendientes(cont, { alTitulo = () => {}, alIrADia = () => {}, alDa
               x.duplicado ? el("span", { class: "chip-marca repetido", text: "¿Repetido?",
                                          title: "La misma tarea y actividad dos veces ese día" }) : null,
               x.nolab ? el("span", { class: "chip-marca tele", text: x.motivo }) : null),
+            el("button", { class: "pend-quitar", text: "Quitar apunte ▾",
+                           title: "Quitar ahí mismo el apunte que sobra (se puede deshacer)",
+                           onclick: (e) => {
+                             e.stopPropagation();
+                             const r0 = e.currentTarget.getBoundingClientRect();
+                             menuQuitarApunte(r0.left, r0.bottom + 2, x);
+                           } }),
             el("button", { class: "enlace pend-ir", text: "Ir al día →", title: "Abrir su semana para revisarlo",
                            onclick: () => alIrADia(x.iso) }));
         }))));
+  }
+
+  // Los apuntes de ese dia, para quitar el que sobra sin salir de la lista:
+  // se señala el repetido y el que, quitandolo, deja el dia en su jornada.
+  function menuQuitarApunte(px, py, x) {
+    mostrarMenu(px, py, [
+      { titulo: `${x.dia} · sobran ${x.sobra_txt}` },
+      ...x.apuntes.map((a) => ({
+        texto: `🗑 ${a.horas_txt}  ${corto(a.tarea, 34)}${a.actividad ? ` · ${a.actividad}` : ""}`
+               + (a.comentario ? ` · «${corto(a.comentario, 24)}»` : "")
+               + (a.justo ? "   ← deja el día justo" : a.repetido ? "   (repetido)" : ""),
+        clase: a.justo ? "destacado" : "",
+        accion: () => quitarApunte(x, a),
+      })),
+    ]);
+  }
+
+  async function quitarApunte(x, a) {
+    if (!(await preguntar("Quitar apunte",
+        `¿Quitar ${a.horas_txt} de «${a.tarea}»${a.actividad ? ` (${a.actividad})` : ""} del ${x.dia.toLowerCase()}?\n\n`
+        + "Se borra de ProyectosTIC. Después, «Deshacer» lo devuelve.", { si: "Quitar", no: "Cancelar" }))) return;
+    estado("Quitando…");
+    const r = await llamar("eliminar", [{ id: a.id, fecha: x.iso, destino: "op" }]);
+    if (r.errores || !r.eliminados) {
+      await avisar("No se pudo quitar", r.ultimo || "El apunte ya no está.");
+    } else {
+      trasCambio(r, `Quitadas ${a.horas_txt} de «${corto(a.tarea, 40)}» del ${x.dia.toLowerCase()}.`);
+    }
+    await cargar();
   }
 
   // Lo que se haga, sobre los marcados (de cualquier mes); luego, la lista
@@ -1043,7 +1167,7 @@ function dlgCompletarPend(dias) {
 // Una plantilla en todos los marcados. Si alguno ya tiene horas, se avisa:
 // la plantilla es un dia entero y se puede pasar de la jornada.
 async function dlgPlantillaPend(dias) {
-  const ps = await llamar("plantillas");
+  const ps = (await llamar("plantillas")).filter((p) => !p.semana);      // las de semana no van a dias sueltos
   if (!ps.length) {
     await avisar("Aplicar plantilla", "Todavía no tienes plantillas. Para crear una: botón derecho sobre un día "
                  + "con las horas que quieras guardar → Guardar este día como plantilla.");
@@ -1592,31 +1716,36 @@ async function dlgCopiarSemana() {
 
 // ================================================================ plantillas
 
-async function pedirNombrePlantilla(dia) {
-  const total = fmtHoras(dia.apuntes.reduce((s, a) => s + a.horas, 0));
+// Pide un texto corto (el nombre de una plantilla). Una sola salida: botones,
+// Enter, Esc y la × pasan por fin(). (Si la X/Esc resolvieran por su cuenta,
+// ganaria siempre el "cancelado".)
+function pedirTexto({ titulo, texto, etiqueta = "Nombre", valor = "", si = "Guardar" }) {
   return new Promise((resolver) => {
-    const nombre = entrada(`Día tipo (${total}h)`, { class: "ancho" });
-    // Una sola salida: botones, Enter, Esc y la × pasan por fin(). (Si la X/Esc
-    // resolvieran por su cuenta, ganaria siempre el "cancelado".)
+    const campo = entrada(valor, { class: "ancho" });
     let fin = () => {};
-    const d = dialogo({ titulo: "Guardar como plantilla", ancho: 440, botones: [
+    const d = dialogo({ titulo, ancho: 440, botones: [
       { texto: "Cancelar", accion: () => fin(null) },
-      { texto: "Guardar", clase: "primario", accion: () => fin(nombre.value.trim()) }] });
+      { texto: si, clase: "primario", accion: () => fin(campo.value.trim()) }] });
     const cerrarDialogo = d.cerrar;
     let hecho = false;
-    fin = (valor) => {
+    fin = (v) => {
       if (hecho) return;
       hecho = true;
       cerrarDialogo();
-      resolver(valor);
+      resolver(v);
     };
     d.cerrar = () => fin(null);
-    d.cuerpo.append(nota(`Apuntes del ${dia.nombre} ${dia.fecha} (${dia.apuntes.length}):`),
-                    rejilla(["Nombre", nombre]));
-    nombre.addEventListener("keydown", (e) => { if (e.key === "Enter") fin(nombre.value.trim()); });
-    nombre.focus();
-    nombre.select();
+    d.cuerpo.append(nota(texto), rejilla([etiqueta, campo]));
+    campo.addEventListener("keydown", (e) => { if (e.key === "Enter") fin(campo.value.trim()); });
+    campo.focus();
+    campo.select();
   });
+}
+
+async function pedirNombrePlantilla(dia) {
+  const total = fmtHoras(dia.apuntes.reduce((s, a) => s + a.horas, 0));
+  return pedirTexto({ titulo: "Guardar como plantilla", valor: `Día tipo (${total}h)`,
+                      texto: `Apuntes del ${dia.nombre} ${dia.fecha} (${dia.apuntes.length}):` });
 }
 
 async function dlgGuardarPlantillaDia(dia, alGuardar) {
@@ -1628,33 +1757,58 @@ async function dlgGuardarPlantillaDia(dia, alGuardar) {
   alGuardar?.();
 }
 
+const fechaCorta = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
+
+// Plantillas de DIA (los apuntes de un dia tipico, para los dias marcados) y
+// de SEMANA (lunes a viernes, cada dia con los suyos: el de guardia, el de
+// teletrabajo..., para aplicarla entera a una semana).
 function dlgPlantillas() {
   const lista = el("select", { size: "8", class: "lista" });
-  const vacia = nota("Todavía no tienes plantillas.\n\nPara crear una: marca el día con las horas "
-    + "que quieras guardar y pulsa «Guardar día marcado como plantilla». También con botón "
-    + "derecho sobre el día → Guardar este día como plantilla.");
-  const d = dialogo({ titulo: "Plantillas de apuntes", ancho: 560, botones: [
-    { texto: "Aplicar a días marcados", clase: "primario", id: "aplicar", izquierda: true, accion: aplicar },
-    { texto: "Guardar día marcado como plantilla", izquierda: true, accion: guardarMarcado },
+  const vacia = nota("Todavía no tienes plantillas.\n\nDe un día: marca el día con las horas que quieras "
+    + "guardar y pulsa «Guardar día marcado». De una semana entera: «Guardar esta semana».");
+  const d = dialogo({ titulo: "Plantillas de apuntes", ancho: 800, botones: [
+    { texto: "Aplicar", clase: "primario", id: "aplicar", izquierda: true, accion: aplicar },
+    { texto: "Guardar día marcado", izquierda: true, accion: guardarMarcado },
+    { texto: "Guardar esta semana", id: "semana", izquierda: true, accion: guardarSemana },
     { texto: "Eliminar", clase: "peligro", id: "borrar", izquierda: true, accion: borrar },
     cerrarBoton] });
-  d.cuerpo.append(nota("Una plantilla guarda los apuntes de un día típico para aplicarlos de golpe "
-                       + "a los días marcados."), lista, vacia);
+  d.cuerpo.append(nota("Una plantilla de día guarda los apuntes de un día típico, para aplicarlos a los días "
+                       + "marcados. Una de semana (📅) guarda de lunes a viernes, cada día con los suyos."), lista, vacia);
   let datos = [];
+  const lunes = () => lunesReferencia();
+  const elegida = () => datos[lista.selectedIndex];
+  const pintarBoton = () => {
+    const p = elegida();
+    d.botones.aplicar.textContent = !p ? "Aplicar" : p.semana ? `Aplicar a la semana del ${fechaCorta(lunes())}` : "Aplicar a días marcados";
+  };
   const pintar = (ps) => {
     datos = ps;
-    lista.replaceChildren(...ps.map((p, i) => el("option", { value: String(i), text: `${p.nombre}  (${p.n} apuntes, ${p.total})` })));
+    lista.replaceChildren(...ps.map((p, i) => el("option", { value: String(i),
+      text: `${p.semana ? "📅 " : ""}${p.nombre}  (${p.semana ? "semana: " : ""}${p.n} apuntes, ${p.total})` })));
     lista.hidden = !ps.length;
     vacia.hidden = !!ps.length;
     d.botones.aplicar.disabled = d.botones.borrar.disabled = !ps.length;
     if (ps.length) lista.selectedIndex = 0;
+    pintarBoton();
   };
+  d.botones.semana.title = `La semana del ${fechaCorta(lunes())}, tal como está en ProyectosTIC`;
   llamar("plantillas").then(pintar);
+  lista.addEventListener("change", pintarBoton);
   lista.addEventListener("dblclick", () => aplicar(d));
 
   async function aplicar(dd) {
-    const p = datos[lista.selectedIndex];
+    const p = elegida();
     if (!p) return;
+    if (p.semana) {
+      if (!(await preguntar("Plantilla de semana",
+          `¿Aplicar «${p.nombre}» (${p.n} apuntes, ${p.total}) a la semana del ${fechaCorta(lunes())}?\n`
+          + "Cada día recibe los suyos. Se saltan los días no laborables y las tareas que ya tengan apunte ese día."))) return;
+      dd.cerrar();
+      estado("Aplicando plantilla de semana…");
+      await informarLote(await llamar("aplicar_plantilla_semana", p.nombre, lunes()), {
+        hecho: (n) => `Plantilla de semana aplicada: ${n} apuntes.`, nada: "No se añadió nada: esas tareas ya estaban." });
+      return;
+    }
     const dias = [...st.marcados].sort();
     if (!dias.length) { await avisar("Plantilla", "Marca al menos un día de destino."); return; }
     if (!(await preguntar("Plantilla", `¿Aplicar «${p.nombre}» (${p.n} apuntes) a ${dias.length} día(s)?\n`
@@ -1670,8 +1824,18 @@ function dlgPlantillas() {
     if (!marcados[0].apuntes.length) { await avisar("Plantilla", "Ese día no tiene apuntes que guardar."); return; }
     await dlgGuardarPlantillaDia(marcados[0], () => llamar("plantillas").then(pintar));
   }
+  async function guardarSemana() {
+    const l = lunes();
+    const nombre = await pedirTexto({ titulo: "Guardar la semana como plantilla", valor: "Semana tipo",
+      texto: `La semana del ${fechaCorta(l)} (lunes a viernes), cada día con sus apuntes de ProyectosTIC:` });
+    if (!nombre) return;
+    const r = await llamar("guardar_plantilla_semana", l, nombre);
+    if (r.error) { await avisar("Plantilla de semana", r.error); return; }
+    estado(`Plantilla de semana «${nombre}» guardada (${r.n} apuntes, ${r.total}).`);
+    pintar(await llamar("plantillas"));
+  }
   async function borrar() {
-    const p = datos[lista.selectedIndex];
+    const p = elegida();
     if (p && await preguntar("Plantilla", `¿Eliminar la plantilla «${p.nombre}»?`)) {
       pintar(await llamar("eliminar_plantilla", p.nombre));
     }

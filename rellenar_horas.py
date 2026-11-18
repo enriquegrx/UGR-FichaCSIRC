@@ -1567,6 +1567,14 @@ def guardar_plantilla(nombre, apuntes):
     guardar_config_valor("plantillas", PLANTILLAS)
 
 
+def guardar_plantilla_semana(nombre, dias):
+    """Plantilla de SEMANA: dias = [apuntes del lunes, ..., del viernes]. (Las
+    versiones anteriores la ven como una plantilla sin apuntes: no molesta.)"""
+    PLANTILLAS[:] = [p for p in PLANTILLAS if p.get("nombre") != nombre]
+    PLANTILLAS.append({"nombre": nombre, "semana": True, "dias": dias})
+    guardar_config_valor("plantillas", PLANTILLAS)
+
+
 def eliminar_plantilla(nombre):
     PLANTILLAS[:] = [p for p in PLANTILLAS if p.get("nombre") != nombre]
     guardar_config_valor("plantillas", PLANTILLAS)

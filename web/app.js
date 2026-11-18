@@ -500,6 +500,11 @@ async function refrescarFranja() {
   $("franja").replaceChildren(...items);
   st.habituales = r.habituales;
   pintarHabituales(r.habituales);
+  // al menu del icono de la bandeja: "Completar hoy con ..." (sin las de permiso)
+  try {
+    api().bandeja_habituales((r.habituales?.filas || []).filter((f) => !f.permiso).slice(0, 3)
+      .map((f) => ({ wp_id: f.wp_id, tarea: f.tarea, actividad: f.actividad })))?.catch?.(() => {});
+  } catch (_e) { /* sin bandeja */ }
   $("franja").hidden = items.length < 2;
 }
 
@@ -756,7 +761,7 @@ async function menuAnadirRapido(d, x, y) {
   if (d.estado === "error") return;
   const filas = st.habituales?.filas || [];
   // las plantillas viven en este equipo: leerlas es inmediato
-  const plantillas = await llamar("plantillas").catch(() => []);
+  const plantillas = (await llamar("plantillas").catch(() => [])).filter((p) => !p.semana);
   const items = [{ titulo: `Añadir al ${d.nombre.toLowerCase()} ${d.fecha}`
                            + (d.falta > 0.001 ? ` · faltan ${fmtHoras(d.falta)}h` : "") },
                  // lo mas repetido, lo primero (como en el botón derecho)
@@ -1102,6 +1107,15 @@ function entrarPendientes(opciones = null) {
     alDatos: ponerContadorPendientes,
   }) };
   pintarSelectorVista();
+}
+
+// Se ha fichado desde el menu del icono de la bandeja ("Completar hoy con
+// ..."): la ventana se pone al dia y ofrece su Deshacer. Lo llama el motor.
+async function alFicharFuera(r, texto) {
+  if (document.querySelector(".bloqueo")) return;
+  await cargarSemana();
+  trasCambio(r, texto);
+  if (st.estad?.tipo === "pend") st.estad.cargar();
 }
 
 // A la semana de ese dia, con el dia marcado (saliendo de Estadisticas o de

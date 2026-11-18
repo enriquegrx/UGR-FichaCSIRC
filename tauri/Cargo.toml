@@ -29,6 +29,7 @@ hex = "0.4"
 subtle = "2"
 base64 = "0.22"
 tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
 
 [features]
 # FichaCSIRC 4.x de verdad (ver src/modo.rs): misma config que la 3.x,

@@ -81,8 +81,13 @@ fn exceso(reglas: &Reglas, d: NaiveDate, ap: &[Apunte], reg: f64, obj: f64) -> V
            "sobra": redondear(reg - obj, 2), "sobra_txt": fmt_horas(reg - obj),
            "texto": format!("{} de {}", fmt_horas(reg), fmt_horas(obj)), "nolab": obj == 0.0, "motivo": motivo,
            "duplicado": veces.values().any(|n| *n > 1),
-           "apuntes": ap.iter().map(|a| json!({"tarea": a.wp_titulo, "horas_txt": fmt_horas(a.horas), "actividad": a.actividad}))
-                         .collect::<Vec<_>>()})
+           // repetido: la misma tarea y actividad mas de una vez ese dia;
+           // justo: quitandolo, el dia queda en su jornada exacta
+           "apuntes": ap.iter().map(|a| json!({
+               "id": a.id, "tarea": a.wp_titulo, "horas": a.horas, "horas_txt": fmt_horas(a.horas),
+               "actividad": a.actividad, "comentario": a.comentario,
+               "repetido": veces[&(a.wp_id.clone(), a.actividad.clone())] > 1,
+               "justo": (a.horas - (reg - obj)).abs() < 0.001})).collect::<Vec<_>>()})
 }
 
 /// Una ficha por mes: "pendiente" (con dias por completar), "completo",
@@ -144,6 +149,8 @@ pub fn calcular(reglas: &Reglas, aps: Vec<Apunte>, anio: i32, hoy: NaiveDate, co
             // te pasas: mas que la jornada (o horas en un dia no laborable que no es de guardia)
             if !ap.is_empty() && reg > obj + 0.001 && (obj > 0.0 || !reglas.es_guardia(&iso)) {
                 excesos.push(exceso(reglas, d, &ap, reg, obj));
+                // en la cache: quitar un apunte desde la lista se puede deshacer
+                cache.push((iso.clone(), ap.clone()));
             }
         }
         d += Duration::days(1);
@@ -474,6 +481,10 @@ mod tests {
         assert!(ex[0]["nolab"].as_bool().unwrap());
         assert_eq!((r["n_excesos"].as_u64(), r["sobra"].as_str()), (Some(2), Some("5h")));
         assert_eq!(r["modelo"], "2026-11-11");
+        // que apunte sobra: los dos son la misma tarea; quitando el de 2h queda justo
+        let a = ex[1]["apuntes"].as_array().unwrap();
+        assert_eq!(a.iter().map(|x| (x["repetido"].as_bool(), x["justo"].as_bool())).collect::<Vec<_>>(),
+                   vec![(Some(true), Some(false)), (Some(true), Some(true))]);
         aps[1].comentario = "Renovación del certificado SSL".into();
         let b = filtrar(&aps, "certificado renovacion", 2026);
         assert_eq!((b["n"].as_u64(), b["resultados"][0]["iso"].as_str(), b["total"].as_str()), (Some(1), Some("2026-11-03"), Some("4h")));
