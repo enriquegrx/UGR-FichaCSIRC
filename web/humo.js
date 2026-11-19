@@ -559,36 +559,45 @@
         window.pywebview.api.cerrar = antes;
       }
     });
-    await prueba("bloquear: el botón solo está con PIN, junto a Salir, y también va con Ctrl+L y en Archivo", async () => {
+    await prueba("bloquear: botón siempre a la vista junto a Salir; sin PIN lleva a activarlo, con PIN bloquea (también Ctrl+L y Archivo)", async () => {
       const b = $("b-bloquear");
-      ok(b && b.hidden && b.getBoundingClientRect().width === 0, "sin PIN, el botón Bloquear no debe verse");
-      document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true }));
-      document.querySelector('.menubar [data-menu="archivo"]').click();
-      ok(!/Bloquear/.test($("menu").textContent), "sin PIN, Archivo no debe ofrecer Bloquear");
-      cerrarMenu();
+      const caja = b.getBoundingClientRect(), salir = $("b-salir").getBoundingClientRect();
+      ok(!b.hidden && caja.width > 30, "el botón Bloquear no se ve");
+      ok(caja.right <= salir.left && Math.abs(caja.top - salir.top) < 2, "Bloquear no está a la izquierda de Salir, en su línea");
+      const ctrlL = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true }));
+      const archivo = (texto) => { document.querySelector('.menubar [data-menu="archivo"]').click(); pulsarMenu(texto); };
       let veces = 0;
       const antes = window.pywebview.api.pin_bloquear, pinAntes = st.ini.pin;
       window.pywebview.api.pin_bloquear = () => { veces++; return Promise.resolve({ bloqueada: false }); };
       try {
+        // sin PIN: las tres entradas abren «PIN de acceso» explicando para que
+        ok(!st.ini.pin?.activo && /activarlo/.test(b.title), "sin PIN, el botón no avisa de que hay que activarlo");
+        for (const [como, pulsar] of [["el botón", () => b.click()], ["Ctrl+L", ctrlL],
+                                      ["Archivo", () => archivo("Bloquear con un PIN")]]) {
+          pulsar();
+          ok(await hasta(() => dlg() && /Para bloquear FichaCSIRC hace falta un PIN/.test(dlg().textContent)),
+             `sin PIN, ${como} no lleva a activarlo`);
+          ok([...document.querySelectorAll(".dlg-pie button")].some((x) => x.textContent.trim() === "Activar PIN"), "sin botón Activar PIN");
+          botonDlg("Cancelar");
+          ok(await hasta(() => !dlg()), "la ventana del PIN no se cierra");
+        }
+        ok(veces === 0, "sin PIN se llamó a bloquear");
+        // con PIN: las tres bloquean
         st.ini.pin = { activo: true, desbloqueada: true, auto_min: 0 };
         vigilarInactividad();                 // lo que hace la ventana del PIN al activarlo
-        const caja = b.getBoundingClientRect(), salir = $("b-salir").getBoundingClientRect();
-        ok(!b.hidden && caja.width > 30, "con PIN, el botón Bloquear no se ve");
-        ok(caja.right <= salir.left && Math.abs(caja.top - salir.top) < 2, "Bloquear no está a la izquierda de Salir, en su línea");
-        ok(veces === 0, "Ctrl+L sin PIN llamó a bloquear");
+        ok(/pide el PIN/.test(b.title), "con PIN, el botón no dice que lo pide");
         b.click();
         ok(await hasta(() => veces === 1), "el botón no bloquea");
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true }));
+        ctrlL();
         ok(await hasta(() => veces === 2), "Ctrl+L no bloquea");
-        document.querySelector('.menubar [data-menu="archivo"]').click();
-        pulsarMenu("Bloquear con el PIN");
+        archivo("Bloquear con el PIN");
         ok(await hasta(() => veces === 3), "Archivo → Bloquear no bloquea");
+        ok(!dlg(), "con PIN no debe abrir la ventana del PIN");
       } finally {
         window.pywebview.api.pin_bloquear = antes;
         st.ini.pin = pinAntes;
         vigilarInactividad();
       }
-      ok(b.hidden, "al quitar el PIN, el botón Bloquear sigue a la vista");
     });
     await prueba("campana del aviso diario: el globo lo activa a las 14:00, se cambia la hora y se quita", async () => {
       const b = $("b-aviso");

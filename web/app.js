@@ -60,8 +60,10 @@ function cambiarZoom(delta) {
 let inactividadT = null;
 function vigilarInactividad() {
   // se llama al arrancar y cada vez que el PIN se activa, cambia o se quita:
-  // el boton Bloquear de la cabecera solo esta con PIN
-  $("b-bloquear").hidden = !st.ini?.pin?.activo;
+  // el boton Bloquear de la cabecera dice que va a hacer
+  $("b-bloquear").title = st.ini?.pin?.activo
+    ? "Bloquear FichaCSIRC: pide el PIN para volver a entrar (Ctrl+L)"
+    : "Bloquear FichaCSIRC: hace falta un PIN, y aún no lo tienes. Pulsa para activarlo (Ctrl+L)";
   const min = st.ini?.pin?.activo ? st.ini.pin.auto_min : 0;
   clearTimeout(inactividadT);
   if (!min) return;
@@ -81,6 +83,13 @@ async function bloquearAhora() {
   cerrarMenu();
   if (await desbloquear()) { await cargarSemana(); vigilarInactividad(); }
   else location.href = "configurar.html";
+}
+
+// Bloquear (boton de la cabecera, Archivo > Bloquear, Ctrl+L): con PIN, tapa la
+// ventana hasta que se escriba; sin PIN, lleva a activarlo.
+function bloquearOActivar() {
+  if (st.ini?.pin?.activo) return bloquearAhora();
+  return dlgPin({ paraBloquear: true });
 }
 
 // Salir del todo (boton de la cabecera, Archivo > Salir, Ctrl+Q). Con el icono
@@ -277,7 +286,7 @@ const MENUS = {
     "-",
     { texto: "Buscar en mis apuntes…\tCtrl+F", accion: dlgBuscarApuntes },
     "-",
-    st.ini?.pin?.activo ? { texto: "Bloquear con el PIN\tCtrl+L", accion: bloquearAhora } : null,
+    { texto: (st.ini?.pin?.activo ? "Bloquear con el PIN" : "Bloquear con un PIN…") + "\tCtrl+L", accion: bloquearOActivar },
     { texto: "Salir de FichaCSIRC\tCtrl+Q", accion: salirDeLaApp },
   ].filter(Boolean),
   ver: () => [
@@ -1714,7 +1723,7 @@ $("b-pend").onclick = async () => {
 };
 $("b-aviso").onclick = () => { $("globo-aviso")?.remove(); dlgRecordatorio(); };
 $("b-salir").onclick = salirDeLaApp;
-$("b-bloquear").onclick = bloquearAhora;
+$("b-bloquear").onclick = () => { bloquearOActivar(); };
 // al volver a la ventana (p. ej. tras cambiar la hora desde el propio aviso)
 for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
@@ -1772,7 +1781,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); dlgBuscarApuntes(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "q") { e.preventDefault(); salirDeLaApp(); return; }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l" && st.ini?.pin?.activo) { e.preventDefault(); bloquearAhora(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") { e.preventDefault(); bloquearOActivar(); return; }
   if (e.altKey && /^[1-5]$/.test(e.key) && st.vista === "semana") {
     e.preventDefault();
     const d = st.dias[Number(e.key) - 1];

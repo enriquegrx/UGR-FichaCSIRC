@@ -29,8 +29,9 @@ instalada aparece en el pie de la ventana.
 - Botón **Salir** a la vista, arriba a la derecha (también *Archivo → Salir*
   y Ctrl+Q): cierra el programa del todo. Con el icono junto al reloj, la X
   solo esconde la ventana.
-- Si usas PIN, botón **Bloquear** al lado del de Salir (también *Archivo →
-  Bloquear con el PIN* y Ctrl+L): tapa la ventana hasta que escribas el PIN.
+- Botón **Bloquear** al lado del de Salir (también *Archivo → Bloquear con el
+  PIN* y Ctrl+L): tapa la ventana hasta que escribas el PIN. Si no tienes PIN,
+  te lleva a activarlo.
 
 **Estadísticas**
 - Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o

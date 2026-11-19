@@ -1390,7 +1390,9 @@ function dlgSugerirPin() {
   }
 }
 
-async function dlgPin() {
+// paraBloquear: se llega desde el boton Bloquear sin tener PIN, y se explica.
+async function dlgPin(opciones) {
+  const paraBloquear = opciones?.paraBloquear === true;
   const { activo, auto_min } = await llamar("pin_estado");
   const campo = (etiqueta) => entrada("", { type: "password", inputmode: "numeric", maxlength: "8",
                                             autocomplete: "off", class: "horas", "aria-label": etiqueta });
@@ -1411,6 +1413,9 @@ async function dlgPin() {
   const d = dialogo({ titulo: "PIN de acceso", ancho: 520, botones });
   d.cuerpo.append(
     nota(activo ? "FichaCSIRC pide el PIN al abrirse. Para cambiarlo o quitarlo, escribe antes el actual."
+         : paraBloquear ? "Para bloquear FichaCSIRC hace falta un PIN, y aún no lo tienes. Actívalo aquí: el botón "
+                          + "Bloquear tapará la ventana hasta que lo escribas, y FichaCSIRC lo pedirá también cada vez "
+                          + "que se abra."
                 : "Con un PIN, FichaCSIRC lo pedirá cada vez que se abra (también el asistente de configuración)."),
     rejilla(...(activo ? [["PIN actual", actual]] : []),
             ["PIN nuevo", nuevo], ["Repítelo", repetido],
@@ -1425,7 +1430,9 @@ async function dlgPin() {
     if (r.error) { await avisar("PIN de acceso", r.error); return; }
     dd.cerrar();
     if (st.ini) { st.ini.pin = { activo: true, desbloqueada: true, auto_min: Number(auto.value) }; vigilarInactividad(); }
-    estado(activo ? "PIN cambiado." : "PIN activado: se pedirá al abrir FichaCSIRC.");
+    estado(activo ? "PIN cambiado."
+           : paraBloquear ? "PIN activado: el botón Bloquear ya tapa la ventana, y se pedirá al abrir FichaCSIRC."
+                          : "PIN activado: se pedirá al abrir FichaCSIRC.");
   }
   async function quitar(dd) {
     const r = await llamar("pin_quitar", actual.value);
@@ -2379,7 +2386,7 @@ function dlgAtajos() {
     ["Arrastrar", "Un apunte a otro día lo copia (con Mayús, lo mueve); una tarea habitual, la añade"],
     ["F5", "Recargar la semana"], ["Ctrl+← / →", "Semana anterior / siguiente"],
     ["Ctrl+Q", "Salir de FichaCSIRC del todo (con el icono junto al reloj, la X solo esconde la ventana)"],
-    ["Ctrl+L", "Bloquear FichaCSIRC con el PIN (si lo tienes activado)"],
+    ["Ctrl+L", "Bloquear FichaCSIRC con el PIN (si no tienes PIN, te lleva a activarlo)"],
     ["Alt+1..5", "Marcar/desmarcar lunes..viernes"], ["Esc", "Cerrar el diálogo o el menú"],
     ["Doble clic", "Editar un apunte"],
     ["Botón derecho", "En un día: festivo, vacaciones, permiso, guardia, teletrabajo, plantilla… "

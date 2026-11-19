@@ -91,8 +91,8 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--permiso-bg); color: var(--permiso-fg);
 }
 .usuario { margin-left: auto; font-weight: 600; }
-/* Bloquear (solo con PIN) y Salir, a la vista junto al nombre; Salir, en rojo
-   al pasar el raton (cierra el programa) */
+/* Bloquear y Salir, a la vista junto al nombre; Salir, en rojo al pasar el
+   raton (cierra el programa) */
 .cab-botones { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-left: 14px; }
 .b-cab { display: inline-flex; align-items: center; gap: 6px; flex: none;
          padding: 6px 12px; font-weight: 600; white-space: nowrap; }
