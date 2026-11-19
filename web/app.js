@@ -449,7 +449,13 @@ async function pintarCampana({ ofrecer = false } = {}) {
   campanaT = Date.now();
   const b = $("b-aviso");
   b.hidden = !e.soportado || !!e.experimento;
-  b.textContent = e.activo ? `🔔 ${e.hora || "Aviso"}` : "🔕 Activar aviso";
+  $("ancla-aviso").hidden = b.hidden;
+  // encendida, la hora siempre a la vista; apagada, el rotulo se esconde con
+  // la ventana estrecha y el icono va en gris (no es una alarma)
+  b.replaceChildren(
+    el("span", { class: "ico", "aria-hidden": "true", text: e.activo ? "🔔" : "🔕" }),
+    el("span", { class: e.activo ? "hora" : "rot", text: e.activo ? (e.hora || "Aviso") : "Activar aviso" }));
+  b.setAttribute("aria-label", e.activo ? `Aviso diario a las ${e.hora || "su hora"}` : "Activar el aviso diario");
   b.classList.toggle("apagado", !e.activo);
   b.title = e.activo
     ? `Aviso diario a las ${e.hora || "su hora"}, de lunes a viernes, si te faltan horas por fichar. Pulsa para cambiar la hora o quitarlo.`
@@ -469,7 +475,7 @@ function globoAviso(e) {
   const g = el("div", { id: "globo-aviso", class: "globo-aviso", role: "dialog", "aria-label": "Aviso diario de fichaje" },
     el("button", { class: "cerrar-aviso", title: "Cerrar", "aria-label": "Cerrar", text: "×", onclick: cerrar }),
     el("p", {}, el("b", { text: `¿Te aviso a las ${hora} si te faltan horas por fichar?` })),
-    el("p", { class: "tenue", text: "Solo los días laborables, y solo si falta algo. La hora se cambia, o el aviso se quita, aquí en la campana." }),
+    el("p", { class: "tenue", text: "Solo los días laborables. Se cambia o se quita aquí, en la campana." }),
     el("div", { class: "fila globo-botones" },
       el("button", { text: "Ahora no", onclick: cerrar }),
       el("button", { class: "primario", text: `Activar a las ${hora}`, onclick: async () => {
@@ -479,10 +485,7 @@ function globoAviso(e) {
         estado(`Aviso diario activado: los días laborables a las ${hora}, si te faltan horas por fichar.`);
         pintarCampana();
       } })));
-  const r = $("b-aviso").getBoundingClientRect();
-  g.style.top = `${Math.round(r.bottom + 10)}px`;
-  g.style.right = `${Math.max(8, Math.round(innerWidth - r.right - 40))}px`;
-  document.body.append(g);
+  $("ancla-aviso").append(g);      // cuelga del boton: lo sigue al desplazar o redimensionar
 }
 
 // ---------------------------------------------------------------- semana / mes
@@ -1697,7 +1700,6 @@ $("b-aviso").onclick = () => { $("globo-aviso")?.remove(); dlgRecordatorio(); };
 for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
 }
-$("b-exportar").onclick = () => dlgExportar();
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
   { texto: "Copiar día anterior a los días marcados", accion: dlgCopiarDia },

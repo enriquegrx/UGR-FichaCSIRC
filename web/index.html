@@ -47,11 +47,14 @@
       <span id="estado-vista" class="chip-estado" hidden></span>
     </div>
     <!-- a la derecha, con lo de consultar (a la izquierda, moverse por los dias) -->
-    <button id="b-pend" aria-pressed="false" title="Días del año sin completar: márcalos y rellénalos de una vez">🧩 Por completar <span class="n-pend"></span></button>
-    <button id="b-estad" aria-pressed="false" title="Tareas más realizadas, jornada cumplida y el año mes a mes">📊 Estadísticas</button>
-    <!-- la campana del aviso diario: si esta puesto y a que hora; un clic para cambiarlo -->
-    <button id="b-aviso" hidden>🔕 Activar aviso</button>
-    <button id="b-exportar" title="Exporta tus apuntes a CSV por rango de fechas">Exportar CSV…</button>
+    <!-- icono + rotulo: con la ventana estrecha se queda el icono (app.css) -->
+    <button id="b-pend" aria-pressed="false" title="Días del año sin completar: márcalos y rellénalos de una vez"><span class="ico" aria-hidden="true">🧩</span> <span class="rot">Por completar</span> <span class="n-pend"></span></button>
+    <button id="b-estad" aria-pressed="false" title="Tareas más realizadas, jornada cumplida y el año mes a mes"><span class="ico" aria-hidden="true">📊</span> <span class="rot">Estadísticas</span></button>
+    <!-- la campana del aviso diario: si esta puesto y a que hora; un clic para
+         cambiarlo. El globo que lo ofrece la primera vez cuelga de este ancla,
+         asi sigue al boton si la ventana se desplaza o cambia de tamaño.
+         (Exportar a CSV esta en el menu Archivo.) -->
+    <span id="ancla-aviso" class="ancla-aviso" hidden><button id="b-aviso" hidden></button></span>
     <button id="b-recargar" title="Recargar (F5)">⟳</button>
   </section>
 

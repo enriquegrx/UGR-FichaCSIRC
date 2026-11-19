@@ -168,9 +168,25 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--prima
 
 /* ---------- barra de semana ---------- */
 .barra-semana { display: flex; align-items: center; gap: 12px; }
+.barra-semana button { flex: none; white-space: nowrap; }     /* ni se encogen ni se parten en dos lineas */
+.barra-semana > button { position: relative; }
+.nav, .selector-vista { flex: none; }
 .nav { display: flex; gap: 4px; }
-.titulo-semana { flex: 1; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
-.titulo-semana strong { font-size: 16px; }
+.titulo-semana { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px 14px; flex-wrap: wrap; }
+.titulo-semana strong { font-size: 16px; white-space: nowrap; }
+/* Ventana no muy ancha (un portatil de 1366 con Windows al 125 %): los botones
+   de la derecha se quedan en su icono. El rotulo sigue ahi para el lector de
+   pantalla, y el globo de ayuda lo dice al pasar el raton. */
+@media (max-width: 1180px) {
+  .barra-semana { gap: 8px; }
+  .barra-semana .rot { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}
+/* Y con la ventana en su minimo, el titulo baja a su propia linea. */
+@media (max-width: 940px) {
+  .barra-semana { flex-wrap: wrap; row-gap: 6px; }
+  .titulo-semana { order: 9; flex-basis: 100%; }
+  #b-pend { margin-left: auto; }
+}
 .total { color: var(--tenue); font-variant-numeric: tabular-nums; }
 
 /* ---------- tarjetas de dia ---------- */
@@ -695,11 +711,19 @@ i.punto { flex: none; width: 8px; height: 8px; border-radius: 2px; background: v
 .dias.mes .celda { --tinte: transparent; --fuerza: 18%; border-radius: 10px;
                    background: color-mix(in srgb, var(--tinte) var(--fuerza), var(--panel)); }
 .dias.mes .celda.completo { --tinte: var(--exito); }
-.dias.mes .celda.parcial { --tinte: var(--aviso); --fuerza: calc(12% + (1 - var(--frac, 0)) * 20%); }
+/* Lo que falta NO se rellena: fondo neutro, una franja a la izquierda (mas
+   viva cuanto mas falta) y la cifra en ambar. Asi un mes con huecos no es un
+   muro de color, y el relleno queda para lo que esta bien o no cuenta. Hoy va
+   sin franja: a media mañana es normal que le falte. */
+.dias.mes .celda.parcial:not(.hoy), .dias.mes .celda.vacio:not(.futuro):not(.hoy) {
+  --falta: color-mix(in srgb, var(--aviso) calc(40% + (1 - var(--frac, 0)) * 60%), var(--panel));
+  box-shadow: inset 4px 0 0 var(--falta); }
+.dias.mes .celda.parcial.marcado:not(.hoy), .dias.mes .celda.vacio.marcado:not(.futuro):not(.hoy) {
+  box-shadow: inset 0 0 0 1px var(--primario), inset 4px 0 0 var(--falta); }
+.dias.mes .celda.vacio:not(.futuro) .cifra { color: var(--aviso); }
 .dias.mes .celda.pasado { --tinte: var(--primario); }
 .dias.mes .celda.nolab, .dias.mes .celda.permiso { --tinte: var(--tenue); --fuerza: 16%; }
 .dias.mes .celda.vacaciones { --tinte: var(--vacaciones); }
-.dias.mes .celda.vacio:not(.futuro) { --tinte: var(--aviso); --fuerza: 32%; }
 .dias.mes .celda.futuro { border-style: dashed; }
 .dias.mes .celda.marcado { background: var(--seleccion); }
 .dias.mes .celda .linea-ap { color: var(--texto); }
@@ -735,12 +759,19 @@ body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #esta
 #b-pend.al-dia { color: var(--tenue); }
 
 /* ---- campana del aviso diario (barra de arriba) y su globo de la primera vez ---- */
-#b-aviso { font-variant-numeric: tabular-nums; white-space: nowrap; }
+#b-aviso { font-variant-numeric: tabular-nums; }
+#b-aviso .ico { margin-right: 5px; }
 #b-aviso.apagado { color: var(--tenue); }
-.globo-aviso { position: fixed; z-index: 25; width: min(340px, calc(100vw - 16px)); background: var(--panel);
+/* apagada no es una alarma: el icono, en gris (en color solo cuando avisa) */
+#b-aviso.apagado .ico { filter: grayscale(1); opacity: .7; }
+@media (max-width: 1180px) { #b-aviso.apagado .ico { margin-right: 0; } }
+/* el globo cuelga del boton (ancla), con su borde derecho al del boton */
+.ancla-aviso { position: relative; display: inline-flex; flex: none; }
+.globo-aviso { position: absolute; top: calc(100% + 10px); right: 0; z-index: 25; width: min(300px, calc(100vw - 32px));
+               background: var(--panel); white-space: normal; text-align: left;
                border: 1px solid var(--primario); border-radius: 10px; box-shadow: 0 12px 32px rgba(16, 24, 40, .22);
-               padding: 14px 16px 12px; font-size: 13px; }
-.globo-aviso::before { content: ""; position: absolute; top: -7px; right: 64px; width: 12px; height: 12px;
+               padding: 12px 14px 10px; font-size: 13px; }
+.globo-aviso::before { content: ""; position: absolute; top: -7px; right: 15px; width: 12px; height: 12px;
                        background: var(--panel); border-left: 1px solid var(--primario); border-top: 1px solid var(--primario);
                        transform: rotate(45deg); }
 .globo-aviso p { margin: 0 0 6px; padding-right: 18px; }

@@ -545,6 +545,10 @@
       // la primera vez lo ofrece un globo bajo la campana
       globoAviso({ por_defecto: "14:00" });
       ok($("globo-aviso"), "no sale el globo");
+      // cuelga del boton (no de la ventana): lo sigue al desplazar o cambiar de tamaño
+      ok($("globo-aviso").parentElement === $("ancla-aviso") && $("ancla-aviso").contains(b),
+         "el globo no cuelga de la campana");
+      ok(!$("b-exportar"), "Exportar CSV sigue en la barra (va en el menú Archivo)");
       [...$("globo-aviso").querySelectorAll("button")].find((x) => x.textContent.startsWith("Activar")).click();
       ok(await hasta(() => b.textContent.includes("14:00")), `tras activar: ${b.textContent}`);
       ok(!$("globo-aviso"), "el globo no se va");

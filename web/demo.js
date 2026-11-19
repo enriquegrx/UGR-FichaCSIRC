@@ -67,6 +67,7 @@
     return {
       iso: i, nombre: DIAS[n], fecha: `${dd}/${m}`, es_hoy: i === hoyIso, estado, frac, texto,
       reg, obj, falta: marcas.nolab[i] ? 0 : obj - reg, no_laborable: !!marcas.nolab[i],
+      exceso: !marcas.nolab[i] && reg > obj ? reg - obj : 0,
       motivo: marcas.nolab[i] || "", guardia: marcas.guardia.has(i), teletrabajo: marcas.tele.has(i),
       permiso: "", permiso_detalle: [],
       apuntes: ap.map((x) => ({ ...x, id: String(x.id), horas_txt: fmt(x.horas), destino: "op" })),
