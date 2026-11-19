@@ -559,6 +559,58 @@
         window.pywebview.api.cerrar = antes;
       }
     });
+    await prueba("comentario: al entrar en el campo ofrece los usados con la tarea; se eligen con el teclado o el ratón", async () => {
+      const campo = $("comentario"), lista = () => $("lista-comentarios"), filas = () => lista().querySelectorAll(".bt-item");
+      const a = window.pywebview.api, antes = a.comentarios_tareas, valorAntes = campo.value, autoAntes = st.comAuto;
+      const wp = resolverTarea();
+      ok(wp != null, "sin tarea elegida en el formulario");
+      let veces = 0;
+      a.comentarios_tareas = () => {
+        veces++;
+        return Promise.resolve({ por_tarea: { [wp]: ["Revisión de copias", "Parches de seguridad", "Certificados"],
+                                              999999: ["De otra tarea"] } });
+      };
+      comTareas.mapa = null;
+      const escribir = (t) => { campo.value = t; campo.dispatchEvent(new Event("input", { bubbles: true })); };
+      const tecla = (key) => {
+        const e = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+        campo.dispatchEvent(e);
+        return e;
+      };
+      try {
+        campo.value = ""; st.comAuto = "";
+        campo.focus();
+        if (!document.hasFocus()) campo.dispatchEvent(new FocusEvent("focus"));   // ventana sin foco: focus() no avisa
+        ok(await hasta(() => !lista().hidden && filas().length === 3), "no ofrece los comentarios de la tarea");
+        ok(!/De otra tarea/.test(lista().textContent), "ofrece comentarios de otra tarea");
+        escribir("revision");                               // filtra, sin tildes
+        ok(filas().length === 1 && /Revisión de copias/.test(lista().textContent), "no filtra al escribir");
+        escribir("");
+        tecla("ArrowDown"); tecla("ArrowDown");             // teclado
+        const intro = tecla("Enter");
+        ok(campo.value === "Parches de seguridad" && lista().hidden, `con el teclado queda «${campo.value}»`);
+        ok(intro.defaultPrevented, "Intro sobre una sugerencia añadiría el apunte");
+        escribir("");
+        ok(!lista().hidden && filas().length === 3, "no vuelve a ofrecerlos al vaciar el campo");
+        filas()[2].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));   // raton
+        ok(campo.value === "Certificados" && lista().hidden, `con el ratón queda «${campo.value}»`);
+        // el que la app pone sola (el último usado) ni filtra la lista ni se repite en ella
+        st.comAuto = "Revisión de copias";
+        escribir("Revisión de copias");
+        ok(!lista().hidden && filas().length === 2 && !/Revisión/.test(lista().textContent), "el comentario sugerido filtra o se repite");
+        tecla("Escape");
+        ok(lista().hidden, "Escape no cierra la lista");
+        ok(veces === 1, `pidió los comentarios ${veces} veces`);
+        // lo que se añade desde el formulario pasa a ser el primero
+        recordarComentario(wp, "Uno nuevo");
+        ok(comTareas.mapa[wp][0] === "Uno nuevo" && comTareas.mapa[wp].length === 4, "no recuerda el comentario recién usado");
+      } finally {
+        a.comentarios_tareas = antes;
+        comTareas.mapa = null;
+        campo.value = valorAntes; st.comAuto = autoAntes;
+        campo.blur();
+      }
+    });
     await prueba("PIN: el tiempo de bloqueo se cambia sin cambiar el PIN, y la ventana dice que se ha guardado", async () => {
       const a = window.pywebview.api, antes = { estado: a.pin_estado, auto: a.pin_auto }, pinAntes = st.ini.pin;
       const pedidos = [];
@@ -638,6 +690,21 @@
       // la primera vez lo ofrece un globo bajo la campana
       globoAviso({ por_defecto: "14:00" });
       ok($("globo-aviso"), "no sale el globo");
+      // con una franja de aviso debajo, no tapa sus enlaces («Completar ahora»)
+      const franja = $("aviso-semana"), estaba = franja.hidden, hijos = [...franja.childNodes];
+      franja.replaceChildren(el("span", { class: "aviso-semana-texto", text: "La semana pasada te quedaron días sin completar." }),
+                             el("button", { class: "enlace", text: "Completar ahora" }),
+                             el("button", { class: "cerrar-aviso", text: "×" }));
+      franja.hidden = false;
+      const rg = $("globo-aviso").getBoundingClientRect();
+      const tapados = [...document.querySelectorAll(".aviso-semana:not([hidden]) button, .aviso-conexion:not([hidden]) button")]
+        .filter((x) => {
+          const r = x.getBoundingClientRect();
+          return r.width && !(r.right <= rg.left || r.left >= rg.right || r.bottom <= rg.top || r.top >= rg.bottom);
+        }).map((x) => x.textContent.trim());
+      franja.replaceChildren(...hijos);
+      franja.hidden = estaba;
+      ok(!tapados.length, `el globo tapa: ${tapados.join(", ")}`);
       // cuelga del boton (no de la ventana): lo sigue al desplazar o cambiar de tamaño
       ok($("globo-aviso").parentElement === $("ancla-aviso") && $("ancla-aviso").contains(b),
          "el globo no cuelga de la campana");

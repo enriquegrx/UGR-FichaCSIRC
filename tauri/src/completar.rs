@@ -386,6 +386,50 @@ pub async fn buscar_apuntes(e: &Estado, cfg: &Cfg, texto: &str, anio: Option<i64
     }
 }
 
+pub const MAX_COMENTARIOS: usize = 8;
+pub const DIAS_COMENTARIOS: i64 = 365;
+
+/// {wp_id: [comentarios]}: los ultimos comentarios distintos usados con cada
+/// tarea, el mas reciente primero (el desplegable del campo Comentario). No
+/// cuentan los vacios ni el de guardia, y dos que solo se diferencian en
+/// mayusculas, tildes o espacios son el mismo.
+pub fn comentarios_por_tarea(aps: &[Apunte], guardia: &str, maximo: usize) -> Value {
+    let limpio = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let guardia = limpio(guardia);
+    let mut orden: Vec<&Apunte> = aps.iter().collect();
+    // estable: a igual fecha, en el orden en que llegaron (como sort de Python)
+    orden.sort_by(|x, y| y.fecha.cmp(&x.fecha));
+    let mut out = serde_json::Map::new();
+    let mut vistos = std::collections::HashSet::new();
+    for a in orden {
+        let com = limpio(&a.comentario);
+        if a.wp_id.is_empty() || com.is_empty() || com == guardia {
+            continue;
+        }
+        let Some(lista) = out.entry(a.wp_id.clone()).or_insert_with(|| json!([])).as_array_mut() else { continue };
+        if lista.len() >= maximo || !vistos.insert((a.wp_id.clone(), normal(&com))) {
+            continue;
+        }
+        lista.push(Value::String(com));
+    }
+    Value::Object(out)
+}
+
+/// Los comentarios usados con cada tarea en el ultimo año. Una consulta por
+/// rango; es una ayuda: sin conexion no hay sugerencias, y no se avisa.
+pub async fn comentarios_tareas(e: &Estado, cfg: &Cfg, hoy: NaiveDate) -> Value {
+    let desde = hoy - Duration::days(DIAS_COMENTARIOS);
+    let leido = async {
+        let cli = Cliente::desde(cfg)?;
+        let uid = e.uid(&cli).await?;
+        cli.entradas_rango(&uid, &desde.to_string(), &hoy.to_string()).await
+    }.await;
+    match leido {
+        Ok(aps) => json!({"por_tarea": comentarios_por_tarea(&aps, &Reglas::desde(cfg).comentario_guardia, MAX_COMENTARIOS)}),
+        Err(_) => json!({"por_tarea": {}}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,6 +509,18 @@ mod tests {
         let horas: Vec<Vec<f64>> = plan.iter().map(|(_, t, _)| t.iter().map(|x| x.2).collect()).collect();
         assert_eq!(horas, vec![vec![2.0, 1.0], vec![5.0, 2.0]]);
         assert!(partes_de("", "", &[json!({"wp_id": "x", "peso": 1})]).is_none());
+    }
+
+    #[test]
+    fn comentarios_de_cada_tarea() {
+        let con = |fecha: &str, wp: &str, com: &str| Apunte { wp_id: wp.into(), comentario: com.into(), ..ap(fecha, 1.0) };
+        let aps = vec![con("2026-11-02", "10", "Revisión de copias"), con("2026-11-05", "10", "Parches"),
+                       con("2026-11-09", "10", "revision  de copias"),       // el mismo, mas reciente
+                       con("2026-11-10", "10", ""), con("2026-11-11", "10", "Servicio de Guardia"),
+                       con("2026-11-03", "20", "Curso")];
+        let r = comentarios_por_tarea(&aps, "Servicio de Guardia", MAX_COMENTARIOS);
+        assert_eq!(r, json!({"10": ["revision de copias", "Parches"], "20": ["Curso"]}));
+        assert_eq!(comentarios_por_tarea(&aps, "", 1)["10"], json!(["Servicio de Guardia"]));
     }
 
     #[test]

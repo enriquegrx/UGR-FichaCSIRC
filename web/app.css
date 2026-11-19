@@ -612,6 +612,8 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .bt-id { color: var(--tenue); font-variant-numeric: tabular-nums; }
 .bt-ruta { font-size: 12px; color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-nada { padding: 5px 12px 7px; color: var(--tenue); }
+/* comentarios usados con la tarea (campo Comentario): una linea cada uno */
+.lista-comentarios .bt-item { display: block; padding: 6px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-fila.quitada .ed-tarea { text-decoration: line-through; color: var(--tenue); }
 .ed-fila.quitada { background: var(--peligro-bg); }
 .ed-fila.nueva { background: var(--seleccion); }
@@ -774,6 +776,9 @@ body.modo-estad #total-semana, body.modo-estad #tt-semana, body.modo-estad #esta
 @media (max-width: 1180px) { #b-aviso.apagado .ico { margin-right: 0; } }
 /* el globo cuelga del boton (ancla), con su borde derecho al del boton */
 .ancla-aviso { position: relative; display: inline-flex; flex: none; }
+/* con el globo abierto, las franjas de aviso de debajo le dejan sitio: sus
+   enlaces («Completar ahora», «Ir a esa semana», cerrar) no quedan tapados */
+body:has(#globo-aviso) .aviso-semana, body:has(#globo-aviso) .aviso-conexion { padding-right: 364px; }
 .globo-aviso { position: absolute; top: calc(100% + 10px); right: 0; z-index: 25; width: min(300px, calc(100vw - 32px));
                background: var(--panel); white-space: normal; text-align: left;
                border: 1px solid var(--primario); border-radius: 10px; box-shadow: 0 12px 32px rgba(16, 24, 40, .22);

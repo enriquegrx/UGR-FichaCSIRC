@@ -186,6 +186,32 @@ def repartir(falta, pesos):
     return out
 
 
+MAX_COMENTARIOS = 8
+DIAS_COMENTARIOS = 365
+
+
+def comentarios_por_tarea(apuntes, guardia="", maximo=MAX_COMENTARIOS):
+    """{wp_id: [comentarios]}: los ultimos comentarios distintos usados con cada
+    tarea, el mas reciente primero (el desplegable del campo Comentario). No
+    cuentan los vacios ni el de guardia, y dos que solo se diferencian en
+    mayusculas, tildes o espacios son el mismo."""
+    limpio = lambda s: " ".join(str(s or "").split())
+    guardia = limpio(guardia)
+    out, vistos = {}, set()
+    # estable: a igual fecha, en el orden en que llegaron
+    for a in sorted(apuntes, key=lambda a: str(a.get("fecha") or ""), reverse=True):
+        wp, com = str(a.get("wp_id") or ""), limpio(a.get("comentario"))
+        if not wp or not com or com == guardia:
+            continue
+        lista = out.setdefault(wp, [])
+        clave = (wp, _sin_tildes(com))
+        if len(lista) >= maximo or clave in vistos:
+            continue
+        vistos.add(clave)
+        lista.append(com)
+    return out
+
+
 def texto_fichar_hoy(r, tarea):
     """Lo que dice el aviso tras "Completar hoy con ..." desde la bandeja."""
     if r.get("error"):
@@ -2248,6 +2274,18 @@ class Api:
         total = sum(x["horas"] for x in out)
         return {**base, "resultados": out[:self.MAX_BUSQUEDA], "n": len(out), "total": _horas(total),
                 "recortado": len(out) > self.MAX_BUSQUEDA}
+
+    def comentarios_tareas(self, hoy=None):
+        """Los comentarios que has usado con cada tarea en el ultimo año, para
+        ofrecerlos en el campo Comentario. Una consulta por rango; es una
+        ayuda: sin conexion no hay sugerencias, y no se avisa."""
+        hoy = hoy or dt.date.today()
+        desde = hoy - dt.timedelta(days=DIAS_COMENTARIOS)
+        try:
+            apuntes = core.entradas_rango(desde.isoformat(), hoy.isoformat())
+        except Exception:
+            return {"por_tarea": {}}
+        return {"por_tarea": comentarios_por_tarea(apuntes, core.comentario_guardia() or "")}
 
     # ---- resumen del mes (una consulta por rango, no una por dia) ----
     def resumen_mes(self, anio, mes):

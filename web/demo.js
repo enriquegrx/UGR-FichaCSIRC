@@ -277,6 +277,17 @@
       return espera({ ok: true, n, total: fmt(dias.flat().reduce((t, x) => t + x.horas, 0)) });
     },
     aplicar_plantilla_semana: () => espera({ creados: 3, saltados: 1, errores: 0, ultimo: "" }),
+    comentarios_tareas: () => {
+      const por = { 11765: ["Parches de seguridad", "Actualización de certificados"] };
+      for (const iso of Object.keys(apuntes).sort().reverse()) {
+        for (const a of apuntes[iso]) {
+          if (!a.comentario || !a.wp_id) continue;
+          const lista = (por[a.wp_id] ||= []);
+          if (!lista.includes(a.comentario)) lista.push(a.comentario);
+        }
+      }
+      return espera({ por_tarea: por });
+    },
     buscar_apuntes: (texto, anio) => {
       const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const palabras = norm(texto).split(/\s+/).filter(Boolean);

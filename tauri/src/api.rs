@@ -332,6 +332,10 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             let anio = args.get(1).and_then(|v| v.as_i64().or_else(|| v.as_str()?.parse().ok()));
             Ok(crate::completar::buscar_apuntes(e, &cfg, &arg(&args, 0), anio, hoy()).await)
         }
+        "comentarios_tareas" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(crate::completar::comentarios_tareas(e, &cfg, hoy()).await)
+        }
         "bandeja_pendientes" => Ok(sistema::bandeja_pendientes(&app, args.first().and_then(Value::as_u64).unwrap_or(0))),
         "estadisticas" => {
             e.exigir_desbloqueo(&cfg)?;

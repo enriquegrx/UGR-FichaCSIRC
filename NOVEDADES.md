@@ -32,6 +32,10 @@ instalada aparece en el pie de la ventana.
 - Botón **Bloquear** al lado del de Salir (también *Archivo → Bloquear con el
   PIN* y Ctrl+L): tapa la ventana hasta que escribas el PIN. Si no tienes PIN,
   te lleva a activarlo.
+- **PIN de acceso**: el tiempo de bloqueo va en su propio apartado y se cambia
+  sin tener que cambiar el PIN.
+- **Comentario**: al entrar en el campo salen los últimos que usaste con esa
+  tarea, para elegirlos sin volver a escribirlos.
 
 **Estadísticas**
 - Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o

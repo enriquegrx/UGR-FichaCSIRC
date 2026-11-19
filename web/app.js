@@ -1556,6 +1556,127 @@ function menuActividad(e) {
   mostrarMenu(e.clientX, e.clientY, items);
 }
 
+// ---------------------------------------------------------------- comentarios usados con la tarea
+
+// El campo Comentario se rellena solo con el ultimo que usaste con la tarea;
+// al entrar en el ofrece ademas los anteriores (los distintos del ultimo año).
+// Se piden una vez, al entrar en el campo, y valen un rato; lo que añades
+// desde aqui se suma al momento.
+const comTareas = { mapa: null, cuando: 0, pidiendo: null };
+const COM_CADUCA = 10 * 60 * 1000, COM_MAX = 8;
+const comNormal = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+  .replace(/\s+/g, " ").trim();
+function cargarComentariosTareas() {
+  if (comTareas.mapa && Date.now() - comTareas.cuando < COM_CADUCA) return Promise.resolve(comTareas.mapa);
+  comTareas.pidiendo ??= (async () => {
+    try {
+      const r = await api().comentarios_tareas();
+      comTareas.mapa = r?.por_tarea || {};
+      comTareas.cuando = Date.now();
+    } catch (_e) {
+      comTareas.mapa ??= {};                 // es una ayuda: sin conexion, sin sugerencias
+    } finally {
+      comTareas.pidiendo = null;
+    }
+    return comTareas.mapa;
+  })();
+  return comTareas.pidiendo;
+}
+function recordarComentario(wp, comentario) {
+  if (!comTareas.mapa || wp == null || !comentario) return;
+  const k = String(wp);
+  comTareas.mapa[k] = [comentario, ...(comTareas.mapa[k] || []).filter((c) => comNormal(c) !== comNormal(comentario))]
+    .slice(0, COM_MAX);
+}
+
+// Convierte el campo Comentario en un desplegable de los usados con la tarea
+// elegida. Escribir filtra (sin tildes); el que la app ha puesto sola no
+// filtra ni se repite en la lista. Flechas e Intro, o clic, para elegir.
+let listaCom = null;
+function sugerenciasComentario(input) {
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "false");
+  input.setAttribute("aria-controls", "lista-comentarios");
+  const caja = el("div", { id: "lista-comentarios", class: "buscador-tareas lista-comentarios", role: "listbox" });
+  caja.hidden = true;
+  document.body.append(caja);
+  let items = [], activo = -1;
+
+  function colocar() {
+    // con zoom en <html>, el rect ya viene ampliado y left/top se volverian a ampliar
+    const z = parseFloat(document.documentElement.style.zoom) || 1;
+    const r = input.getBoundingClientRect();
+    const abajo = innerHeight - r.bottom;
+    caja.style.left = `${r.left / z}px`;
+    caja.style.width = `${r.width / z}px`;
+    // encima del campo siempre que quepa: justo debajo esta el boton Añadir
+    if (r.top > 170 || r.top > abajo) {
+      caja.style.top = ""; caja.style.bottom = `${(innerHeight - r.top + 2) / z}px`;
+      caja.style.maxHeight = `${Math.min(300, r.top - 12) / z}px`;
+    } else {
+      caja.style.bottom = ""; caja.style.top = `${(r.bottom + 2) / z}px`;
+      caja.style.maxHeight = `${Math.min(300, abajo - 12) / z}px`;
+    }
+  }
+  function cerrar() {
+    caja.hidden = true;
+    activo = -1;
+    input.setAttribute("aria-expanded", "false");
+  }
+  function elegir(c) {
+    input.value = c;
+    cerrar();
+  }
+  function pintar() {
+    const wp = resolverTarea();
+    const todos = (wp != null && comTareas.mapa?.[String(wp)]) || [];
+    const escrito = input.value.trim();
+    const q = escrito && escrito !== st.comAuto ? comNormal(escrito) : "";
+    items = todos.filter((c) => comNormal(c) !== comNormal(escrito) && (!q || comNormal(c).includes(q)));
+    if (!items.length || document.activeElement !== input) { cerrar(); return; }
+    if (activo >= items.length) activo = -1;
+    caja.replaceChildren(el("div", { class: "bt-grupo", text: "Usados con esta tarea" }),
+      ...items.map((c, i) => {
+        const fila = el("div", { class: `bt-item${i === activo ? " activo" : ""}`, role: "option", title: c, text: c });
+        fila.addEventListener("mousedown", (e) => { e.preventDefault(); elegir(c); });
+        return fila;
+      }));
+    caja.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    colocar();
+  }
+
+  input.addEventListener("focus", async () => {
+    activo = -1;
+    pintar();
+    await cargarComentariosTareas();
+    pintar();
+  });
+  input.addEventListener("input", () => { activo = -1; pintar(); });
+  input.addEventListener("blur", () => setTimeout(cerrar, 120));
+  input.addEventListener("keydown", (e) => {
+    if (caja.hidden) {
+      if (e.key === "ArrowDown") { e.preventDefault(); pintar(); }
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      activo = e.key === "ArrowDown" ? (activo + 1) % items.length : (activo <= 0 ? items.length : activo) - 1;
+      pintar();
+      caja.querySelector(".bt-item.activo")?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter" && activo >= 0) {
+      e.preventDefault();                    // Intro sobre una sugerencia la elige; no añade el apunte
+      e.stopPropagation();
+      elegir(items[activo]);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      cerrar();
+    }
+  });
+  return { cerrar, pintar };
+}
+
 function sugerirHoras(falta) {
   const campo = $("horas");
   if (campo.value.trim() && campo.value.trim() !== st.horasAuto) return;
@@ -1576,6 +1697,7 @@ function sugerirComentario() {
 async function anadir(e) {
   e?.preventDefault();
   if (st.ocupado) return;
+  listaCom?.cerrar();
   const dias = [...st.marcados].sort();
   const wp = resolverTarea();
   if (wp == null) {
@@ -1603,7 +1725,10 @@ async function anadir(e) {
     const r = await llamar("anadir", dias, wp, horas, comentario, actividad, permitirRepetir);
     $("horas").value = st.horasAuto = "";
     $("comentario").value = st.comAuto = "";
-    if (r.creados && comentario && comentario !== st.ini.comentario_guardia) st.comHabitual = comentario;
+    if (r.creados && comentario && comentario !== st.ini.comentario_guardia) {
+      st.comHabitual = comentario;
+      recordarComentario(wp, comentario);
+    }
     await informarLote(r, { hecho: (n) => `Apunte añadido (${n}).`,
       nada: "Esa tarea ya estaba registrada en los días marcados; no se añadió nada." });
   } finally {
@@ -1724,6 +1849,7 @@ $("b-pend").onclick = async () => {
 $("b-aviso").onclick = () => { $("globo-aviso")?.remove(); dlgRecordatorio(); };
 $("b-salir").onclick = salirDeLaApp;
 $("b-bloquear").onclick = () => { bloquearOActivar(); };
+listaCom = sugerenciasComentario($("comentario"));
 // al volver a la ventana (p. ej. tras cambiar la hora desde el propio aviso)
 for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });

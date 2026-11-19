@@ -142,6 +142,20 @@ class TestPorCompletar(unittest.TestCase):
         self.assertEqual(self.api.buscar_apuntes("05/11", 2026, hoy=HOY)["n"], 1)   # por fecha
         self.assertEqual(self.api.buscar_apuntes(" ", 2026, hoy=HOY)["n"], 0)
 
+    def test_comentarios_de_cada_tarea(self):
+        def con(fecha, wp, com):
+            return dict(ap(fecha, wp, 1), comentario=com)
+        self.apuntes[:] = [con("2026-11-02", "10", "Revisión de copias"), con("2026-11-05", "10", "Parches"),
+                           con("2026-11-09", "10", "revision  de copias"),      # el mismo, mas reciente
+                           con("2026-11-10", "10", ""), con("2026-11-11", "10", "Servicio de Guardia"),
+                           con("2026-11-03", "20", "Curso"),
+                           con("2025-10-01", "10", "De hace más de un año")]
+        r = self.api.comentarios_tareas(hoy=HOY)
+        self.assertEqual(r, {"por_tarea": {"10": ["revision de copias", "Parches"], "20": ["Curso"]}})
+        self.assertEqual(web.comentarios_por_tarea(self.apuntes, "", 1)["10"], ["Servicio de Guardia"])
+        with mock.patch.object(core, "entradas_rango", side_effect=OSError("sin red")):
+            self.assertEqual(self.api.comentarios_tareas(hoy=HOY), {"por_tarea": {}})   # sin conexion, sin sugerencias
+
     def test_te_pasas_dice_que_apunte_sobra(self):
         self.apuntes += [dict(ap("2026-11-10", "10", 2), id=77)]            # el 10: 7 + 2 de la misma tarea
         x = self.api.por_completar(2026, hoy=HOY)["excesos"][0]
