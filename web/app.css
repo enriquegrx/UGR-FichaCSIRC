@@ -882,6 +882,9 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
 .pend-suma.ambar { color: var(--aviso); }
 /* dialogos de Por completar */
 .pend-sub { margin: 10px 0 4px; font-size: 13px; color: var(--texto-fuerte); }
+/* PIN de acceso: el tiempo de bloqueo y el cambio de PIN, cada uno en su apartado */
+.pin-apartado { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--borde); }
+.pin-guardado { margin-bottom: 0; }
 .pend-tareas { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .pend-op { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--borde-suave); cursor: pointer; }
 .pend-op:has(input:checked) { border-color: var(--primario); background: var(--seleccion); }

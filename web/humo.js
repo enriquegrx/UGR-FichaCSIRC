@@ -559,6 +559,37 @@
         window.pywebview.api.cerrar = antes;
       }
     });
+    await prueba("PIN: el tiempo de bloqueo se cambia sin cambiar el PIN, y la ventana dice que se ha guardado", async () => {
+      const a = window.pywebview.api, antes = { estado: a.pin_estado, auto: a.pin_auto }, pinAntes = st.ini.pin;
+      const pedidos = [];
+      a.pin_estado = () => Promise.resolve({ activo: true, desbloqueada: true, auto_min: 15 });
+      a.pin_auto = (m) => { pedidos.push(String(m)); return Promise.resolve({ ok: true }); };
+      try {
+        st.ini.pin = { activo: true, desbloqueada: true, auto_min: 15 };
+        dlgPin();
+        ok(await hasta(() => dlg() && dlg().querySelector("select")), "no abre la ventana del PIN");
+        const sel = dlg().querySelector("select"), pin = dlg().querySelector('input[type="password"]');
+        ok(sel.value === "15", `no enseña el tiempo guardado: ${sel.value}`);
+        ok(sel.compareDocumentPosition(pin) & Node.DOCUMENT_POSITION_FOLLOWING, "el tiempo no va antes de los campos del PIN");
+        sel.value = "30";
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+        ok(await hasta(() => pedidos.length === 1 && pedidos[0] === "30"), "no guarda el tiempo al elegirlo");
+        ok(await hasta(() => /Guardado/.test(dlg().querySelector(".pin-guardado").textContent)), "la ventana no dice que se ha guardado");
+        ok(st.ini.pin.auto_min === 30, "la app no se entera del tiempo nuevo");
+        // «Cambiar PIN» sin escribir nada no pide el PIN: explica que el tiempo ya esta guardado
+        botonDlg("Cambiar PIN");
+        ok(await hasta(() => !$("modal").hidden && /no hace falta cambiar el PIN/.test($("modal-texto").textContent)),
+           "«Cambiar PIN» en blanco no lo explica");
+        $("modal-si").click();
+        ok(await hasta(() => $("modal").hidden), "el aviso no se cierra");
+        cerrarTodo();
+        ok(await hasta(() => !dlg()), "no se cierra");
+      } finally {
+        a.pin_estado = antes.estado; a.pin_auto = antes.auto;
+        st.ini.pin = pinAntes;
+        vigilarInactividad();
+      }
+    });
     await prueba("bloquear: botón siempre a la vista junto a Salir; sin PIN lleva a activarlo, con PIN bloquea (también Ctrl+L y Archivo)", async () => {
       const b = $("b-bloquear");
       const caja = b.getBoundingClientRect(), salir = $("b-salir").getBoundingClientRect();

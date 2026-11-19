@@ -1400,32 +1400,56 @@ async function dlgPin(opciones) {
   const auto = selector([{ valor: 0, texto: "Nunca (solo al abrir)" }, { valor: 5, texto: "5 minutos" },
                          { valor: 15, texto: "15 minutos" }, { valor: 30, texto: "30 minutos" },
                          { valor: 60, texto: "1 hora" }], auto_min);
+  // El tiempo de bloqueo se guarda al elegirlo, sin tocar el PIN: con PIN va
+  // arriba, en su propio apartado, y la ventana dice que ya esta guardado (el
+  // unico boton era "Cambiar PIN" y parecia que habia que cambiarlo).
+  const guardado = nota("Se guarda al elegirlo: no hace falta cambiar el PIN.", "tenue pin-guardado");
+  guardado.setAttribute("role", "status");
   auto.onchange = async () => {
     const r = await llamar("pin_auto", auto.value);
     if (r.error) { await avisar("PIN de acceso", r.error); return; }
     if (st.ini?.pin) { st.ini.pin.auto_min = Number(auto.value); vigilarInactividad(); }
-    estado(Number(auto.value) ? `Se pedirá el PIN tras ${auto.options[auto.selectedIndex].text} sin usar la app.`
-                              : "El PIN solo se pedirá al abrir la app.");
+    const texto = Number(auto.value) ? `Se pedirá el PIN tras ${auto.options[auto.selectedIndex].text} sin usar la app.`
+                                     : "El PIN solo se pedirá al abrir la app.";
+    estado(texto);
+    guardado.textContent = `✓ Guardado. ${texto}`;
+    guardado.className = "nota verde pin-guardado";
   };
-  const botones = [cancelarBoton,
+  const botones = [{ texto: activo ? "Cerrar" : "Cancelar", accion: (dd) => dd.cerrar() },
     { texto: activo ? "Cambiar PIN" : "Activar PIN", clase: "primario", accion: fijar }];
   if (activo) botones.unshift({ texto: "Quitar PIN", clase: "peligro", izquierda: true, accion: quitar });
   const d = dialogo({ titulo: "PIN de acceso", ancho: 520, botones });
-  d.cuerpo.append(
-    nota(activo ? "FichaCSIRC pide el PIN al abrirse. Para cambiarlo o quitarlo, escribe antes el actual."
-         : paraBloquear ? "Para bloquear FichaCSIRC hace falta un PIN, y aún no lo tienes. Actívalo aquí: el botón "
+  const siSeOlvida = nota("De 4 a 8 cifras. Si lo olvidas, la única salida es borrar la configuración de este equipo "
+                          + "y volver a configurar FichaCSIRC (tus horas en ProyectosTIC no se pierden).");
+  if (activo) {
+    d.cuerpo.append(
+      // dos cosas distintas, cada una en su apartado: el tiempo de bloqueo y el PIN
+      el("h4", { class: "pend-sub", text: "Tiempo de bloqueo" }),
+      nota("FichaCSIRC pide el PIN al abrirse y, si quieres, también tras un rato sin usarla."),
+      rejilla(["Pedirlo de nuevo tras", auto]),
+      guardado,
+      el("h4", { class: "pend-sub pin-apartado", text: "Cambiar o quitar el PIN" }),
+      nota("Escribe antes el PIN actual."),
+      rejilla(["PIN actual", actual], ["PIN nuevo", nuevo], ["Repítelo", repetido]),
+      siSeOlvida);
+  } else {
+    d.cuerpo.append(
+      nota(paraBloquear ? "Para bloquear FichaCSIRC hace falta un PIN, y aún no lo tienes. Actívalo aquí: el botón "
                           + "Bloquear tapará la ventana hasta que lo escribas, y FichaCSIRC lo pedirá también cada vez "
                           + "que se abra."
-                : "Con un PIN, FichaCSIRC lo pedirá cada vez que se abra (también el asistente de configuración)."),
-    rejilla(...(activo ? [["PIN actual", actual]] : []),
-            ["PIN nuevo", nuevo], ["Repítelo", repetido],
-            ["Pedirlo de nuevo tras", auto]),
-    nota("De 4 a 8 cifras. Si lo olvidas, la única salida es borrar la configuración de este equipo "
-         + "y volver a configurar FichaCSIRC (tus horas en ProyectosTIC no se pierden)."));
-  (activo ? actual : nuevo).focus();
+                        : "Con un PIN, FichaCSIRC lo pedirá cada vez que se abra (también el asistente de configuración)."),
+      rejilla(["PIN nuevo", nuevo], ["Repítelo", repetido], ["Pedirlo de nuevo tras", auto]),
+      siSeOlvida);
+  }
+  (activo ? auto : nuevo).focus();
   for (const i of [actual, nuevo, repetido]) i.addEventListener("keydown", (e) => { if (e.key === "Enter") fijar(d); });
 
   async function fijar(dd) {
+    if (activo && !actual.value && !nuevo.value && !repetido.value) {
+      await avisar("PIN de acceso", "Para cambiar el PIN, escribe el actual y el nuevo.\n\n"
+                   + "El tiempo de bloqueo se guarda solo al elegirlo: para eso no hace falta cambiar el PIN.");
+      return;
+    }
     const r = await llamar("pin_fijar", nuevo.value, repetido.value, actual.value);
     if (r.error) { await avisar("PIN de acceso", r.error); return; }
     dd.cerrar();
