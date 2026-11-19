@@ -91,10 +91,12 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--permiso-bg); color: var(--permiso-fg);
 }
 .usuario { margin-left: auto; font-weight: 600; }
-/* Salir, a la vista junto al nombre: al pasar el raton, en rojo (cierra el programa) */
-.b-salir { display: inline-flex; align-items: center; gap: 6px; flex: none; margin-left: 14px;
-           padding: 6px 12px; font-weight: 600; white-space: nowrap; }
-.b-salir svg { width: 16px; height: 16px; }
+/* Bloquear (solo con PIN) y Salir, a la vista junto al nombre; Salir, en rojo
+   al pasar el raton (cierra el programa) */
+.cab-botones { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-left: 14px; }
+.b-cab { display: inline-flex; align-items: center; gap: 6px; flex: none;
+         padding: 6px 12px; font-weight: 600; white-space: nowrap; }
+.b-cab svg { width: 16px; height: 16px; }
 .b-salir:hover:not(:disabled) { background: var(--peligro); border-color: var(--peligro); color: #fff; }
 
 /* ---------- estructura ---------- */

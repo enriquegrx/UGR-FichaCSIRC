@@ -59,6 +59,9 @@ function cambiarZoom(delta) {
 // Con PIN: pasados N minutos sin tocar la app, se vuelve a pedir.
 let inactividadT = null;
 function vigilarInactividad() {
+  // se llama al arrancar y cada vez que el PIN se activa, cambia o se quita:
+  // el boton Bloquear de la cabecera solo esta con PIN
+  $("b-bloquear").hidden = !st.ini?.pin?.activo;
   const min = st.ini?.pin?.activo ? st.ini.pin.auto_min : 0;
   clearTimeout(inactividadT);
   if (!min) return;
@@ -274,7 +277,7 @@ const MENUS = {
     "-",
     { texto: "Buscar en mis apuntes…\tCtrl+F", accion: dlgBuscarApuntes },
     "-",
-    st.ini?.pin?.activo ? { texto: "Bloquear con el PIN", accion: bloquearAhora } : null,
+    st.ini?.pin?.activo ? { texto: "Bloquear con el PIN\tCtrl+L", accion: bloquearAhora } : null,
     { texto: "Salir de FichaCSIRC\tCtrl+Q", accion: salirDeLaApp },
   ].filter(Boolean),
   ver: () => [
@@ -1711,6 +1714,7 @@ $("b-pend").onclick = async () => {
 };
 $("b-aviso").onclick = () => { $("globo-aviso")?.remove(); dlgRecordatorio(); };
 $("b-salir").onclick = salirDeLaApp;
+$("b-bloquear").onclick = bloquearAhora;
 // al volver a la ventana (p. ej. tras cambiar la hora desde el propio aviso)
 for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
@@ -1768,6 +1772,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); dlgBuscarApuntes(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "q") { e.preventDefault(); salirDeLaApp(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l" && st.ini?.pin?.activo) { e.preventDefault(); bloquearAhora(); return; }
   if (e.altKey && /^[1-5]$/.test(e.key) && st.vista === "semana") {
     e.preventDefault();
     const d = st.dias[Number(e.key) - 1];

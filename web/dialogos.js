@@ -2379,6 +2379,7 @@ function dlgAtajos() {
     ["Arrastrar", "Un apunte a otro día lo copia (con Mayús, lo mueve); una tarea habitual, la añade"],
     ["F5", "Recargar la semana"], ["Ctrl+← / →", "Semana anterior / siguiente"],
     ["Ctrl+Q", "Salir de FichaCSIRC del todo (con el icono junto al reloj, la X solo esconde la ventana)"],
+    ["Ctrl+L", "Bloquear FichaCSIRC con el PIN (si lo tienes activado)"],
     ["Alt+1..5", "Marcar/desmarcar lunes..viernes"], ["Esc", "Cerrar el diálogo o el menú"],
     ["Doble clic", "Editar un apunte"],
     ["Botón derecho", "En un día: festivo, vacaciones, permiso, guardia, teletrabajo, plantilla… "

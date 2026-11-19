@@ -559,6 +559,37 @@
         window.pywebview.api.cerrar = antes;
       }
     });
+    await prueba("bloquear: el botón solo está con PIN, junto a Salir, y también va con Ctrl+L y en Archivo", async () => {
+      const b = $("b-bloquear");
+      ok(b && b.hidden && b.getBoundingClientRect().width === 0, "sin PIN, el botón Bloquear no debe verse");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true }));
+      document.querySelector('.menubar [data-menu="archivo"]').click();
+      ok(!/Bloquear/.test($("menu").textContent), "sin PIN, Archivo no debe ofrecer Bloquear");
+      cerrarMenu();
+      let veces = 0;
+      const antes = window.pywebview.api.pin_bloquear, pinAntes = st.ini.pin;
+      window.pywebview.api.pin_bloquear = () => { veces++; return Promise.resolve({ bloqueada: false }); };
+      try {
+        st.ini.pin = { activo: true, desbloqueada: true, auto_min: 0 };
+        vigilarInactividad();                 // lo que hace la ventana del PIN al activarlo
+        const caja = b.getBoundingClientRect(), salir = $("b-salir").getBoundingClientRect();
+        ok(!b.hidden && caja.width > 30, "con PIN, el botón Bloquear no se ve");
+        ok(caja.right <= salir.left && Math.abs(caja.top - salir.top) < 2, "Bloquear no está a la izquierda de Salir, en su línea");
+        ok(veces === 0, "Ctrl+L sin PIN llamó a bloquear");
+        b.click();
+        ok(await hasta(() => veces === 1), "el botón no bloquea");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "l", ctrlKey: true, bubbles: true }));
+        ok(await hasta(() => veces === 2), "Ctrl+L no bloquea");
+        document.querySelector('.menubar [data-menu="archivo"]').click();
+        pulsarMenu("Bloquear con el PIN");
+        ok(await hasta(() => veces === 3), "Archivo → Bloquear no bloquea");
+      } finally {
+        window.pywebview.api.pin_bloquear = antes;
+        st.ini.pin = pinAntes;
+        vigilarInactividad();
+      }
+      ok(b.hidden, "al quitar el PIN, el botón Bloquear sigue a la vista");
+    });
     await prueba("campana del aviso diario: el globo lo activa a las 14:00, se cambia la hora y se quita", async () => {
       const b = $("b-aviso");
       ok(await hasta(() => !b.hidden), "sin campana en la barra");
