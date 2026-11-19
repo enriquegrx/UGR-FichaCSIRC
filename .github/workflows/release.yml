@@ -1,8 +1,25 @@
 name: Release
 
-# Se dispara al subir una etiqueta de version (ej. v2.1):
-#   git tag v2.1 && git push origin v2.1
-# Construye los .exe y los publica como Release de GitHub.
+# Se dispara al subir una etiqueta de version:
+#   git tag v4.0.0 && git push origin v4.0.0
+#
+# Desde la 4.0 publica la version Rust/Tauri (carpeta tauri/) compilada en modo
+# PRODUCCION (--features produccion y SIN tauri.pruebas.json): es FichaCSIRC de
+# verdad, la que sustituye a la 3.x al instalarse y usa su misma configuracion.
+#
+# Una etiqueta con guion (v4.0.0-rc.1) se publica como PRE-RELEASE: las apps
+# instaladas no la ven (miran "releases/latest", que excluye las pre-releases,
+# y la 3.x ni siquiera entiende ese numero); solo la instala quien tenga el
+# enlace. Sirve para ensayar el paso de la 3.x a la 4.x antes de que le llegue
+# a nadie.
+#
+# Los ficheros llevan los nombres que busca el actualizador de la 3.x y de la
+# 4.x: FichaCSIRC-Instalador.exe y FichaCSIRC-mac-<arch>.dmg.
+#
+# La 3.x se publicaba desde este mismo fichero con PyInstaller + Inno Setup. Al
+# etiquetar se usa el release.yml del commit etiquetado: una 3.x nueva se
+# etiqueta desde una rama que conserve aquel (main, mientras no se le haga
+# merge de la 4.0).
 
 on:
   push:
@@ -24,10 +41,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build-windows:
+  # La etiqueta tiene que ser la version que lleva el codigo (la que ensena la
+  # app y con la que se compara al buscar actualizaciones), y de la 4 en adelante.
+  comprobar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: La etiqueta es la version del codigo
+        run: |
+          etiqueta="${GITHUB_REF_NAME#v}"
+          conf=$(python3 -c "import json; print(json.load(open('tauri/tauri.conf.json'))['version'])")
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' tauri/Cargo.toml | head -1)
+          echo "etiqueta=$etiqueta tauri.conf.json=$conf Cargo.toml=$cargo"
+          case "$etiqueta" in
+            [0-3].*)
+              echo "::error::Este release.yml publica la 4.x (Rust). Una 3.x se etiqueta desde una rama con el release.yml de la 3.x."
+              exit 1 ;;
+          esac
+          if [ "$etiqueta" != "$conf" ] || [ "$etiqueta" != "$cargo" ]; then
+            echo "::error::La etiqueta v$etiqueta no coincide con la version de tauri/ (tauri.conf.json: $conf, Cargo.toml: $cargo)."
+            exit 1
+          fi
+
+  # La ventana (web/) es la misma que probaban las releases de la 3.x: sus
+  # pruebas, con las de navegador, antes de publicar nada.
+  tests:
     runs-on: windows-latest
-    # Si algo se cuelga, que muera solo: una release a medias es mejor que
-    # un run abierto 6 horas bloqueando la vista de Actions.
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
@@ -37,128 +78,87 @@ jobs:
           python-version: "3.12"
 
       - name: Instalar dependencias
-        # PyInstaller fijado: evita que un bootloader nuevo cambie el manejo del
-        # empaquetado sin avisar (build reproducible).
-        run: pip install -r requirements-web.txt pyinstaller==6.21.0
+        run: pip install -r requirements-web.txt
 
       - name: Ejecutar tests
         run: python -m unittest discover -s tests -t . -v
 
-      # Desde la 3.0 hay UNA app: la interfaz HTML (registrar_web.py + web/,
-      # con pywebview); el asistente de configuracion va dentro (--configurar).
-      # Modo CARPETA (--onedir), no --onefile: el .exe se ejecuta junto a su
-      # carpeta _internal (con python3XX.dll y el runtime VC) y NO se extrae nada
-      # a %TEMP%\_MEI. Asi se evita el error "Failed to load Python DLL" al lanzar
-      # el .exe recien instalado desde el instalador. --noupx como blindaje extra.
-      - name: Construir FichaCSIRC (carpeta)
-        run: >
-          pyinstaller --noconfirm --clean --onedir --windowed --noupx
-          --name "FichaCSIRC" --icon "fichacsirc.ico"
-          --version-file "version_info.txt"
-          --add-data "web;web" --add-data "logo_ugr.png;." --add-data "fichacsirc.ico;."
-          --add-data "NOVEDADES.md;." --add-data "TECNOLOGIA.md;."
-          --hidden-import pystray._win32
-          registrar_web.py
-
-      - name: Instalar Inno Setup
-        run: choco install innosetup -y --no-progress
-
-      - name: Construir instalador único
-        shell: pwsh
-        run: |
-          $v = "${{ github.ref_name }}".TrimStart('v')
-          iscc /DMyAppVersion=$v instalador.iss
-
-      # Con --onedir ya no hay .exe suelto portable (el exe necesita su carpeta
-      # _internal al lado). Se publica solo el instalador, que empaqueta ambas
-      # carpetas; es tambien lo que descarga el autoactualizador.
-      - name: Publicar release con el instalador
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/FichaCSIRC-Instalador.exe
-          generate_release_notes: true
-
-  # Linux: .deb (Ubuntu/Debian) y AppImage, sin PyInstaller (ver build_linux.sh).
-  # Se construye en la Ubuntu mas antigua soportada (22.04, Python 3.10) y se
-  # PRUEBA que arranca en una pantalla virtual (xvfb) antes de publicar.
-  build-linux:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Dependencias del sistema (WebKitGTK, pantalla virtual)
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q python3-pip python3-gi gir1.2-webkit2-4.1 xvfb dpkg-dev
-
-      - name: Construir .deb y AppImage
-        run: bash build_linux.sh
-
-      - name: El codigo compila con el Python de Ubuntu 22.04 (3.10)
-        run: python3 -m compileall -q build/linux/app
-
-      # 124 = timeout lo corto con la ventana abierta (el asistente, sin config):
-      # arranco bien. Cualquier otro codigo es que se cerro solo.
-      # El sandbox de WebKit no funciona en los runners de GitHub (solo aqui).
-      - name: Probar que arranca (.deb)
-        env:
-          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
-          FICHACSIRC_CONFIG: /tmp/fichacsirc-deb/config.json
-        run: |
-          sudo apt-get install -y -q ./dist/fichacsirc_*_all.deb
-          set +e; xvfb-run -a timeout 25 fichacsirc; rc=$?; set -e
-          echo "codigo: $rc"; test "$rc" = 124
-
-      - name: Probar que arranca (AppImage)
-        env:
-          WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS: "1"
-          APPIMAGE_EXTRACT_AND_RUN: "1"
-          FICHACSIRC_CONFIG: /tmp/fichacsirc-appimage/config.json
-        run: |
-          set +e; xvfb-run -a timeout 25 ./dist/FichaCSIRC-linux-x86_64.AppImage; rc=$?; set -e
-          echo "codigo: $rc"; test "$rc" = 124
-
-      - name: Publicar release con Linux
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            dist/fichacsirc_*_all.deb
-            dist/FichaCSIRC-linux-x86_64.AppImage
-
-  build-macos:
+  publicar:
+    needs: [comprobar, tests]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-26
+          - nombre: windows
+            os: windows-latest
+            paquetes: nsis
+          - nombre: mac-arm64
+            os: macos-26
+            paquetes: dmg
             arch: arm64
-          - runner: macos-26-intel
+          - nombre: mac-x64
+            os: macos-26-intel
+            paquetes: dmg
             arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+          - nombre: linux
+            os: ubuntu-22.04
+            paquetes: deb,appimage
+    runs-on: ${{ matrix.os }}
+    # el Mac Intel de GitHub tarda mucho en compilar Rust la primera vez; si
+    # algo se cuelga, que muera solo
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - name: Librerias de Linux (WebKitGTK y bandeja)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
         with:
-          python-version: "3.12"
+          workspaces: tauri
 
-      - name: Instalar dependencias
-        run: pip install requests
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
 
-      # Aqui NO se ejecutan los tests a proposito. Colgaban el job de Intel
-      # indefinidamente (19+ min en el paso "Ejecutar tests", cuando el build
-      # entero tarda 1 min): los tests de GUI abren ventanas Tk y en ese runner
-      # se quedan esperando en vez de saltarse. Ademas son redundantes: ya corren
-      # en el workflow de Tests en cada push y en el job de Windows de cada
-      # release. Estos jobs solo tienen que EMPAQUETAR.
+      - name: Tests de Rust
+        working-directory: tauri
+        run: cargo test
 
-      - name: Construir apps macOS
-        run: ARCH_LABEL=${{ matrix.arch }} ./build_macos.sh
+      # PRODUCCION: sin tauri.pruebas.json (el producto es "FichaCSIRC", y el
+      # instalador de Windows retira la 3.x: tauri/nsis/hooks.nsh) y con la
+      # feature (misma config que la 3.x, mismos nombres, se actualiza sola).
+      # Las dos cosas van siempre juntas.
+      - name: Compilar e instalador (produccion)
+        working-directory: tauri
+        run: npx --yes @tauri-apps/cli@2 build --bundles ${{ matrix.paquetes }} --features produccion
 
-      - name: Publicar release con apps macOS
+      # Con los nombres que busca el actualizador en cada release.
+      - name: Nombres de la release
+        shell: bash
+        run: |
+          mkdir -p dist
+          case "${{ matrix.nombre }}" in
+            windows)
+              cp tauri/target/release/bundle/nsis/*-setup.exe dist/FichaCSIRC-Instalador.exe ;;
+            mac-*)
+              cp tauri/target/release/bundle/dmg/*.dmg "dist/FichaCSIRC-mac-${{ matrix.arch }}.dmg" ;;
+            linux)
+              cp tauri/target/release/bundle/deb/*.deb dist/
+              cp tauri/target/release/bundle/appimage/*.AppImage dist/FichaCSIRC-linux-x86_64.AppImage ;;
+          esac
+          ls -l dist
+
+      - name: Publicar en la release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/FichaCSIRC-mac-${{ matrix.arch }}.dmg
+          files: dist/*
+          fail_on_unmatched_files: true
+          # v4.0.0-rc.1, v4.0.0-beta.2...: pre-release (nadie la recibe sola)
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: ${{ matrix.nombre == 'windows' }}

@@ -42,10 +42,17 @@ fn exe() -> String {
 
 // ---------------------------------------------------------------- actualizaciones
 
-fn version_tupla(s: &str) -> Option<(u64, u64, u64)> {
+/// (mayor, menor, parche, definitiva). Una version de pruebas ("-rc.1",
+/// "-alpha.1") es ANTERIOR a la definitiva del mismo numero: quien tenga la
+/// 4.0.0-rc.1 tiene que ver la 4.0.0 como nueva.
+fn version_tupla(s: &str) -> Option<(u64, u64, u64, bool)> {
     let limpia = s.trim().trim_start_matches('v');
-    let num: Vec<u64> = limpia.split(['.', '-']).take(3).map(|p| p.parse().ok()).collect::<Option<_>>()?;
-    (num.len() == 3).then(|| (num[0], num[1], num[2]))
+    let (numeros, definitiva) = match limpia.split_once('-') {
+        Some((n, _)) => (n, false),
+        None => (limpia, true),
+    };
+    let num: Vec<u64> = numeros.split('.').map(|p| p.parse().ok()).collect::<Option<_>>()?;
+    (num.len() == 3).then(|| (num[0], num[1], num[2], definitiva))
 }
 
 pub async fn comprobar_actualizacion(e: &Estado, cfg: &Cfg, forzar: bool) -> Value {
@@ -674,10 +681,15 @@ mod tests {
 
     #[test]
     fn versiones() {
-        assert_eq!(version_tupla("v3.2.2"), Some((3, 2, 2)));
-        assert_eq!(version_tupla("4.0.0-alpha.1"), Some((4, 0, 0)));
+        assert_eq!(version_tupla("v3.2.2"), Some((3, 2, 2, true)));
+        assert_eq!(version_tupla("4.0.0-alpha.1"), Some((4, 0, 0, false)));
         assert!(version_tupla("v3.2.2") < version_tupla(VERSION));
         assert_eq!(version_tupla("x"), None);
+        assert_eq!(version_tupla("v2.1"), None);
+        // la de pruebas es anterior a la definitiva del mismo numero, y posterior a la 3.x
+        assert!(version_tupla("v4.0.0-rc.1") < version_tupla("v4.0.0"));
+        assert!(version_tupla("v3.9.9") < version_tupla("v4.0.0-rc.1"));
+        assert!(version_tupla("v4.0.0") < version_tupla("v4.0.1-rc.1"));
     }
 
     #[test]
