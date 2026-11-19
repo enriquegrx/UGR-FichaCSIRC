@@ -163,6 +163,33 @@ pub fn abrir_informe(app: &AppHandle, html: &str, nombre: &str) -> Value {
     }
 }
 
+pub const DIAS_INFORME: u64 = 7;
+
+/// Borra los informes de Estadisticas (FichaCSIRC-informe*.html) que la app
+/// dejo en la carpeta temporal hace mas de `dias`: Windows solo limpia los
+/// temporales si el Sensor de almacenamiento esta activado, y llevan tus
+/// tareas y tus horas. Devuelve cuantos ha borrado.
+pub fn limpiar_informes(carpeta: &std::path::Path, dias: u64) -> usize {
+    let limite = std::time::Duration::from_secs(dias * 86_400);
+    let Ok(entradas) = std::fs::read_dir(carpeta) else { return 0 };
+    let mut n = 0;
+    for e in entradas.flatten() {
+        let nombre = e.file_name().to_string_lossy().to_string();
+        if !(nombre.starts_with("FichaCSIRC-informe") && nombre.ends_with(".html")) {
+            continue;
+        }
+        let viejo = e.metadata().ok().filter(|m| m.is_file())
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|d| d > limite);
+        // abierto por otro programa, sin permiso...: otro dia
+        if viejo && std::fs::remove_file(e.path()).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
 pub fn abrir_exportacion(e: &Estado, app: &AppHandle) -> Value {
     match candado(&e.ultima_exportacion).clone().filter(|r| r.exists()) {
         Some(r) => {
@@ -338,6 +365,28 @@ pub async fn diagnostico() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn los_informes_viejos_se_borran() {
+        let carpeta = std::env::temp_dir().join(format!("fichacsirc-test-informes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&carpeta);
+        std::fs::create_dir_all(&carpeta).unwrap();
+        let hace = |dias: u64| std::time::SystemTime::now() - std::time::Duration::from_secs(dias * 86_400);
+        let crear = |nombre: &str, dias: u64| {
+            let ruta = carpeta.join(nombre);
+            std::fs::write(&ruta, "x").unwrap();
+            std::fs::File::options().write(true).open(&ruta).unwrap().set_modified(hace(dias)).unwrap();
+            ruta
+        };
+        let viejo = crear("FichaCSIRC-informe-mes-2026-10-01.html", 8);
+        let reciente = crear("FichaCSIRC-informe-mes-2026-11-01.html", 2);
+        let ajeno = crear("otro-informe.html", 30);                       // no es de la app
+        let csv = crear("FichaCSIRC-informe-viejo.csv", 30);              // ni un informe
+        assert_eq!(limpiar_informes(&carpeta, DIAS_INFORME), 1);
+        assert!(!viejo.exists() && reciente.exists() && ajeno.exists() && csv.exists());
+        assert_eq!(limpiar_informes(&carpeta.join("no-existe"), DIAS_INFORME), 0);
+        let _ = std::fs::remove_dir_all(&carpeta);
+    }
 
     #[test]
     fn nombre_del_informe_sin_rutas_raras() {

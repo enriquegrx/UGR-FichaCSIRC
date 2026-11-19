@@ -5,6 +5,68 @@ instalada aparece en el pie de la ventana.
 
 ---
 
+## 4.0.0
+
+**Nuevo motor: Rust y Tauri**
+- FichaCSIRC está **reescrita por dentro** en Rust. La ventana es la misma y
+  **no tienes que hacer nada**: tu API key, favoritas, plantillas, permisos,
+  PIN y preferencias siguen como estaban.
+- El instalador ocupa unos **3 MB** y la aplicación **ya no lleva Python
+  dentro**: adiós a los problemas de archivos bloqueados por Windows al
+  instalar o actualizar.
+- Los cálculos son los mismos: se han comparado con los de la versión 3, día a
+  día, con apuntes reales. Lo cuenta *Ayuda → Tecnología utilizada*.
+
+**Nuevo diseño**
+- **Semana**: cada día enseña sus horas con una barra por tarea, cada tarea de
+  su color.
+- **Mes**: un calendario donde se ve de un vistazo cómo va cada día. Los
+  completos van rellenos; los que tienen horas por fichar, con una franja y la
+  cifra en ámbar.
+- La **barra de arriba** se adapta a ventanas estrechas: los botones se quedan
+  en su icono en vez de partirse en dos líneas.
+- **Exportar a CSV** pasa al menú *Archivo*.
+
+**Estadísticas**
+- Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o
+  Anual**, con tus tareas más realizadas, la jornada cumplida y el año mes a
+  mes.
+- El bloque **«Cómo va»** sustituye al *Resumen del mes*: estado, objetivos y
+  los días que te quedan por completar, cada uno con su enlace.
+- **Informe del periodo** en una página para imprimir o guardar como PDF.
+
+**Por completar**
+- Botón **🧩 Por completar** con el número de días del año sin completar (hasta
+  ayer), en fichas por mes: la que eliges filtra la lista.
+- Marca uno, varios o todos y **rellénalos de una vez**: completar lo que falta
+  con una tarea, repartirlo entre varias, aplicar una plantilla o copiar un
+  día. Antes de hacerlo te enseña un resumen, y todo se deshace de una vez.
+- Desde la misma lista se marca un día como **vacaciones, festivo, baja o
+  permiso**.
+- **«Te pasas»**: los días con horas de más y los apuntes repetidos, con el
+  botón para quitar ahí mismo el que sobra.
+- Los avisos de la semana y de cierre de mes traen **«Completar ahora»**.
+- **Plantillas de semana**: guarda de lunes a viernes, cada día con sus
+  apuntes, y aplícala entera.
+- **Buscar en mis apuntes** del año (Ctrl+F).
+
+**Aviso diario de fichaje**
+- **Campana en la barra** con la hora del aviso («🔔 14:00»). Un clic para
+  activarlo, cambiar la hora o quitarlo; la hora se queda hasta que la cambies.
+- Se propone a las **14:00** (antes, a las 16:00). Si ya lo tenías activado,
+  conservas tu hora.
+- La **ventanita del aviso**, rediseñada: el total que te falta en el título,
+  hoy el primero, **«Fichar todo»** cuando son varios días y la campana para
+  cambiar la hora o desactivarlo desde ahí.
+
+**Icono junto al reloj**
+- **«Completar hoy con…»** tu tarea habitual, desde el menú del icono y sin
+  abrir la ventana. El icono dice también cuántos días tienes por completar.
+- **Una sola FichaCSIRC abierta**: si estaba escondida junto al reloj, el
+  acceso del escritorio la muestra en vez de abrir otra que no se veía.
+
+---
+
 ## 3.2.2
 
 **Correcciones**

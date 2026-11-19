@@ -772,17 +772,23 @@ class TestDialogos(Base):
 
     def test_novedades_junta_lineas(self):
         bloques = self.api.novedades()
-        # la primera version listada es la que se esta ejecutando (si no, se
-        # ha olvidado la entrada de NOVEDADES.md al subir la version)
-        primera = next(b for b in bloques if b["estilo"] == "version")
-        self.assertEqual(primera["texto"], f"Versión {core.VERSION}")
+        # la version que se esta ejecutando tiene su entrada (si no, se ha
+        # olvidado la de NOVEDADES.md al subir la version). Por delante solo
+        # puede haber versiones posteriores: el fichero es el mismo para la app
+        # de Rust (4.x), y la ventana no enseña lo que aun no se tiene.
+        versiones = [b["texto"].replace("Versión ", "") for b in bloques if b["estilo"] == "version"]
+        self.assertIn(core.VERSION, versiones)
+        tupla = lambda v: tuple(int(x) for x in v.split("."))
+        for v in versiones[:versiones.index(core.VERSION)]:
+            self.assertGreater(tupla(v), tupla(core.VERSION), v)
         self.assertTrue(any(b["estilo"] == "punto" for b in bloques))
         self.assertTrue(all("**" not in b["texto"] for b in bloques))
 
     def test_tecnologia_y_va_en_cada_empaquetado(self):
         bloques = self.api.tecnologia()
         titulos = [b["texto"] for b in bloques if b["estilo"] == "version"]
-        self.assertIn("El futuro: Rust y Tauri", titulos)
+        self.assertIn("Versión 4: cómo está hecha", titulos)
+        self.assertIn("Versión 3 (histórico): cómo estaba hecha", titulos)      # lo anterior se conserva
         self.assertTrue(all("**" not in b["texto"] for b in bloques))
         # Si falta en un build, en la app saldria "No se encontro..."
         raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

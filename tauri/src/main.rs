@@ -140,6 +140,11 @@ fn main() {
                     sistema::reparar_recordatorio();
                 });
             }
+            // los informes de Estadisticas de hace mas de una semana, fuera de
+            // la carpeta temporal
+            std::thread::spawn(|| {
+                ayuda::limpiar_informes(&std::env::temp_dir(), ayuda::DIAS_INFORME);
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![api::api])

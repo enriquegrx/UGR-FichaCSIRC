@@ -510,7 +510,9 @@
       { estilo: "punto", texto: "HTML, CSS y JavaScript dentro de la aplicación, con pywebview." },
       { estilo: "version", texto: "El futuro: Rust y Tauri" },
       { estilo: "punto", texto: "Está previsto migrar FichaCSIRC a Tauri (Rust)." }]),
-    novedades: () => espera([{ estilo: "version", texto: "Versión 2.9.2" }, { estilo: "apartado", texto: "Mejoras" },
+    novedades: () => espera([{ estilo: "version", texto: "Versión 9.0.0" },      // posterior a la de la demo: no se enseña
+      { estilo: "punto", texto: "Lo de una versión que aún no tienes." },
+      { estilo: "version", texto: "Versión 2.9.2" }, { estilo: "apartado", texto: "Mejoras" },
       { estilo: "punto", texto: "Permisos: lo que no usas ya no se pierde en enero." },
       { estilo: "punto", texto: "Mac: ahora se instala con un .dmg." }]),
     abrir_github: () => espera({ ok: true }),

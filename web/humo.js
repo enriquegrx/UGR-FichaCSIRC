@@ -530,6 +530,10 @@
         await espera(300);                 // que terminen sus llamadas a la API
         ok(!/\bnull\b|undefined/.test(dlg().textContent), "escribe null/undefined");
         if (nombre === "festivos") ok(await hasta(() => document.querySelector(".festivo.ugr input")), "sin días UGR revisables");
+        if (nombre === "novedades") {
+          ok(/2\.9\.2/.test(dlg().textContent), "no enseña las versiones que hay");
+          ok(!/9\.0\.0|aún no tienes/.test(dlg().textContent), "enseña lo de una versión posterior a la instalada");
+        }
         // los párrafos con viñeta (p.punto) a todo lo ancho: una regla .punto de
         // la leyenda los dejaba en 8px y las palabras salían apiladas
         for (const p of dlg().querySelectorAll("p.punto")) ok(p.getBoundingClientRect().width > 200, `«${nombre}»: texto aplastado`);

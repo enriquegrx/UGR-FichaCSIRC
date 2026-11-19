@@ -2307,7 +2307,14 @@ function versionMayor(a, b) {
 /* tras = {desde}: se abre sola despues de actualizar y ensena solo lo nuevo
    desde la version que se tenia (sin 'desde', solo la ultima version). */
 async function dlgNovedades(tras = null) {
-  const bloques = await llamar("novedades");
+  // NOVEDADES.md es el mismo para la app de Python (3.x) y la de Rust (4.x):
+  // lo de una version posterior a la que se ejecuta no se enseña.
+  const mia = st.ini?.version || "";
+  let deVersion = null;
+  const bloques = (await llamar("novedades")).filter((b) => {
+    if (b.estilo === "version") deVersion = b.texto.replace(/^Versión\s+/, "");
+    return !(mia && deVersion && versionMayor(deVersion, mia));
+  });
   let visibles = bloques;
   if (tras) {
     let version = null, versiones = 0;

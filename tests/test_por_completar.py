@@ -181,6 +181,27 @@ class TestPorCompletar(unittest.TestCase):
         self.assertIn("error", self.api.abrir_informe("", "x"))
         self.assertIn("error", self.api.abrir_informe("x" * (web.Api.MAX_INFORME + 1), "x"))
 
+    def test_los_informes_viejos_se_borran_al_arrancar(self):
+        import tempfile
+        import time
+        with tempfile.TemporaryDirectory() as carpeta:
+            def crear(nombre, dias):
+                ruta = os.path.join(carpeta, nombre)
+                with open(ruta, "w", encoding="utf-8") as fh:
+                    fh.write("x")
+                antes = time.time() - dias * 86400
+                os.utime(ruta, (antes, antes))
+                return ruta
+            viejo = crear("FichaCSIRC-informe-mes-2026-10-01.html", 8)
+            reciente = crear("FichaCSIRC-informe-mes-2026-11-01.html", 2)
+            ajeno = crear("otro-informe.html", 30)                       # no es de la app
+            csv = crear("FichaCSIRC-informe-viejo.csv", 30)              # ni un informe
+            self.assertEqual(web.limpiar_informes(carpeta), 1)
+            self.assertFalse(os.path.exists(viejo))
+            for ruta in (reciente, ajeno, csv):
+                self.assertTrue(os.path.exists(ruta), ruta)
+            self.assertEqual(web.limpiar_informes(os.path.join(carpeta, "no-existe")), 0)
+
     def test_completar_hoy_desde_la_bandeja(self):
         self.api._bandeja = mock.MagicMock()
         self.api._ventana = mock.MagicMock()

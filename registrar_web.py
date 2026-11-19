@@ -3229,11 +3229,35 @@ def _usar_bandeja(asistente):
         return False
 
 
+DIAS_INFORME = 7
+
+
+def limpiar_informes(carpeta=None, dias=DIAS_INFORME):
+    """Borra los informes de Estadisticas (FichaCSIRC-informe*.html) que la app
+    dejo en la carpeta temporal hace mas de una semana: Windows solo limpia
+    los temporales si el Sensor de almacenamiento esta activado, y llevan tus
+    tareas y tus horas. Devuelve cuantos ha borrado."""
+    import glob
+    import tempfile
+    import time
+    limite = time.time() - dias * 86400
+    n = 0
+    for ruta in glob.glob(os.path.join(carpeta or tempfile.gettempdir(), "FichaCSIRC-informe*.html")):
+        try:
+            if os.path.isfile(ruta) and os.path.getmtime(ruta) < limite:
+                os.remove(ruta)
+                n += 1
+        except OSError:
+            pass                      # abierto por otro programa, sin permiso...: otro dia
+    return n
+
+
 def main():
     import webview
     if "--recordatorio" in sys.argv[1:]:
         _main_recordatorio(webview)
         return
+    threading.Thread(target=limpiar_informes, daemon=True).start()
     if core is not None and not EXPERIMENTO:
         import recordatorio
         # Aviso diario que apunte a un .exe/.app que ya no existe: se repara solo.
