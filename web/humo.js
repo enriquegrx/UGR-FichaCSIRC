@@ -541,6 +541,24 @@
         ok(!dlg(), "no cierra");
       });
     }
+    await prueba("salir: botón a la vista en la cabecera, en Archivo y con Ctrl+Q", async () => {
+      const b = $("b-salir");
+      ok(b && b.getBoundingClientRect().width > 40 && /Salir/.test(b.textContent), "sin botón Salir en la cabecera");
+      let veces = 0;
+      const antes = window.pywebview.api.cerrar;
+      window.pywebview.api.cerrar = () => { veces++; return Promise.resolve({ ok: true }); };
+      try {
+        b.click();
+        ok(await hasta(() => veces === 1), "el botón no cierra la app");
+        document.querySelector('.menubar [data-menu="archivo"]').click();
+        pulsarMenu("Salir de FichaCSIRC");
+        ok(await hasta(() => veces === 2), "Archivo → Salir no cierra la app");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "q", ctrlKey: true, bubbles: true }));
+        ok(await hasta(() => veces === 3), "Ctrl+Q no cierra la app");
+      } finally {
+        window.pywebview.api.cerrar = antes;
+      }
+    });
     await prueba("campana del aviso diario: el globo lo activa a las 14:00, se cambia la hora y se quita", async () => {
       const b = $("b-aviso");
       ok(await hasta(() => !b.hidden), "sin campana en la barra");

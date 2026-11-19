@@ -80,6 +80,17 @@ async function bloquearAhora() {
   else location.href = "configurar.html";
 }
 
+// Salir del todo (boton de la cabecera, Archivo > Salir, Ctrl+Q). Con el icono
+// junto al reloj, la X de la ventana solo la esconde: esto cierra el programa
+// y quita el icono.
+async function salirDeLaApp() {
+  if (st.ocupado) return;                  // a mitad de guardar algo, no
+  cerrarMenu();
+  try {
+    await api().cerrar();
+  } catch (_e) { /* la ventana ya se esta cerrando */ }
+}
+
 // ---------------------------------------------------------------- semana anterior incompleta
 
 async function avisarSemanaAnterior() {
@@ -262,7 +273,10 @@ const MENUS = {
     { texto: "Días por completar", accion: () => entrarPendientes() },
     "-",
     { texto: "Buscar en mis apuntes…\tCtrl+F", accion: dlgBuscarApuntes },
-  ],
+    "-",
+    st.ini?.pin?.activo ? { texto: "Bloquear con el PIN", accion: bloquearAhora } : null,
+    { texto: "Salir de FichaCSIRC\tCtrl+Q", accion: salirDeLaApp },
+  ].filter(Boolean),
   ver: () => [
     ...PANELES.map(([id, nombre]) => ({
       texto: `${st.paneles[id] === "oculto" ? "      " : "✓   "}${nombre}`
@@ -1696,6 +1710,7 @@ $("b-pend").onclick = async () => {
   await cargarSemana();
 };
 $("b-aviso").onclick = () => { $("globo-aviso")?.remove(); dlgRecordatorio(); };
+$("b-salir").onclick = salirDeLaApp;
 // al volver a la ventana (p. ej. tras cambiar la hora desde el propio aviso)
 for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
@@ -1752,6 +1767,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); dlgBuscarApuntes(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "q") { e.preventDefault(); salirDeLaApp(); return; }
   if (e.altKey && /^[1-5]$/.test(e.key) && st.vista === "semana") {
     e.preventDefault();
     const d = st.dias[Number(e.key) - 1];

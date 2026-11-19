@@ -26,6 +26,9 @@ instalada aparece en el pie de la ventana.
 - La **barra de arriba** se adapta a ventanas estrechas: los botones se quedan
   en su icono en vez de partirse en dos líneas.
 - **Exportar a CSV** pasa al menú *Archivo*.
+- Botón **Salir** a la vista, arriba a la derecha (también *Archivo → Salir*
+  y Ctrl+Q): cierra el programa del todo. Con el icono junto al reloj, la X
+  solo esconde la ventana. Si usas PIN, *Archivo → Bloquear con el PIN*.
 
 **Estadísticas**
 - Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o
