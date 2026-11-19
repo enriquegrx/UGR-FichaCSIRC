@@ -2455,10 +2455,20 @@ async function dlgRecordatorio() {
       campana();
     } }].filter(Boolean) });
   d.cuerpo.append(
-    nota(e.activo ? `El aviso está activo${e.hora ? `, a las ${e.hora}` : ""}. Cámbiale la hora aquí o desactívalo.`
+    nota(e.activo ? `El aviso está activo${e.hora ? `, a las ${e.hora}` : ""}. Solo aparece si a esa hora te faltan horas `
+                    + "por fichar; con la semana al día, no sale. Cámbiale la hora aquí o desactívalo."
       : "FichaCSIRC puede avisarte cada día laborable si te faltan horas por fichar (solo aparece si hay algo pendiente)."),
     rejilla(["¿A qué hora?", hora]),
-    nota("Se queda a esa hora hasta que la cambies o lo quites."));
+    nota("Se queda a esa hora hasta que la cambies o lo quites. Si la cambias a una hora de hoy que aún no ha "
+         + "pasado, hoy vuelve a avisarte (si te faltan horas)."),
+    // el aviso de verdad solo sale si faltan horas: asi se puede ver como es
+    el("p", { class: "nota" },
+      el("button", { class: "enlace", type: "button", text: "Probar el aviso ahora", onclick: async () => {
+        const r = await llamar("recordatorio_probar");
+        if (r.error) { await avisar("No se pudo abrir el aviso", r.error); return; }
+        estado("Aviso de prueba abierto en su ventanita: desde la prueba no se ficha nada.");
+      } }),
+      el("span", { class: "tenue", text: " · para ver cómo es, aunque hoy no te falte nada." })));
   hora.focus();
 }
 

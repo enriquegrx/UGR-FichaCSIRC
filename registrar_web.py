@@ -3098,6 +3098,21 @@ class Api:
             pass
         return {"ok": True}
 
+    def recordatorio_probar(self):
+        """La campana: abre ahora la ventanita del aviso, de prueba, con lo que
+        te falte de verdad o, si no falta nada, un dia de ejemplo (el aviso de
+        verdad solo sale si faltan horas, y asi no hay forma de verlo). Desde
+        la prueba no se ficha."""
+        args = ["--recordatorio", "--prueba-aviso"]
+        try:
+            if getattr(sys, "frozen", False):
+                subprocess.Popen([sys.executable, *args])
+            else:
+                subprocess.Popen([sys.executable, os.path.abspath(__file__), *args])
+        except OSError as e:
+            return {"error": f"No se pudo abrir el aviso: {e}"}
+        return {"ok": True}
+
     def recordatorio_activar(self, hora):
         if EXPERIMENTO:
             return {"error": "En el prototipo no se programa el aviso (secuestraría el de tu app normal)."}
@@ -3147,12 +3162,17 @@ class Api:
                 por_completar = 0
         return {"texto": getattr(self, "_aviso", ""), "minutos": 10, "dias": dias,
                 "habituales": habituales, "pin": _pin_guardado() is not None,
-                "tema": self.tema(), "por_completar": por_completar}
+                "tema": self.tema(), "por_completar": por_completar,
+                # "Probar el aviso": no ficha; 'ejemplo' si el dia es inventado
+                "prueba": bool(getattr(self, "_prueba", False)),
+                "ejemplo": bool(getattr(self, "_ejemplo", False))}
 
     def aviso_fichar(self, iso, wp_id, horas, actividad):
         """Desde el aviso: un apunte en ese dia. Devuelve lo que sigue faltando
         (para que la ventanita se vaya quedando vacia y se cierre sola)."""
         self._exigir_desbloqueo()
+        if getattr(self, "_prueba", False):
+            return {"error": "Es una prueba del aviso: desde aquí no se ficha nada."}
         try:
             h = float(str(horas).replace(",", "."))
             if not 0 < h <= 24:
@@ -3221,6 +3241,9 @@ def _fondo_ventana(claro):
     return "#14181d" if (ccore.cargar_previa() or {}).get("tema") == "oscuro" else claro
 
 
+ALTO_FRANJA_PRUEBA = 50
+
+
 def alto_aviso(n_dias):
     """Alto del contenido de la ventanita del aviso segun los dias que trae
     (de 1 a 5): que quepan sin barra de desplazamiento."""
@@ -3229,22 +3252,38 @@ def alto_aviso(n_dias):
     return max(300, 210 + 55 * n + (70 if n > 1 else 0))
 
 
+def aviso_de_ejemplo(hoy=None):
+    """"Probar el aviso" sin nada pendiente: hoy, como si no se hubiera fichado
+    (7h si hoy no se trabaja)."""
+    hoy = hoy or dt.date.today()
+    return [(hoy, 0.0, core.objetivo_de(hoy) or 7.0)]
+
+
 def _main_recordatorio(webview):
     """--recordatorio: lo lanza la tarea programada. Si no falta nada (o no hay
     red), sale en silencio; si falta, una ventanita propia (encima de todo, que
-    se cierra sola a los 10 minutos para no dejar el proceso vivo)."""
+    se cierra sola a los 10 minutos para no dejar el proceso vivo).
+    Con --prueba-aviso ("Probar el aviso", en la campana) sale siempre: con lo
+    que falte o, si no falta nada, con un dia de ejemplo; y no ficha."""
     if core is None:
         return
     import recordatorio
+    prueba = "--prueba-aviso" in sys.argv[1:]
     pendientes = core.dias_pendientes_semana()
+    ejemplo = False
     if not pendientes:
-        return
+        if not prueba:
+            return
+        pendientes, ejemplo = aviso_de_ejemplo(), True
     api = Api()
     api._aviso = recordatorio.mensaje_pendientes(pendientes)
     api._pendientes = pendientes
+    api._prueba, api._ejemplo = prueba, ejemplo
     api._ventana = webview.create_window(
         "FichaCSIRC - Recordatorio", _recurso("web", "aviso.html"), js_api=api,
-        width=660, height=alto_aviso(len(pendientes)) + 40, resizable=False, on_top=True,
+        # la prueba lleva una franja que lo dice: su renglon de mas
+        width=660, height=alto_aviso(len(pendientes)) + 40 + (ALTO_FRANJA_PRUEBA if prueba else 0),
+        resizable=False, on_top=True,
         background_color=_fondo_ventana("#ffffff"))
     webview.start()
 

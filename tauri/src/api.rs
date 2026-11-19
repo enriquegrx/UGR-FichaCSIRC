@@ -50,6 +50,9 @@ pub struct Estado {
     /// aviso diario: el texto y los dias con huecos (dia, registrado, objetivo)
     pub(crate) aviso: Mutex<String>,
     pub(crate) pendientes: Mutex<Vec<(NaiveDate, f64, f64)>>,
+    /// "Probar el aviso" (--prueba-aviso): no ficha; y si el dia es de ejemplo
+    pub(crate) aviso_prueba: std::sync::atomic::AtomicBool,
+    pub(crate) aviso_ejemplo: std::sync::atomic::AtomicBool,
     /// con icono en la bandeja, cerrar la ventana solo la esconde
     pub(crate) con_bandeja: std::sync::atomic::AtomicBool,
     /// se borro la config por olvidar el PIN (el asistente empieza de cero)
@@ -658,6 +661,10 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         "instalar_actualizacion" => Ok(sistema::instalar_actualizacion(e).await),
         "recordatorio_estado" => Ok(sistema::recordatorio_estado(&cfg)),
         "recordatorio_ofrecido" => Ok(sistema::recordatorio_ofrecido()),
+        "recordatorio_probar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            Ok(sistema::recordatorio_probar())
+        }
         "recordatorio_activar" => {
             e.exigir_desbloqueo(&cfg)?;
             Ok(sistema::recordatorio_activar(&arg(&args, 0)))

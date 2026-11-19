@@ -682,6 +682,22 @@
         vigilarInactividad();
       }
     });
+    await prueba("campana: «Probar el aviso ahora» abre la ventanita de prueba", async () => {
+      const a = window.pywebview.api, antes = a.recordatorio_probar;
+      let veces = 0;
+      a.recordatorio_probar = () => { veces++; return Promise.resolve({ ok: true }); };
+      try {
+        dlgRecordatorio();
+        ok(await hasta(() => dlg() && /Probar el aviso ahora/.test(dlg().textContent)), "la ventana de la campana no ofrece probar el aviso");
+        ok(/Solo aparece si|solo aparece si/.test(dlg().textContent), "no dice que el aviso solo sale si faltan horas");
+        [...dlg().querySelectorAll("button.enlace")].find((b) => /Probar el aviso/.test(b.textContent)).click();
+        ok(await hasta(() => veces === 1), "el botón no abre el aviso de prueba");
+        ok(dlg(), "probar el aviso no debe cerrar la ventana de la campana");
+      } finally {
+        a.recordatorio_probar = antes;
+        cerrarTodo();
+      }
+    });
     await prueba("campana del aviso diario: el globo lo activa a las 14:00, se cambia la hora y se quita", async () => {
       const b = $("b-aviso");
       ok(await hasta(() => !b.hidden), "sin campana en la barra");
@@ -761,10 +777,31 @@
 
   // La ventanita del aviso diario: hoy el primero, sin la lista repetida,
   // fichar un dia o todos, y la campana para cambiar la hora o quitarlo.
+  // "Probar el aviso" (?prueba=ejemplo): se ve como el de verdad, lo dice y no ficha
+  async function escenarioAvisoPrueba() {
+    await prueba("aviso de prueba: dice que es una prueba y no deja fichar", async () => {
+      ok(await hasta(() => document.querySelectorAll(".aviso-dia").length === 3), "no pinta los días");
+      const franja = $("prueba-aviso");
+      ok(!franja.hidden && /Esto es una prueba/.test(franja.textContent) && /de ejemplo/.test(franja.textContent)
+         && /no se ficha/.test(franja.textContent), `franja: ${franja.textContent}`);
+      const botones = [...document.querySelectorAll(".aviso-dia button"), $("b-todo")];
+      ok(botones.length === 4 && botones.every((b) => b.disabled), "en la prueba se puede fichar");
+      ok(/Te faltan 19,5h/.test($("titulo-aviso").textContent), "no se ve como el aviso de verdad");
+      ok(!$("b-si").disabled && !$("b-no").disabled, "no se puede cerrar ni abrir la app");
+    });
+    await prueba("sin errores de JS por el camino", async () => {
+      ok(!lineas.some((l) => l.startsWith("FALLO error") || l.startsWith("FALLO promesa")), "hubo errores");
+    });
+    apuntar("HUMO-FIN");
+  }
+
   async function escenarioAviso() {
+    if (/[?&]prueba\b/.test(location.search)) return escenarioAvisoPrueba();
     const renglones = () => [...document.querySelectorAll(".aviso-dia")];
     await prueba("aviso: el total en el título, hoy el primero y todo con coma", async () => {
       ok(await hasta(() => renglones().length === 3), "no pinta los tres días");
+      ok($("prueba-aviso").hidden, "el aviso de verdad dice que es una prueba");
+      ok([...document.querySelectorAll(".aviso-dia button")].every((b) => !b.disabled), "en el aviso de verdad no se puede fichar");
       ok(/Te faltan 19,5h por fichar esta semana/.test($("titulo-aviso").textContent), `título: ${$("titulo-aviso").textContent}`);
       ok(renglones()[0].classList.contains("hoy") && renglones()[0].textContent.includes("Hoy"), "hoy no va el primero");
       ok(renglones().every((r) => /faltan 6,5h/.test(r.textContent)), "no dice lo que falta cada día");

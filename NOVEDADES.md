@@ -68,6 +68,9 @@ instalada aparece en el pie de la ventana.
 - La **ventanita del aviso**, rediseñada: el total que te falta en el título,
   hoy el primero, **«Fichar todo»** cuando son varios días y la campana para
   cambiar la hora o desactivarlo desde ahí.
+- **«Probar el aviso ahora»**, en la ventana de la campana: enseña la
+  ventanita aunque hoy no te falte nada (el aviso de verdad solo sale si
+  faltan horas). Desde la prueba no se ficha.
 
 **Icono junto al reloj**
 - **«Completar hoy con…»** tu tarea habitual, desde el menú del icono y sin

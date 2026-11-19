@@ -142,6 +142,22 @@ class TestPorCompletar(unittest.TestCase):
         self.assertEqual(self.api.buscar_apuntes("05/11", 2026, hoy=HOY)["n"], 1)   # por fecha
         self.assertEqual(self.api.buscar_apuntes(" ", 2026, hoy=HOY)["n"], 0)
 
+    def test_probar_el_aviso_no_ficha(self):
+        with mock.patch.object(web.subprocess, "Popen") as popen:
+            self.assertEqual(self.api.recordatorio_probar(), {"ok": True})
+        self.assertEqual(popen.call_args[0][0][-2:], ["--recordatorio", "--prueba-aviso"])
+        with mock.patch.object(web.subprocess, "Popen", side_effect=OSError("no")):
+            self.assertIn("error", self.api.recordatorio_probar())
+        # sin nada pendiente, la prueba enseña hoy como si no se hubiera fichado
+        with mock.patch.object(core, "objetivo_de", lambda d: 6.5):
+            self.assertEqual(web.aviso_de_ejemplo(HOY), [(HOY, 0.0, 6.5)])
+        with mock.patch.object(core, "objetivo_de", lambda d: 0.0):       # fin de semana o festivo
+            self.assertEqual(web.aviso_de_ejemplo(HOY), [(HOY, 0.0, 7.0)])
+        # y desde la prueba no se ficha, aunque se pulse
+        self.api._prueba = True
+        self.assertIn("prueba", self.api.aviso_fichar("2026-11-12", "10", "2", "")["error"])
+        self.assertEqual(self.creados, [])
+
     def test_comentarios_de_cada_tarea(self):
         def con(fecha, wp, com):
             return dict(ap(fecha, wp, 1), comentario=com)

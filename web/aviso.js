@@ -113,6 +113,11 @@ function pintar(d) {
   cont.hidden = nada;
   $("b-todo").disabled = false;      // renglones nuevos: se puede otra vez
   pintarTodo();
+  if (d.prueba) {                    // "Probar el aviso": se ve, pero no se ficha
+    bloquear(true);
+    for (const f of filas) f.boton.title = "En la prueba no se ficha";
+    $("b-todo").title = "En la prueba no se ficha";
+  }
   $("hecho").hidden = !nada;
   if (nada) {
     $("pend-aviso").hidden = true;
@@ -181,6 +186,12 @@ async function arrancarAviso() {
     return;
   }
   aplicarTema(d.tema);
+  if (d.prueba) {
+    $("prueba-aviso").textContent = "🧪 Esto es una prueba: así verás el aviso"
+      + (d.ejemplo ? ". Hoy no te falta nada; el día es de ejemplo." : " cuando te falten horas.")
+      + " Desde la prueba no se ficha.";
+    $("prueba-aviso").hidden = false;
+  }
   pintar(d);
   if (d.por_completar > 0 && d.dias.length) {
     const n = d.por_completar;

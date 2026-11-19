@@ -462,6 +462,8 @@ body.aviso h2 { font-size: 17px; }
 .todo-aviso { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
 .todo-aviso[hidden] { display: none; }
 .hecho-aviso { color: var(--exito); font-weight: 600; font-size: 15px; }
+/* "Probar el aviso": la franja que dice que es una prueba */
+.prueba-aviso { padding: 6px 10px; border-radius: 6px; background: var(--permiso-bg); color: var(--permiso-fg); font-size: 13px; }
 .ajuste-hora { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-weight: 600; }
 .modal-botones .a-la-izquierda { margin-right: auto; }
 

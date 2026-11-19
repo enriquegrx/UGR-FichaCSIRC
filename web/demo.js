@@ -230,6 +230,8 @@
   const avisoDemo = () => ({
     texto: avisoPend.length ? `Te faltan horas por fichar esta semana (${fmt(avisoPend.reduce((s, x) => s + x.falta, 0))} en total):` : "",
     minutos: 10, dias: avisoPend, pin: /[?&]pin\b/.test(location.search),
+    // ?prueba: "Probar el aviso" (no ficha); ?prueba=ejemplo: con el dia inventado
+    prueba: /[?&]prueba\b/.test(location.search), ejemplo: /[?&]prueba=ejemplo\b/.test(location.search),
     habituales: [{ wp_id: 11765, tarea: "[2026_ASG] Mantenimientos", actividad: "Actuaciones técnicas", tipico: 6.5, tipico_txt: "6,5h" },
                  { wp_id: 12065, tarea: "[ASG] Proxmox + dockers en SisGes", actividad: "Formación", tipico: 2, tipico_txt: "2h" }] });
   // ?pin: arranca bloqueada (PIN 1234)
@@ -563,6 +565,7 @@
       return espera({ ok: true, hora });
     },
     recordatorio_desactivar: () => { recDemo.activo = false; return espera({ ok: true }); },
+    recordatorio_probar: () => espera({ ok: true }),
     recordatorio_ofrecido: () => { recDemo.ofrecido = true; return espera({ ok: true }); },
     aviso_datos: () => espera(avisoDemo()),
     aviso_fichar: (iso) => { avisoPend = avisoPend.filter((x) => x.iso !== iso); return espera({ ok: true, ...avisoDemo() }); },

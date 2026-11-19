@@ -108,6 +108,10 @@ class TestHumoWeb(unittest.TestCase):
         lineas = self._correr("demo&humo", "humo_aviso.html")
         self.assertGreaterEqual(sum(1 for ln in lineas if ln.startswith("OK")), 4)
 
+    def test_aviso_de_prueba(self):
+        lineas = self._correr("demo&humo&prueba=ejemplo", "humo_aviso.html")
+        self.assertTrue(any("aviso de prueba" in ln for ln in lineas if ln.startswith("OK")))
+
     def test_pantalla_del_pin(self):
         lineas = self._correr("demo&humo&pin")
         self.assertTrue(any("PIN" in ln for ln in lineas if ln.startswith("OK")))

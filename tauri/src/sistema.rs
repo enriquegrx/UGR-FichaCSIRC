@@ -255,6 +255,26 @@ pub fn recordatorio_activar(hora: &str) -> Value {
     }
 }
 
+pub const ALTO_FRANJA_PRUEBA: f64 = 50.0;
+
+/// "Probar el aviso" sin nada pendiente: hoy, como si no se hubiera fichado
+/// (7h si hoy no se trabaja).
+pub fn aviso_de_ejemplo(cfg: &Cfg, hoy: NaiveDate) -> Vec<(NaiveDate, f64, f64)> {
+    let obj = Reglas::desde(cfg).objetivo_de(hoy);
+    vec![(hoy, 0.0, if obj > 0.0 { obj } else { 7.0 })]
+}
+
+/// La campana: abre ahora la ventanita del aviso, de prueba, con lo que falte
+/// de verdad o, si no falta nada, un dia de ejemplo (el aviso de verdad solo
+/// sale si faltan horas, y asi no hay forma de verlo). Desde la prueba no se
+/// ficha.
+pub fn recordatorio_probar() -> Value {
+    match std::process::Command::new(exe()).args(["--recordatorio", "--prueba-aviso"]).spawn() {
+        Ok(_) => json!({"ok": true}),
+        Err(x) => json!({"error": format!("No se pudo abrir el aviso: {x}")}),
+    }
+}
+
 pub fn recordatorio_desactivar() -> Value {
     let _ = ejecutar("schtasks", &["/delete", "/tn", modo::tarea_recordatorio(), "/f"]);
     json!({"ok": true})
@@ -325,11 +345,17 @@ pub async fn aviso_datos(e: &Estado, cfg: &Cfg) -> Value {
     };
     let tema = Some(cfg.texto("tema")).filter(|t| !t.is_empty()).unwrap_or("sistema".into());
     json!({"texto": candado(&e.aviso).clone(), "minutos": AVISO_MINUTOS, "dias": dias, "habituales": habituales,
-           "pin": crate::pin::guardado(cfg).is_some(), "tema": tema, "por_completar": por_completar})
+           "pin": crate::pin::guardado(cfg).is_some(), "tema": tema, "por_completar": por_completar,
+           // "Probar el aviso": no ficha; 'ejemplo' si el dia es inventado
+           "prueba": e.aviso_prueba.load(std::sync::atomic::Ordering::SeqCst),
+           "ejemplo": e.aviso_ejemplo.load(std::sync::atomic::Ordering::SeqCst)})
 }
 
 /// Desde el aviso: un apunte en ese dia; devuelve lo que sigue faltando.
 pub async fn aviso_fichar(e: &Estado, cfg: &Cfg, iso: &str, wp_id: &str, horas: &Value, actividad: &str) -> Result<Value, String> {
+    if e.aviso_prueba.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(json!({"error": "Es una prueba del aviso: desde aquí no se ficha nada."}));
+    }
     let Some(h) = crate::apuntes::horas_de(horas).filter(|h| *h > 0.0 && *h <= 24.0) else {
         return Ok(json!({"error": "Horas no válidas."}));
     };
@@ -633,6 +659,17 @@ mod tests {
         assert!(alto_aviso(1) < alto_aviso(3) && alto_aviso(3) < alto_aviso(5));
         assert_eq!(alto_aviso(5), alto_aviso(9));          // mas de cinco no hay
         assert_eq!(alto_aviso(0), alto_aviso(1));
+    }
+
+    #[test]
+    fn aviso_de_prueba_con_un_dia_de_ejemplo() {
+        let cfg = Cfg(json!({"jornada_invierno": 6, "tiene_verano": false}).as_object().unwrap().clone());
+        let jueves = NaiveDate::from_ymd_opt(2026, 11, 19).unwrap();
+        assert_eq!(aviso_de_ejemplo(&cfg, jueves), vec![(jueves, 0.0, 6.0)]);
+        // un dia en que no se trabaja (festivo): 7h, para que haya algo que enseñar
+        let cfg = Cfg(json!({"jornada_invierno": 6, "tiene_verano": false,
+                             "no_laborables": {"2026-11-19": "Fiesta"}}).as_object().unwrap().clone());
+        assert_eq!(aviso_de_ejemplo(&cfg, jueves), vec![(jueves, 0.0, 7.0)]);
     }
 
     #[test]

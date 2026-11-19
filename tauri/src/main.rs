@@ -38,6 +38,8 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let recordatorio = args.iter().any(|a| a == "--recordatorio");
     let minimizado = args.iter().any(|a| a == "--minimizado");
+    // "Probar el aviso" (campana): sale siempre, y no ficha
+    let prueba_aviso = args.iter().any(|a| a == "--prueba-aviso");
     // --recordatorio: lo lanza la tarea programada. Si no falta nada (o no hay
     // red), se sale en silencio; si falta, una ventanita encima de todo.
     let mut dias_aviso = 0;
@@ -49,8 +51,16 @@ fn main() {
                 dias_aviso = p.len();
                 estado.preparar_aviso(p)
             }
+            // la prueba, sin nada pendiente: un dia de ejemplo
+            _ if prueba_aviso => {
+                let p = sistema::aviso_de_ejemplo(&cfg, hoy);
+                dias_aviso = p.len();
+                estado.preparar_aviso(p);
+                estado.aviso_ejemplo.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
             _ => return,
         }
+        estado.aviso_prueba.store(prueba_aviso, std::sync::atomic::Ordering::SeqCst);
     }
     let mut builder = tauri::Builder::default();
     // Una sola abierta: con la ventana escondida en la bandeja, el acceso del
@@ -90,7 +100,8 @@ fn main() {
                 tauri::WebviewWindowBuilder::new(app, "aviso", tauri::WebviewUrl::App("aviso.html".into()))
                     .title("FichaCSIRC - Recordatorio")
                     // tan alta como dias trae: sin barra de desplazamiento
-                    .inner_size(660.0, sistema::alto_aviso(dias_aviso))
+                    // (la prueba lleva una franja que lo dice: su renglon de mas)
+                    .inner_size(660.0, sistema::alto_aviso(dias_aviso) + if prueba_aviso { sistema::ALTO_FRANJA_PRUEBA } else { 0.0 })
                     .resizable(false)
                     .always_on_top(true)
                     .build()?;
