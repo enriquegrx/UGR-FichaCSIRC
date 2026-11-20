@@ -1,6 +1,6 @@
 [package]
 name = "fichacsirc"
-version = "4.0.0-rc.1"
+version = "4.0.0-rc.2"
 edition = "2021"
 description = "FichaCSIRC: registro de horas en ProyectosTIC (version Rust/Tauri, en pruebas)"
 publish = false
