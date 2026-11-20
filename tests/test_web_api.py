@@ -792,12 +792,20 @@ class TestDialogos(Base):
         self.assertTrue(all("**" not in b["texto"] for b in bloques))
         # Si falta en un build, en la app saldria "No se encontro..."
         raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        for f in (".github/workflows/release.yml", ".github/workflows/experimento.yml",
+        for f in (".github/workflows/experimento.yml",
                   "build_exe.bat", "build_macos.sh"):     # el .spec no se versiona
             with open(os.path.join(raiz, f), encoding="utf-8") as fh:
                 texto = fh.read()
             self.assertIn("NOVEDADES.md", texto, f)
             self.assertIn("TECNOLOGIA.md", texto, f)
+        # Desde la 4.0 release.yml publica la version Rust, que no los empaqueta
+        # aparte: van dentro del ejecutable (include_str!), asi que no pueden faltar.
+        with open(os.path.join(raiz, "tauri", "src", "ayuda.rs"), encoding="utf-8") as fh:
+            rust = fh.read()
+        self.assertIn('include_str!("../../NOVEDADES.md")', rust)
+        self.assertIn('include_str!("../../TECNOLOGIA.md")', rust)
+        with open(os.path.join(raiz, ".github", "workflows", "release.yml"), encoding="utf-8") as fh:
+            self.assertIn("--features produccion", fh.read())
 
     def test_buscar_por_numero_de_tarea(self):
         w = {"id": 11754, "subject": "[2026_ATE] Mantenimientos",
