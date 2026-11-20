@@ -1,4 +1,8 @@
-; Ganchos del instalador NSIS de Tauri.
+﻿; Ganchos del instalador NSIS de Tauri.
+;
+; (Este fichero va en UTF-8 CON BOM a proposito: Tauri lo incluye sin decir la
+; codificacion y, sin BOM, NSIS lo leeria en la pagina de codigos del equipo
+; que compila: las tildes de los mensajes saldrian rotas.)
 ;
 ; Tauri instala "solo para mi" en %LOCALAPPDATA%\<producto>; la 3.x (Inno
 ; Setup) instala en %LOCALAPPDATA%\Programs, la carpeta de Windows para los
@@ -42,6 +46,7 @@
     ; hijo suyo y con /T se mataria a si mismo. Tauri solo mira su propio
     ; ejecutable (por ruta): a la 3.x, que vive en otra carpeta, no la ve.
     ; taskkill devuelve 0 si cerro algo y 128 si ya no quedaba ninguno.
+    cerrar_fichacsirc:
     StrCpy $R9 0
     ${Do}
       nsExec::Exec '"$SYSDIR\taskkill.exe" /IM "FichaCSIRC.exe" /F'
@@ -50,6 +55,34 @@
       Sleep 500
       IntOp $R9 $R9 + 1
     ${LoopUntil} $R9 >= 10
+
+    ; ...y COMPROBAR que la 3.x se ha cerrado, que taskkill puede no poder: si el
+    ; instalador corre con menos permisos que la app (paso de verdad: abierto
+    ; desde las descargas de Firefox en una sesion de Administrador, donde
+    ; Firefox baja a integridad media y la app, lanzada desde el Explorador,
+    ; esta en alta), devuelve "Acceso denegado" y la 3.x sigue en marcha. Se
+    ; instalaba igual y quedaban la 3.x abierta y media carpeta suya sin borrar.
+    ; Un .exe en marcha no se deja abrir para escribir: asi se sabe sin
+    ; depender de taskkill. Si sigue abierta, se pide cerrarla; con "Cancelar"
+    ; no se instala nada (aun no se ha copiado ningun fichero).
+    ReadRegStr $R0 HKCU "${CLAVE_3X}" "InstallLocation"
+    ${If} $R0 == ""
+      StrCpy $R0 "$LOCALAPPDATA\Programs\FichaCSIRC"
+    ${EndIf}
+    StrCpy $R1 $R0 1 -1
+    ${If} $R1 == "\"
+      StrCpy $R0 $R0 -1
+    ${EndIf}
+    ${If} ${FileExists} "$R0\FichaCSIRC\FichaCSIRC.exe"
+      ClearErrors
+      FileOpen $R7 "$R0\FichaCSIRC\FichaCSIRC.exe" a
+      ${If} ${Errors}
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "FichaCSIRC sigue abierta y no se ha podido cerrar.$\n$\nCiérrala y pulsa Reintentar. Si tiene icono junto al reloj: botón derecho sobre él y Salir." /SD IDCANCEL IDRETRY cerrar_fichacsirc
+        Abort "FichaCSIRC sigue abierta: no se ha instalado nada. Ciérrala y vuelve a abrir el instalador."
+      ${Else}
+        FileClose $R7
+      ${EndIf}
+    ${EndIf}
   !endif
 !macroend
 
