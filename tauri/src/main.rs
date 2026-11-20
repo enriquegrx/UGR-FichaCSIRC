@@ -140,7 +140,9 @@ fn main() {
                 })
                 // --minimizado (inicio con Windows): escondida en la bandeja
                 .visible(!(minimizado && bandeja))
-                .build()?;
+                .build()
+                // sin ventana no hay programa: decirlo, no morir en silencio
+                .unwrap_or_else(|e| sistema::salir_sin_ventana(&e.to_string()));
             if bandeja {
                 sistema::poner_bandeja(app.handle())?;
             }

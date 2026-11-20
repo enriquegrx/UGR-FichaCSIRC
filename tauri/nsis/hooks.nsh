@@ -77,7 +77,7 @@
       ClearErrors
       FileOpen $R7 "$R0\FichaCSIRC\FichaCSIRC.exe" a
       ${If} ${Errors}
-        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "FichaCSIRC sigue abierta y no se ha podido cerrar.$\n$\nCiérrala y pulsa Reintentar. Si tiene icono junto al reloj: botón derecho sobre él y Salir." /SD IDCANCEL IDRETRY cerrar_fichacsirc
+        MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "FichaCSIRC sigue abierta y no se ha podido cerrar.$\n$\nCiérrala y pulsa Reintentar. Si tiene icono junto al reloj: botón derecho sobre él y Salir.$\n$\nSi no ves ni su ventana ni su icono, ciérrala desde el Administrador de tareas (Ctrl+Mayús+Esc): pestaña Detalles, FichaCSIRC.exe, Finalizar tarea." /SD IDCANCEL IDRETRY cerrar_fichacsirc
         Abort "FichaCSIRC sigue abierta: no se ha instalado nada. Ciérrala y vuelve a abrir el instalador."
       ${Else}
         FileClose $R7

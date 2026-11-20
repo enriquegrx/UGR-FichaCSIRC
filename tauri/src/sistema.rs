@@ -454,6 +454,41 @@ pub fn bandeja_guardar(app: &AppHandle, activa: bool, inicio: bool) -> Result<Va
     Ok(r)
 }
 
+/// Lo que se dice cuando la ventana no se puede crear (WebView2 no arranca).
+pub fn texto_sin_ventana(error: &str) -> String {
+    format!(
+        "FichaCSIRC no ha podido abrir su ventana.\n\n\
+         Suele pasar cuando la abre otro programa que tiene menos permisos que tu \
+         sesión: por ejemplo, un instalador lanzado desde las descargas del navegador.\n\n\
+         Cierra este aviso y ábrela desde el acceso directo del escritorio o del menú Inicio.\n\n\
+         Si tampoco se abre así, reinstala «Microsoft Edge WebView2 Runtime».\n\n\
+         Detalle: {error}"
+    )
+}
+
+/// La ventana no se ha podido crear: se dice y se sale. Antes el programa
+/// moria en silencio y parecia que "no arrancaba" (paso de verdad: en una
+/// sesion de Administrador, la app lanzada por un instalador abierto desde
+/// Firefox hereda su integridad media y ahi WebView2 no llega a crearse). Con
+/// un cuadro de Windows, que es lo unico que se puede pintar sin WebView2.
+pub fn salir_sin_ventana(error: &str) -> ! {
+    let texto = texto_sin_ventana(error);
+    #[cfg(windows)]
+    {
+        #[link(name = "user32")]
+        extern "system" {
+            fn MessageBoxW(ventana: *mut std::ffi::c_void, texto: *const u16, titulo: *const u16, tipo: u32) -> i32;
+        }
+        let ancho = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+        let (t, c) = (ancho(&texto), ancho("FichaCSIRC"));
+        // MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST
+        unsafe { MessageBoxW(std::ptr::null_mut(), t.as_ptr(), c.as_ptr(), 0x10 | 0x0001_0000 | 0x0004_0000) };
+    }
+    #[cfg(not(windows))]
+    eprintln!("{texto}");
+    std::process::exit(1)
+}
+
 pub fn mostrar(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("principal") {
         let _ = w.show();
@@ -638,6 +673,14 @@ pub fn quitar_bandeja(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sin_ventana_dice_que_hacer_y_el_detalle() {
+        let t = texto_sin_ventana("WebView2 error: 0x80010108");
+        assert!(t.contains("no ha podido abrir su ventana"));
+        assert!(t.contains("acceso directo del escritorio"));
+        assert!(t.ends_with("Detalle: WebView2 error: 0x80010108"));
+    }
 
     #[test]
     fn la_hora_y_el_ejecutable_de_la_tarea() {
