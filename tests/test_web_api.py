@@ -839,6 +839,116 @@ class TestDialogos(Base):
             # sigue en el desplegable de la sesion, ya sin estrella
             self.assertFalse(next(t for t in r["tareas"] if t["id"] == 11754)["favorita"])
 
+    def test_nueva_tarea_solo_donde_proyectostic_deja(self):
+        ps = [{"id": 42, "name": "ATE", "_links": {"createWorkPackage": {"href": "/api/v3/projects/42/work_packages/form"}}},
+              {"id": 43, "name": "Sistemas", "_links": {"self": {"href": "/api/v3/projects/43"}}}]
+        with mock.patch.object(core, "_get_todos", return_value=ps), \
+             mock.patch.object(core, "config_valor", return_value=42):
+            r = self.api.nueva_tarea_proyectos()
+        self.assertEqual(r, {"proyectos": [{"id": 42, "nombre": "ATE"}], "ultimo": 42})
+
+    def test_nueva_tarea_opciones_salen_del_formulario(self):
+        form = {"_embedded": {
+            "payload": {"_links": {"type": {"href": "/api/v3/types/1"}}},
+            "schema": {"type": {"_embedded": {"allowedValues": [
+                {"id": 1, "name": "Tarea", "color": "#1A67A3", "isMilestone": False},
+                {"id": 2, "name": "Hito", "color": "javascript:alert(1)", "isMilestone": True}]}}},
+            "validationErrors": {
+                "assignee": {"message": "Asignado a no es válido."},
+                "customField12": {"_embedded": {"errors": [{"message": "Servicio no puede estar en blanco."}]}}}}}
+        with mock.patch.object(core, "_user_id", return_value="5"), \
+             mock.patch.object(core, "formulario_tarea", return_value=form) as m_form:
+            r = self.api.nueva_tarea_opciones("42", 2)
+        # se valida con el usuario de asignado y el tipo pedido; no crea nada
+        self.assertEqual(m_form.call_args.args[0]["_links"],
+                         {"project": {"href": "/api/v3/projects/42"}, "type": {"href": "/api/v3/types/2"},
+                          "assignee": {"href": "/api/v3/users/5"}})
+        self.assertEqual(r, {"tipos": [{"id": 1, "nombre": "Tarea", "color": "#1A67A3", "hito": False},
+                                       {"id": 2, "nombre": "Hito", "color": "", "hito": True}],
+                             "tipo": 1, "asignable": False, "faltan": ["Servicio no puede estar en blanco."]})
+        with mock.patch.object(core, "_user_id", return_value="5"), \
+             mock.patch.object(core, "formulario_tarea", side_effect=core.TareaRechazada("No te deja.")):
+            self.assertEqual(self.api.nueva_tarea_opciones(42), {"error": "No te deja."})
+
+    def test_nueva_tarea_crear(self):
+        creada = {"id": 14012, "nombre": "Renovar certificado", "proyecto": "ATE", "padre": "[2026_ATE] Servicio"}
+        with mock.patch.object(core, "_user_id", return_value="5"), \
+             mock.patch.object(core, "crear_tarea", return_value=creada) as m_crear, \
+             mock.patch.object(core, "guardar_config_valores") as m_guardar:
+            # sin titulo o sin proyecto: no se llega a ProyectosTIC
+            self.assertIn("título", self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "   "})["error"])
+            self.assertIn("proyecto", self.api.nueva_tarea_crear({"titulo": "x"})["error"])
+            self.assertIn("largo", self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "x" * 256})["error"])
+            m_crear.assert_not_called()
+            r = self.api.nueva_tarea_crear({"proyecto": "42", "titulo": "  Renovar   certificado ", "tipo": 1,
+                                            "padre": 11754, "descripcion": "Caduca el 30.", "asignar": True})
+        self.assertEqual(m_crear.call_args.args[0],
+                         {"subject": "Renovar certificado", "description": {"format": "markdown", "raw": "Caduca el 30."},
+                          "_links": {"project": {"href": "/api/v3/projects/42"}, "type": {"href": "/api/v3/types/1"},
+                                     "parent": {"href": "/api/v3/work_packages/11754"},
+                                     "assignee": {"href": "/api/v3/users/5"}}})
+        self.assertEqual(r["tarea"], creada)
+        # queda en el desplegable, y la proxima vez el mismo proyecto
+        self.assertEqual(r["tareas"][0]["texto"], "14012 - Renovar certificado")
+        m_guardar.assert_called_once_with({"nueva_tarea_proyecto": 42})
+        # lo minimo: titulo y proyecto, sin asignar
+        with mock.patch.object(core, "crear_tarea", return_value=creada) as m_crear, \
+             mock.patch.object(core, "guardar_config_valores"):
+            self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra"})
+        self.assertEqual(m_crear.call_args.args[0],
+                         {"subject": "Otra", "_links": {"project": {"href": "/api/v3/projects/42"}}})
+        # ProyectosTIC la rechaza: su motivo, no una excepcion
+        with mock.patch.object(core, "crear_tarea", side_effect=core.TareaRechazada("Tipo no es válido.")):
+            self.assertEqual(self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra"}),
+                             {"error": "Tipo no es válido."})
+        # sin respuesta: que no la repita a ciegas
+        with mock.patch.object(core, "crear_tarea", side_effect=core.requests.Timeout()):
+            self.assertIn("llegó a crearse", self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra"})["error"])
+
+    def test_nueva_tarea_a_favoritas(self):
+        creada = {"id": 14012, "nombre": "Renovar certificado", "proyecto": "ATE", "padre": ""}
+        favs = []
+        with mock.patch.object(core, "crear_tarea", return_value=creada), \
+             mock.patch.object(core, "FAVORITOS", favs), \
+             mock.patch.object(core, "guardar_config_valor"), \
+             mock.patch.object(core, "guardar_config_valores"):
+            r = self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Renovar certificado", "favorita": True})
+        self.assertEqual(favs, [{"id": 14012, "nombre": "Renovar certificado"}])
+        self.assertTrue(next(t for t in r["tareas"] if t["id"] == 14012)["favorita"])
+
+    def test_por_que_no_se_creo_la_tarea(self):
+        uno = '{"_type":"Error","message":"Asunto no puede estar en blanco."}'
+        varios = ('{"message":"Multiple field constraints have been violated.","_embedded":{"errors":'
+                  '[{"message":"Tipo no es válido."},{"message":"Servicio no puede estar en blanco."}]}}')
+        self.assertEqual(core.mensaje_error_tarea(uno, 422), "Asunto no puede estar en blanco.")
+        self.assertEqual(core.mensaje_error_tarea(varios, 422), "Tipo no es válido. Servicio no puede estar en blanco.")
+        self.assertEqual(core.mensaje_error_tarea("<html>", 422), "ProyectosTIC no ha aceptado la tarea (error 422).")
+        self.assertIn("no te deja crear tareas", core.mensaje_error_tarea(uno, 403))
+        self.assertIn("no encuentra el proyecto", core.mensaje_error_tarea("", 404))
+        # y asi lo dice al crear: 422 con su motivo; 500, error del servidor
+        resp = mock.Mock(status_code=422, text=uno)
+        with mock.patch.object(core.requests, "post", return_value=resp):
+            with self.assertRaises(core.TareaRechazada) as cm:
+                core.crear_tarea({"subject": ""})
+        self.assertEqual(str(cm.exception), "Asunto no puede estar en blanco.")
+
+    def test_abrir_tarea_solo_en_proyectostic(self):
+        with mock.patch.object(web.webbrowser, "open") as m_open, \
+             mock.patch.object(core, "BASE_URL", "https://proyectostic.ugr.es/"):
+            self.api.abrir_tarea("14012")
+            self.api.abrir_alta_tarea(42, 1)
+            for malo in ("../../otra", "0", None):
+                with self.assertRaises(ValueError):
+                    self.api.abrir_tarea(malo)
+        self.assertEqual([c.args[0] for c in m_open.call_args_list],
+                         ["https://proyectostic.ugr.es/work_packages/14012",
+                          "https://proyectostic.ugr.es/projects/42/work_packages/new?type=1"])
+        with mock.patch.object(web.webbrowser, "open") as m_open, \
+             mock.patch.object(core, "BASE_URL", "file:///c:/x"):
+            with self.assertRaises(ValueError):
+                self.api.abrir_tarea(1)
+        m_open.assert_not_called()
+
     def test_abrir_github_solo_el_repo(self):
         with mock.patch.object(web.webbrowser, "open") as m_open:
             self.api.abrir_github("releases")

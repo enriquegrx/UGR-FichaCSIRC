@@ -543,7 +543,7 @@ body.arrastrando .dia, body.arrastrando .celda { transition: none; }
                   background: var(--tooltip-bg); color: var(--tooltip-fg); border-radius: 8px; padding: 9px 10px 9px 16px;
                   box-shadow: 0 6px 20px rgba(15, 23, 42, .25); font-size: 14px; }
 .aviso-deshacer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.aviso-deshacer .enlace { color: var(--tooltip-enlace); font-weight: 600; }
+.aviso-deshacer .enlace { color: var(--tooltip-enlace); font-weight: 600; flex: none; white-space: nowrap; }
 .aviso-deshacer .cerrar-aviso { border: 0; background: none; color: var(--tooltip-x); font-size: 18px; padding: 0 4px; }
 
 /* semana anterior con huecos: aviso bajo la cabecera de Dias */
@@ -614,6 +614,14 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .bt-id { color: var(--tenue); font-variant-numeric: tabular-nums; }
 .bt-ruta { font-size: 12px; color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-nada { padding: 5px 12px 7px; color: var(--tenue); }
+/* fila sin estrella (las tareas del proyecto, en Nueva tarea) */
+.bt-item.sin-fav { padding-left: 12px; }
+/* "Crear la tarea «...»": al final de la lista, separada */
+.bt-crear { border-top: 1px solid var(--borde-suave); margin-top: 4px; padding-top: 7px; padding-bottom: 7px; align-items: center; }
+.bt-crear .bt-nombre b { font-weight: 600; }
+.bt-mas { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+          background: var(--primario); color: #fff; font-size: 15px; font-weight: 700; line-height: 1; }
+:root[data-tema="oscuro"] .bt-mas, :root:not([data-tema="claro"]).sistema-oscuro .bt-mas { color: #10151b; }
 /* comentarios usados con la tarea (campo Comentario): una linea cada uno */
 .lista-comentarios .bt-item { display: block; padding: 6px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-fila.quitada .ed-tarea { text-decoration: line-through; color: var(--tenue); }
@@ -943,3 +951,58 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
 .mes-barra.parcial { background: var(--aviso); }
 .mes-barra.nolab { background: var(--tenue); }
 .estad-detalles { list-style: none; padding: 0; margin: 0; font-size: 13px; display: grid; gap: 4px; }
+
+/* ---------- nueva tarea (se crea en ProyectosTIC) ---------- */
+.campo-tarea button { flex: none; white-space: nowrap; }
+.b-nueva span { color: var(--primario); font-weight: 700; }
+.nt { display: flex; flex-direction: column; gap: 14px; padding: 2px 0 6px; }
+.nt-intro { margin: 0; color: var(--tenue); font-size: 13px; }
+.nt-cargando { margin: 18px 0; }
+.nt-campo { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.nt-rot { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+          font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--tenue); }
+.nt-rot .opc { text-transform: none; letter-spacing: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.nt-titulo { width: 100%; font-size: 17px; font-weight: 600; padding: 9px 11px; }
+.nt-titulo::placeholder { font-weight: 400; }
+.nt-dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 14px; align-items: start; }
+.nt-dos select { width: 100%; }
+/* el tipo: pastillas con el color que tiene en ProyectosTIC (un rombo si es hito) */
+.nt-tipos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 33px; }
+.nt-tipo { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; padding: 5px 12px 5px 10px; font-size: 13px; }
+.nt-tipo i, .nt-sello i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--tipo, var(--tenue)); }
+.nt-tipo.hito i, .nt-sello.hito i { border-radius: 1px; transform: rotate(45deg) scale(.9); }
+.nt-tipo[aria-checked="true"] { background: var(--seleccion); border-color: var(--primario);
+                                box-shadow: inset 0 0 0 1px var(--primario); font-weight: 600; }
+.nt-padre { position: relative; display: flex; }
+.nt-padre input { flex: 1; padding-right: 30px; }
+.nt-quitar { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); border: 0; background: none;
+             padding: 2px 7px; color: var(--tenue); font-size: 17px; line-height: 1; }
+.nt-quitar:hover:not(:disabled) { background: none; color: var(--texto); }
+.nt-desc { font: inherit; color: inherit; width: 100%; min-height: 66px; max-height: 220px; resize: vertical;
+           border: 1px solid var(--borde); border-radius: 6px; padding: 7px 9px; background: var(--panel); }
+.nt-desc:focus { outline: 2px solid var(--primario); outline-offset: 1px; }
+.nt-opciones { display: flex; flex-wrap: wrap; gap: 6px 24px; }
+/* como va a quedar: una ficha con el color del tipo en el canto */
+.nt-vista { display: flex; flex-direction: column; gap: 5px; padding: 11px 14px 12px;
+            border: 1px solid var(--borde); border-left: 4px solid var(--tipo, var(--primario)); border-radius: 8px;
+            background: var(--apunte-hover); }
+.nt-vista-rot { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--tenue); }
+.nt-vista-tit { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 15px; font-weight: 600; }
+.nt-sello { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .4px; color: var(--tenue); }
+.nt-vista-tit .txt { min-width: 0; overflow-wrap: anywhere; }
+.nt-vista-tit .txt.vacio { color: var(--tenue); font-weight: 400; font-style: italic; }
+.nt-ruta { font-size: 13px; overflow-wrap: anywhere; }
+.nt-marcas { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 3px; }
+.nt-aviso, .nt-error { border-radius: 8px; padding: 9px 12px; font-size: 13px; }
+.nt-aviso { background: var(--permiso-bg); color: var(--permiso-fg); }
+.nt-aviso ul { margin: 4px 0 6px; padding-left: 20px; }
+.nt-aviso .enlace { color: inherit; font-weight: 600; padding: 0; }
+.nt-error { background: var(--peligro-bg); color: var(--peligro); border: 1px solid var(--peligro-borde); }
+.nt-error .enlace { color: inherit; font-weight: 600; }
+/* sin permiso en ningun proyecto */
+.nt-sin { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 18px 12px 10px; }
+.nt-sin-ico { font-size: 34px; line-height: 1; margin-bottom: 4px; }
+.nt-sin b { font-size: 15px; }
+.nt-sin p { margin: 0; max-width: 46ch; font-size: 13px; }
+@media (max-width: 560px) { .nt-dos { grid-template-columns: minmax(0, 1fr); } }

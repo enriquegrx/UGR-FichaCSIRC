@@ -1477,7 +1477,11 @@ async function dlgPin(opciones) {
 // para marcarla o quitarla de favoritas. alElegir(t) recibe {id, nombre}.
 // La lista va en <body> con position: fixed: dentro de un dialogo, su cuerpo
 // con scroll la recortaria.
-function buscadorTarea(input, { alElegir }) {
+/* fuente: en vez de habituales/usadas/favoritas/todo ProyectosTIC, una lista
+   propia: () => ({ titulo, tareas (null: cargando), vacio(q) }). La usa "Cuelga
+   de" en Nueva tarea, con las tareas del proyecto. Sin fuente, y si ProyectosTIC
+   deja crear tareas, al final se ofrece crear una con lo escrito. */
+function buscadorTarea(input, { alElegir, fuente = null }) {
   input.removeAttribute("list");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("role", "combobox");
@@ -1491,6 +1495,10 @@ function buscadorTarea(input, { alElegir }) {
 
   function grupos(q) {
     const encaja = (t) => !q || normal(`${t.id} ${t.nombre}`).includes(q);
+    if (fuente) {
+      const f = fuente();
+      return [[f.titulo, f.tareas === null ? null : f.tareas.filter(encaja).slice(0, 80)]];
+    }
     const max = q ? 8 : 5;
     const vistas = new Set();
     const tomar = (lista) => lista.filter((t) => t && t.id && !vistas.has(String(t.id)) && encaja(t))
@@ -1530,7 +1538,8 @@ function buscadorTarea(input, { alElegir }) {
     const nodos = [];
     for (const [titulo, lista] of grupos(q)) {
       if (lista === null) {
-        nodos.push(el("div", { class: "bt-grupo", text: titulo }), el("div", { class: "bt-nada", text: "Buscando…" }));
+        nodos.push(el("div", { class: "bt-grupo", text: titulo }),
+                   el("div", { class: "bt-nada", text: fuente ? "Cargando…" : "Buscando…" }));
         continue;
       }
       if (!lista.length) {
@@ -1545,18 +1554,18 @@ function buscadorTarea(input, { alElegir }) {
         const i = items.length;
         items.push(t);
         const fav = st.favoritas?.has(Number(t.id));
-        const estrella = el("button", { class: `bt-fav${fav ? " si" : ""}`, type: "button", tabindex: "-1",
+        const estrella = fuente ? null : el("button", { class: `bt-fav${fav ? " si" : ""}`, type: "button", tabindex: "-1",
           title: fav ? "Quitar de favoritas" : "Añadir a favoritas", text: fav ? "★" : "☆" });
-        estrella.addEventListener("mousedown", (e) => e.preventDefault());
-        estrella.addEventListener("click", async (e) => {
+        estrella?.addEventListener("mousedown", (e) => e.preventDefault());
+        estrella?.addEventListener("click", async (e) => {
           e.stopPropagation();
           const r = await llamar("favorita", t.id, t.nombre, !fav);
           ponerTareas(r.tareas);
           estado(fav ? `«${t.nombre}» ya no es favorita.` : `«${t.nombre}» añadida a favoritas.`);
           pintar();
         });
-        const ruta = [t.proyecto, t.padre].filter(Boolean).join(" › ");
-        const fila = el("div", { class: `bt-item${i === activo ? " activo" : ""}`, role: "option" },
+        const ruta = (fuente ? [t.padre] : [t.proyecto, t.padre]).filter(Boolean).join(" › ");
+        const fila = el("div", { class: `bt-item${fuente ? " sin-fav" : ""}${i === activo ? " activo" : ""}`, role: "option" },
           estrella,
           el("div", { class: "bt-texto" },
             el("div", { class: "bt-nombre" }, el("span", { class: "bt-id", text: String(t.id) }), ` ${t.nombre}`),
@@ -1566,8 +1575,20 @@ function buscadorTarea(input, { alElegir }) {
       }
     }
     if (!nodos.length) {
-      nodos.push(el("div", { class: "bt-nada", text: q
+      nodos.push(el("div", { class: "bt-nada", text: fuente ? fuente().vacio(q) : q
         ? "Sin resultados." : "Escribe un nombre o un número de tarea: se busca en todo ProyectosTIC." }));
+    }
+    // lo escrito no es (o puede que no sea) ninguna: crearla ahi mismo
+    if (!fuente && q && !/^\d+$/.test(q) && puedeCrearTareas()) {
+      const i = items.length, titulo = input.value.trim().replace(/^#/, "");
+      items.push({ crear: true, titulo });
+      const fila = el("div", { class: `bt-item bt-crear${i === activo ? " activo" : ""}`, role: "option" },
+        el("span", { class: "bt-mas", "aria-hidden": "true", text: "＋" }),
+        el("div", { class: "bt-texto" },
+          el("div", { class: "bt-nombre" }, "Crear la tarea ", el("b", { text: `«${titulo}»` })),
+          el("div", { class: "bt-ruta", text: "Nueva en ProyectosTIC" })));
+      fila.addEventListener("mousedown", (e) => { e.preventDefault(); elegir(items[i]); });
+      nodos.push(fila);
     }
     caja.replaceChildren(...nodos);
     caja.hidden = false;
@@ -1576,6 +1597,7 @@ function buscadorTarea(input, { alElegir }) {
   }
 
   function buscarFuera() {
+    if (fuente) return;
     const q = consulta();
     clearTimeout(espera);
     if (!q) { remoto = { q: "", tareas: null, error: "" }; return; }   // desde la 1.a letra
@@ -1599,6 +1621,11 @@ function buscadorTarea(input, { alElegir }) {
   }
 
   function elegir(t) {
+    if (t.crear) {
+      cerrar();
+      dlgNuevaTarea({ titulo: t.titulo, alCrear: (nueva) => { input.value = `${nueva.id} - ${nueva.nombre}`; return alElegir(nueva); } });
+      return;
+    }
     input.value = `${t.id} - ${t.nombre}`;
     cerrar();
     alElegir(t);
@@ -1632,6 +1659,8 @@ function buscadorTarea(input, { alElegir }) {
   // si el campo desaparece (se cierra el dialogo), su lista tambien
   new MutationObserver(() => { if (!input.isConnected) { caja.remove(); } })
     .observe(document.body, { childList: true, subtree: true });
+  // para quien cambia la fuente por debajo (llegan las tareas del proyecto)
+  return { repintar: () => { if (!caja.hidden) pintar(); } };
 }
 
 // ================================================================ buscar tarea
@@ -1645,8 +1674,18 @@ function dlgBuscar({ alElegir = null } = {}) {
   const lista = el("select", { multiple: true, size: "14", class: "lista" });
   const info = nota("Cargando proyectos…");
   const fav = el("input", { type: "checkbox" });
-  const d = dialogo({ titulo: "Buscar tarea", ancho: 640, botones: [cancelarBoton,
+  const d = dialogo({ titulo: "Buscar tarea", ancho: 640, botones: [
+    { texto: "＋ Nueva tarea…", izquierda: true, id: "nueva", accion: nueva }, cancelarBoton,
     { texto: "Elegir", clase: "primario", accion: elegir }] });
+  d.botones.nueva.title = "Si no existe, créala en ProyectosTIC";
+  d.botones.nueva.hidden = !puedeCrearTareas();
+  // en el proyecto que se esta mirando, con lo escrito en el filtro de titulo
+  function nueva() {
+    dlgNuevaTarea({ proyecto: proy.value, titulo: filtro.value.trim(), alCrear: (t) => {
+      d.cerrar();
+      return alElegir ? alElegir(t) : usarTareaEnFormulario(t);
+    } });
+  }
   d.cuerpo.append(
     rejilla(["Proyecto", proy],
             ["Filtro", el("div", { class: "fila" }, filtro,
@@ -1707,6 +1746,285 @@ function dlgBuscar({ alElegir = null } = {}) {
                        : `${elegidas.length} tarea(s) añadida(s) al desplegable.`);
   }
   filtro.focus();
+}
+
+// ================================================================ nueva tarea
+
+const puedeCrearTareas = () => !!st.crear?.proyectos?.length;
+
+// La tarea, al formulario de Añadir apunte: solo faltan las horas.
+async function usarTareaEnFormulario(t) {
+  $("tarea").value = textoDeTarea(t.id) || `${t.id} - ${t.nombre}`;
+  await elegirTarea();
+  if (!pila.length) $("horas").focus();
+}
+
+/* Crear una tarea en ProyectosTIC sin salir de FichaCSIRC. Solo en los
+   proyectos en los que ProyectosTIC deja (el permiso va por proyecto y rol).
+   Los tipos, el que viene por defecto, si se le puede asignar a uno mismo y lo
+   que falta los dice el formulario de ProyectosTIC, que no crea nada. Abajo se
+   ve como va a quedar antes de crearla: no se deshace desde aqui.
+   titulo / proyecto: lo que ya se sabe (lo escrito en el buscador, el proyecto
+   de Buscar tarea). alCrear(tarea): quien lo abre se queda con ella; sin el,
+   va al formulario de Añadir apunte. */
+function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
+  const d = dialogo({ titulo: "Nueva tarea", ancho: 600, botones: [
+    { texto: "Cancelar", id: "no", accion: (dd) => dd.cerrar() },
+    { texto: "Crear tarea", clase: "primario", id: "crear", accion: crear }] });
+  d.botones.crear.disabled = true;
+  const cargando = el("p", { class: "nt-cargando tenue", text: "Mirando en qué proyectos puedes crear tareas…" });
+  d.cuerpo.append(cargando);
+
+  const tit = entrada(titulo, { class: "nt-titulo", maxlength: "255", placeholder: "Título de la tarea",
+                                "aria-label": "Título de la tarea" });
+  const cuenta = el("span", { class: "opc" });
+  const proy = el("select", { "aria-label": "Proyecto" });
+  const tipos = el("div", { class: "nt-tipos", role: "radiogroup", "aria-label": "Tipo" });
+  const padre = entrada("", { placeholder: "Busca una tarea del proyecto, por nombre o número",
+                              "aria-label": "Tarea de la que cuelga" });
+  const quitar = el("button", { type: "button", class: "nt-quitar", title: "Que no cuelgue de ninguna",
+                                "aria-label": "Que no cuelgue de ninguna", text: "×", hidden: true });
+  const desc = el("textarea", { class: "nt-desc", rows: "3", "aria-label": "Descripción",
+                                placeholder: "Lo que haya que saber de la tarea." });
+  const asignar = el("input", { type: "checkbox" });
+  const notaAsignar = el("span", { class: "tenue" });
+  const fav = el("input", { type: "checkbox" });
+  const vista = el("div", { class: "nt-vista" });
+  const aviso = el("div", { class: "nt-aviso", role: "status", hidden: true });
+  const error = el("div", { class: "nt-error", role: "alert", hidden: true });
+
+  let ops = null;            // lo que dice ProyectosTIC de este proyecto y tipo (null: preguntando)
+  let tipoSel = null;        // id del tipo elegido
+  let padreSel = null;       // {id, nombre} de la tarea de la que cuelga
+  let tareasProy = null;     // tareas del proyecto (null: cargando)
+  let quiereAsignar = true, pendiente = false, creando = false, errorCrear = "", seq = 0;
+
+  const proyectoSel = () => st.crear.proyectos.find((p) => String(p.id) === proy.value);
+  const tipoActual = () => ops?.tipos?.find((t) => t.id === tipoSel) || null;
+  const tituloLimpio = () => tit.value.trim().replace(/\s+/g, " ");
+
+  // ---- como va a quedar ----
+  function pintarVista() {
+    const t = tipoActual(), p = proyectoSel(), texto = tituloLimpio();
+    vista.style.setProperty("--tipo", t?.color || "");
+    vista.replaceChildren(
+      el("div", { class: "nt-vista-rot", text: "Así quedará en ProyectosTIC" }),
+      el("div", { class: "nt-vista-tit" },
+        t ? el("span", { class: `nt-sello${t.hito ? " hito" : ""}` }, el("i"), t.nombre) : null,
+        el("span", { class: `txt${texto ? "" : " vacio"}`, text: texto || "Sin título todavía" })),
+      el("div", { class: "nt-ruta" },
+        el("span", { text: p ? p.nombre : "" }),
+        padreSel ? el("span", { text: ` › ${padreSel.nombre}` })
+                 : el("span", { class: "tenue", text: " · directamente en el proyecto" })),
+      el("div", { class: "nt-marcas" },
+        el("span", { class: "chip chip-tele", text: asignar.checked ? "👤 Asignada a ti" : "Sin asignar" }),
+        fav.checked ? el("span", { class: "chip chip-permiso", text: "★ En tus favoritas" }) : null));
+    cuenta.textContent = tit.value.length > 200 ? `${tit.value.length} / 255` : "";
+    d.botones.crear.disabled = creando || pendiente || !ops || !!ops.error || !!ops.faltan?.length;
+  }
+
+  function pintarTipos() {
+    if (!ops || ops.error || !ops.tipos.length) {
+      tipos.replaceChildren(el("span", { class: "tenue", text: ops ? "—" : "Cargando…" }));
+      return;
+    }
+    tipos.replaceChildren(...ops.tipos.map((t) => {
+      const b = el("button", { type: "button", class: `nt-tipo${t.hito ? " hito" : ""}`, role: "radio",
+        "aria-checked": String(t.id === tipoSel), tabindex: t.id === tipoSel ? "0" : "-1" }, el("i"), t.nombre);
+      if (t.color) b.style.setProperty("--tipo", t.color);
+      b.onclick = () => elegirTipo(t.id);
+      return b;
+    }));
+  }
+
+  function pintarAvisos() {
+    const msg = ops?.error || errorCrear;
+    error.hidden = !msg;
+    error.replaceChildren(el("span", { text: msg }),
+      ops?.error ? el("button", { type: "button", class: "enlace", text: "Reintentar", onclick: cargarProyecto }) : null);
+    const faltan = ops?.faltan || [];
+    aviso.hidden = !faltan.length;
+    if (faltan.length) {
+      const t = tipoActual();
+      aviso.replaceChildren(
+        el("b", { text: `ProyectosTIC pide algo más para ${t ? `una tarea de tipo «${t.nombre}»` : "esta tarea"}, y FichaCSIRC no lo rellena:` }),
+        el("ul", {}, ...faltan.map((m) => el("li", { text: m }))),
+        el("span", { text: ops.tipos.length > 1 ? "Elige otro tipo o créala en la web: " : "Créala en la web: " }),
+        el("button", { type: "button", class: "enlace", text: "abrir el alta en ProyectosTIC ↗",
+                       onclick: () => llamar("abrir_alta_tarea", proy.value, tipoSel).catch(() => {}) }));
+    }
+    // asignarsela: solo si el proyecto deja (lo dice su formulario)
+    const puede = !ops || !!ops.error || ops.asignable !== false;
+    asignar.disabled = !puede;
+    asignar.checked = puede && quiereAsignar;
+    notaAsignar.textContent = puede ? "" : " (en este proyecto no se te pueden asignar)";
+  }
+
+  function pintar() { pintarTipos(); pintarAvisos(); pintarVista(); }
+
+  // ---- lo que dice ProyectosTIC ----
+  async function opciones(tipo) {
+    const mio = ++seq;
+    let r;
+    try { r = await api().nueva_tarea_opciones(proy.value, tipo); }
+    catch (e) { r = { error: `No se pudo preguntar a ProyectosTIC (${(e && e.message) || "sin conexión"}).` }; }
+    return mio === seq ? r : null;
+  }
+
+  async function cargarProyecto() {
+    const pid = proy.value;
+    ops = null; tipoSel = null; tareasProy = null; errorCrear = ""; pendiente = false;
+    ponerPadre(null);
+    pintar();
+    // de cual puede colgar: las tareas del proyecto (aparte: tardan mas)
+    api().tareas_de_proyecto(pid).then((r) => r.tareas || [], () => []).then((ts) => {
+      if (proy.value !== pid) return;
+      tareasProy = ts;
+      listaPadre.repintar();
+    });
+    const r = await opciones(null);
+    if (!r) return;
+    ops = r.error ? { error: r.error, tipos: [], faltan: [] } : r;
+    tipoSel = r.tipo ?? r.tipos?.[0]?.id ?? null;
+    pintar();
+  }
+
+  async function elegirTipo(id, foco = false) {
+    if (id === tipoSel || !ops) return;
+    tipoSel = id;
+    pendiente = true; errorCrear = "";
+    ops = { ...ops, faltan: [] };
+    pintar();
+    if (foco) tipos.querySelector('[aria-checked="true"]')?.focus();
+    const r = await opciones(id);
+    if (!r) return;
+    pendiente = false;
+    ops = r.error ? { ...ops, error: r.error } : { ...ops, error: "", faltan: r.faltan, asignable: r.asignable };
+    pintar();
+  }
+
+  tipos.addEventListener("keydown", (e) => {
+    const paso = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+    if (!paso || !ops?.tipos?.length) return;
+    e.preventDefault();
+    const n = ops.tipos.length, i = ops.tipos.findIndex((t) => t.id === tipoSel);
+    elegirTipo(ops.tipos[(i + paso + n) % n].id, true);
+  });
+
+  // ---- de cual cuelga ----
+  function ponerPadre(t) {
+    padreSel = t ? { id: t.id, nombre: t.nombre } : null;
+    padre.value = t ? `${t.id} - ${t.nombre}` : "";
+    quitar.hidden = !t;
+    pintarVista();
+  }
+  const listaPadre = buscadorTarea(padre, { alElegir: ponerPadre, fuente: () => ({
+    titulo: "Tareas del proyecto", tareas: tareasProy,
+    vacio: (q) => (q ? "Ninguna tarea del proyecto con eso." : "Este proyecto aún no tiene tareas.") }) });
+  // lo escrito sin elegir no vale: o la elegida, o ninguna
+  padre.addEventListener("blur", () => setTimeout(() => {
+    if (!padre.value.trim()) ponerPadre(null);
+    else padre.value = padreSel ? `${padreSel.id} - ${padreSel.nombre}` : "";
+  }, 160));
+  quitar.onclick = () => { ponerPadre(null); padre.focus(); };
+
+  // ---- crear ----
+  async function crear() {
+    if (!tituloLimpio()) {
+      errorCrear = "Escribe el título de la tarea.";
+      pintarAvisos();
+      tit.focus();
+      return;
+    }
+    creando = true; errorCrear = "";
+    d.botones.crear.textContent = "Creando…";
+    pintarAvisos();
+    let r;
+    try {
+      r = await llamar("nueva_tarea_crear", { proyecto: proy.value, titulo: tituloLimpio(), tipo: tipoSel,
+        padre: padreSel ? padreSel.id : null, descripcion: desc.value, asignar: asignar.checked, favorita: fav.checked });
+    } finally {
+      creando = false;
+      d.botones.crear.textContent = "Crear tarea";
+    }
+    if (r.error) { errorCrear = r.error; pintarAvisos(); return; }
+    ponerTareas(r.tareas);
+    st.crear.ultimo = Number(proy.value);
+    cerrarDeVerdad();
+    await (alCrear ? alCrear(r.tarea) : usarTareaEnFormulario(r.tarea));
+    if (!pila.length) $("horas").focus();
+    avisoTareaCreada(r.tarea);
+  }
+
+  // Con una descripcion escrita, cerrar pregunta antes (Esc, la X o Cancelar).
+  const cerrarDeVerdad = d.cerrar;
+  let preguntando = false;
+  d.cerrar = async () => {
+    if (preguntando) return;
+    if (desc.value.trim()) {
+      preguntando = true;
+      const si = await preguntar("Descartar la tarea", "Has escrito una descripción y la tarea aún no se ha creado.",
+                                 { si: "Descartar", no: "Seguir escribiendo" });
+      preguntando = false;
+      if (!si) { desc.focus(); return; }
+    }
+    cerrarDeVerdad();
+  };
+
+  tit.addEventListener("input", () => { errorCrear = ""; pintarAvisos(); pintarVista(); });
+  tit.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); d.botones.crear.click(); } });
+  desc.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); d.botones.crear.click(); }
+  });
+  proy.onchange = cargarProyecto;
+  asignar.onchange = () => { quiereAsignar = asignar.checked; pintarVista(); };
+  fav.onchange = pintarVista;
+
+  function montar() {
+    const opcional = () => el("span", { class: "opc", text: "opcional" });
+    const campo = (rotulo, control, extra = null) => el("div", { class: "nt-campo" },
+      el("div", { class: "nt-rot" }, el("span", { text: rotulo }), extra), control);
+    cargando.remove();
+    d.cuerpo.append(el("div", { class: "nt" },
+      el("p", { class: "nt-intro", text: "Se da de alta en ProyectosTIC y queda lista para fichar en ella." }),
+      campo("Título", tit, cuenta),
+      el("div", { class: "nt-dos" }, campo("Proyecto", proy), campo("Tipo", tipos)),
+      aviso,
+      campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar), opcional()),
+      campo("Descripción", desc, opcional()),
+      el("div", { class: "nt-opciones" },
+        el("label", { class: "check" }, asignar, " Asignármela", notaAsignar),
+        el("label", { class: "check" }, fav, " Guardarla en mis favoritas")),
+      vista, error));
+  }
+
+  function sinPermiso() {
+    cargando.remove();
+    d.botones.crear.hidden = true;
+    d.botones.no.textContent = "Cerrar";
+    d.cuerpo.append(el("div", { class: "nt-sin" },
+      el("div", { class: "nt-sin-ico", "aria-hidden": "true", text: "🔒" }),
+      el("b", { text: "ProyectosTIC no te deja crear tareas" }),
+      el("p", { class: "tenue", text: "Ninguno de tus proyectos te da ese permiso. Lo concede quien administra "
+        + "cada proyecto, con un rol que incluya «Añadir paquetes de trabajo»." }),
+      el("p", { class: "tenue", text: "Mientras tanto puedes fichar en las tareas que ya existen: «Buscar…»." })));
+  }
+
+  (async () => {
+    try { st.crear = await llamar("nueva_tarea_proyectos"); }
+    catch (_e) { cerrarDeVerdad(); return; }
+    $("b-nueva").hidden = !puedeCrearTareas();
+    if (!pila.includes(d)) return;                    // se cerro mientras tanto
+    if (!puedeCrearTareas()) { sinPermiso(); return; }
+    const ps = st.crear.proyectos;
+    proy.replaceChildren(...ps.map((p) => el("option", { value: String(p.id), text: p.nombre })));
+    // el proyecto que se estaba mirando; si no, el de la ultima vez
+    const preferido = [proyecto, st.crear.ultimo].map(String).find((x) => ps.some((p) => String(p.id) === x));
+    if (preferido) proy.value = preferido;
+    montar();
+    tit.focus();
+    cargarProyecto();
+  })();
 }
 
 // ================================================================ copiar
@@ -2404,6 +2722,7 @@ function dlgAtajos() {
   const filas = [["Enter", "Añadir el apunte (desde Horas o Comentario)"],
     ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…); otra vez, lo anterior (hasta 20)"],
     ["Ctrl+F", "Buscar en tus apuntes del año (comentario, tarea, actividad o fecha)"],
+    ["Ctrl+N", "Crear una tarea nueva en ProyectosTIC (si tienes permiso en algún proyecto)"],
     ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],

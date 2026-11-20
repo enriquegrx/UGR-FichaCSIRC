@@ -3,7 +3,7 @@
 use crate::config::Cfg;
 use crate::reglas::{redondear, Apunte};
 use base64::Engine;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
@@ -179,14 +179,19 @@ impl Cliente {
         }
     }
 
-    async fn enviar(&self, metodo: reqwest::Method, ruta: &str, cuerpo: Option<&Value>, oks: &[u16]) -> Result<Value, ErrorOp> {
+    /// Una peticion que escribe: el codigo y el texto de la respuesta, sin interpretar.
+    async fn enviar_crudo(&self, metodo: reqwest::Method, ruta: &str, cuerpo: Option<&Value>) -> Result<(u16, String), ErrorOp> {
         let mut pet = self.http.request(metodo, format!("{}{ruta}", self.base)).header("Authorization", &self.auth);
         if let Some(c) = cuerpo {
             pet = pet.json(c);
         }
         let resp = pet.send().await.map_err(desde_reqwest)?;
         let codigo = resp.status().as_u16();
-        let texto = resp.text().await.unwrap_or_default();
+        Ok((codigo, resp.text().await.unwrap_or_default()))
+    }
+
+    async fn enviar(&self, metodo: reqwest::Method, ruta: &str, cuerpo: Option<&Value>, oks: &[u16]) -> Result<Value, ErrorOp> {
+        let (codigo, texto) = self.enviar_crudo(metodo, ruta, cuerpo).await?;
         if !oks.contains(&codigo) {
             if codigo == 401 || codigo == 403 || codigo >= 500 {
                 return Err(ErrorOp::Http(codigo));
@@ -250,6 +255,129 @@ impl Cliente {
     pub async fn actividades(&self, wp_id: &str) -> Result<Vec<String>, ErrorOp> {
         Ok(self.actividades_href(wp_id).await?.into_iter().map(|(n, _)| n).collect())
     }
+
+    // ---- crear tareas ----
+
+    /// Los proyectos en los que ProyectosTIC deja a este usuario crear tareas
+    /// (permiso "añadir paquetes de trabajo", que va por proyecto y rol).
+    pub async fn proyectos_crear(&self) -> Result<Vec<Value>, ErrorOp> {
+        Ok(self.get_todos("/api/v3/projects", vec![]).await?.iter().filter_map(proyecto_crear).collect())
+    }
+
+    /// POST que crea o valida una tarea: lo que diga ProyectosTIC, con su
+    /// motivo en claro si no la acepta (422, 403, 404).
+    async fn enviar_tarea(&self, ruta: &str, cuerpo: &Value, oks: &[u16]) -> Result<Value, ErrorOp> {
+        let (codigo, texto) = self.enviar_crudo(reqwest::Method::POST, ruta, Some(cuerpo)).await?;
+        match codigo {
+            c if oks.contains(&c) => Ok(serde_json::from_str(&texto).unwrap_or(Value::Null)),
+            401 => Err(ErrorOp::Http(401)),
+            c if c >= 500 => Err(ErrorOp::Http(c)),
+            c => Err(ErrorOp::Otro(mensaje_error(&texto, c))),
+        }
+    }
+
+    /// El "formulario" de crear tarea: NO crea nada. Dice que tipos admite el
+    /// proyecto, los valores por defecto y que le falta al cuerpo para valer.
+    pub async fn formulario_tarea(&self, cuerpo: &Value) -> Result<Value, ErrorOp> {
+        self.enviar_tarea("/api/v3/work_packages/form", cuerpo, &[200]).await
+    }
+
+    /// Crea la tarea y devuelve lo que ProyectosTIC ha guardado.
+    pub async fn crear_tarea(&self, cuerpo: &Value) -> Result<Value, ErrorOp> {
+        self.enviar_tarea("/api/v3/work_packages", cuerpo, &[200, 201]).await
+    }
+}
+
+/// Un proyecto en el que se pueden crear tareas: ProyectosTIC solo pone el
+/// enlace "createWorkPackage" a quien tiene el permiso en ese proyecto.
+pub fn proyecto_crear(p: &Value) -> Option<Value> {
+    let enlace = |k: &str| p["_links"][k]["href"].as_str().is_some_and(|h| !h.is_empty());
+    if !enlace("createWorkPackageImmediately") && !enlace("createWorkPackage") {
+        return None;
+    }
+    Some(json!({"id": p["id"].as_i64()?, "nombre": p["name"].as_str().unwrap_or("?")}))
+}
+
+/// ".../api/v3/types/7" -> 7
+fn id_de_href(v: &Value) -> Option<i64> {
+    v.as_str()?.trim_end_matches('/').rsplit('/').next()?.parse().ok()
+}
+
+/// El color de un tipo, solo si es un color de verdad (va a un style).
+fn color_valido(c: &str) -> &str {
+    let hex = c.strip_prefix('#').unwrap_or("-");
+    if [3, 4, 6, 8].contains(&hex.len()) && hex.chars().all(|x| x.is_ascii_hexdigit()) { c } else { "" }
+}
+
+/// Los mensajes de un error de ProyectosTIC (uno, o varios juntos).
+fn mensajes_de(v: &Value) -> Vec<String> {
+    let varios: Vec<String> = v["_embedded"]["errors"].as_array()
+        .map(|a| a.iter().filter_map(|x| x["message"].as_str()).map(String::from).collect())
+        .unwrap_or_default();
+    if !varios.is_empty() {
+        return varios;
+    }
+    v["message"].as_str().filter(|m| !m.trim().is_empty()).map(|m| vec![m.to_string()]).unwrap_or_default()
+}
+
+/// Por que ProyectosTIC no ha aceptado una tarea, para el usuario.
+pub fn mensaje_error(texto: &str, codigo: u16) -> String {
+    match codigo {
+        403 => "ProyectosTIC no te deja crear tareas en este proyecto.".into(),
+        404 => "ProyectosTIC no encuentra el proyecto (o la tarea de la que cuelga): ya no existe o no lo ves.".into(),
+        _ => {
+            let msgs = serde_json::from_str::<Value>(texto).map(|v| mensajes_de(&v)).unwrap_or_default();
+            if msgs.is_empty() { format!("ProyectosTIC no ha aceptado la tarea (error {codigo}).") } else { msgs.join(" ") }
+        }
+    }
+}
+
+/// Lo que se manda para crear (o validar) una tarea. Solo el titulo y el
+/// proyecto son obligatorios; lo demas toma los valores por defecto.
+pub fn cuerpo_tarea(pid: i64, titulo: &str, tipo: Option<i64>, padre: Option<i64>, descripcion: &str,
+                    asignado: Option<&str>) -> Value {
+    let mut links = json!({"project": {"href": format!("/api/v3/projects/{pid}")}});
+    if let Some(t) = tipo {
+        links["type"] = json!({"href": format!("/api/v3/types/{t}")});
+    }
+    if let Some(p) = padre {
+        links["parent"] = json!({"href": format!("/api/v3/work_packages/{p}")});
+    }
+    if let Some(u) = asignado.filter(|u| !u.is_empty()) {
+        links["assignee"] = json!({"href": format!("/api/v3/users/{u}")});
+    }
+    let mut cuerpo = json!({"subject": titulo, "_links": links});
+    if !descripcion.trim().is_empty() {
+        cuerpo["description"] = json!({"format": "markdown", "raw": descripcion.trim()});
+    }
+    cuerpo
+}
+
+/// Del formulario de crear tarea, lo que pinta el dialogo: los tipos del
+/// proyecto (con su color), el que viene por defecto, si la tarea se le puede
+/// asignar al usuario (se valida con el puesto) y lo que ProyectosTIC pide de
+/// mas y la app no rellena (campos propios obligatorios).
+pub fn opciones_tarea(form: &Value) -> Value {
+    let esquema = &form["_embedded"]["schema"]["type"];
+    let mut tipos: Vec<Value> = esquema["_embedded"]["allowedValues"].as_array().map(|a| a.iter().filter_map(|t| {
+        Some(json!({"id": t["id"].as_i64()?, "nombre": t["name"].as_str().unwrap_or("?"),
+                    "color": color_valido(t["color"].as_str().unwrap_or("")),
+                    "hito": t["isMilestone"].as_bool().unwrap_or(false)}))
+    }).collect()).unwrap_or_default();
+    if tipos.is_empty() {
+        // solo enlazados (sin incrustar): el nombre y el numero, sin color
+        tipos = esquema["_links"]["allowedValues"].as_array().map(|a| a.iter().filter_map(|t| {
+            Some(json!({"id": id_de_href(&t["href"])?, "nombre": t["title"].as_str().unwrap_or("?"), "color": "", "hito": false}))
+        }).collect()).unwrap_or_default();
+    }
+    let vacio = Map::new();
+    let errores = form["_embedded"]["validationErrors"].as_object().unwrap_or(&vacio);
+    let faltan: Vec<String> = errores.iter().filter(|(k, _)| k.as_str() != "assignee" && k.as_str() != "subject")
+        .flat_map(|(_, v)| mensajes_de(v)).collect();
+    json!({"tipos": tipos,
+           "tipo": id_de_href(&form["_embedded"]["payload"]["_links"]["type"]["href"]),
+           "asignable": !errores.contains_key("assignee"),
+           "faltan": faltan})
 }
 
 /// "Buscar en todo" sin texto: tope de tareas que se traen.
@@ -396,5 +524,64 @@ mod tests {
                                   "activity": {"title": "Formación"}}});
         let a = apunte(&e);
         assert_eq!((a.id.as_str(), a.wp_id.as_str(), a.horas, a.actividad.as_str()), ("64077", "11754", 4.0, "Formación"));
+    }
+
+    #[test]
+    fn solo_se_crea_donde_proyectostic_deja() {
+        let con = json!({"id": 42, "name": "ATE", "_links": {"createWorkPackage": {"href": "/api/v3/projects/42/work_packages/form", "method": "post"},
+                                                           "createWorkPackageImmediately": {"href": "/api/v3/projects/42/work_packages", "method": "post"}}});
+        let sin = json!({"id": 43, "name": "Sistemas", "_links": {"self": {"href": "/api/v3/projects/43"}}});
+        assert_eq!(proyecto_crear(&con), Some(json!({"id": 42, "nombre": "ATE"})));
+        assert_eq!(proyecto_crear(&sin), None);
+    }
+
+    #[test]
+    fn el_cuerpo_de_una_tarea_nueva() {
+        // lo minimo: titulo y proyecto
+        assert_eq!(cuerpo_tarea(42, "Renovar certificado", None, None, "  ", None),
+                   json!({"subject": "Renovar certificado", "_links": {"project": {"href": "/api/v3/projects/42"}}}));
+        // con todo
+        let c = cuerpo_tarea(42, "Renovar certificado", Some(7), Some(11754), "Caduca el 30.\n", Some("5"));
+        assert_eq!(c["_links"]["type"]["href"], "/api/v3/types/7");
+        assert_eq!(c["_links"]["parent"]["href"], "/api/v3/work_packages/11754");
+        assert_eq!(c["_links"]["assignee"]["href"], "/api/v3/users/5");
+        assert_eq!(c["description"], json!({"format": "markdown", "raw": "Caduca el 30."}));
+    }
+
+    #[test]
+    fn las_opciones_salen_del_formulario() {
+        let form = json!({"_type": "Form", "_embedded": {
+            "payload": {"subject": "-", "_links": {"type": {"href": "/api/v3/types/1", "title": "Tarea"}}},
+            "schema": {"type": {"_embedded": {"allowedValues": [
+                {"id": 1, "name": "Tarea", "color": "#1A67A3", "isMilestone": false},
+                {"id": 2, "name": "Hito", "color": "javascript:alert(1)", "isMilestone": true}]}}},
+            "validationErrors": {
+                "assignee": {"message": "Asignado a no es válido."},
+                "customField12": {"errorIdentifier": "urn:openproject-org:api:v3:errors:MultipleErrors",
+                                  "_embedded": {"errors": [{"message": "Servicio no puede estar en blanco."}]}}}}});
+        let o = opciones_tarea(&form);
+        assert_eq!(o["tipos"], json!([{"id": 1, "nombre": "Tarea", "color": "#1A67A3", "hito": false},
+                                      {"id": 2, "nombre": "Hito", "color": "", "hito": true}]));
+        assert_eq!(o["tipo"], 1);
+        assert_eq!(o["asignable"], false);
+        assert_eq!(o["faltan"], json!(["Servicio no puede estar en blanco."]));
+        // sin errores y con los tipos solo enlazados
+        let form = json!({"_embedded": {"payload": {"_links": {"type": {"href": "/api/v3/types/3"}}},
+            "schema": {"type": {"_links": {"allowedValues": [{"href": "/api/v3/types/3", "title": "Fase"}]}}},
+            "validationErrors": {}}});
+        let o = opciones_tarea(&form);
+        assert_eq!(o["tipos"], json!([{"id": 3, "nombre": "Fase", "color": "", "hito": false}]));
+        assert_eq!((o["asignable"].clone(), o["faltan"].clone()), (json!(true), json!([])));
+    }
+
+    #[test]
+    fn por_que_no_se_creo_la_tarea() {
+        let uno = r#"{"_type":"Error","errorIdentifier":"urn:openproject-org:api:v3:errors:PropertyConstraintViolation","message":"Asunto no puede estar en blanco."}"#;
+        assert_eq!(mensaje_error(uno, 422), "Asunto no puede estar en blanco.");
+        let varios = r#"{"_type":"Error","errorIdentifier":"urn:openproject-org:api:v3:errors:MultipleErrors","message":"Multiple field constraints have been violated.","_embedded":{"errors":[{"message":"Tipo no es válido."},{"message":"Servicio no puede estar en blanco."}]}}"#;
+        assert_eq!(mensaje_error(varios, 422), "Tipo no es válido. Servicio no puede estar en blanco.");
+        assert_eq!(mensaje_error("<html>", 422), "ProyectosTIC no ha aceptado la tarea (error 422).");
+        assert!(mensaje_error(uno, 403).contains("no te deja crear tareas"));
+        assert!(mensaje_error("", 404).contains("no encuentra el proyecto"));
     }
 }

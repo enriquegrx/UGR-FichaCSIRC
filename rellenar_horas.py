@@ -687,6 +687,127 @@ def buscar_wp(texto, limite=50):
     return [_wp_resumen(w) for w in data.get("_embedded", {}).get("elements", [])]
 
 
+# ----------------------- crear tareas -----------------------
+# (igual que tauri/src/openproject.rs: la app de Rust y esta hacen lo mismo)
+
+class TareaRechazada(RuntimeError):
+    """ProyectosTIC no ha aceptado la tarea; el mensaje dice por que."""
+
+
+def proyectos_crear():
+    """Los proyectos en los que ProyectosTIC deja a este usuario crear tareas
+    (permiso "añadir paquetes de trabajo", que va por proyecto y rol): solo a
+    quien lo tiene le pone el enlace createWorkPackage."""
+    out = []
+    for p in _get_todos("/api/v3/projects"):
+        links = p.get("_links") or {}
+        if any((links.get(k) or {}).get("href")
+               for k in ("createWorkPackageImmediately", "createWorkPackage")):
+            out.append({"id": int(p["id"]), "nombre": p.get("name", "?")})
+    return out
+
+
+def _id_de_href(href):
+    try:
+        return int(str(href).rstrip("/").rsplit("/", 1)[-1])
+    except (TypeError, ValueError):
+        return None
+
+
+def _mensajes_error(v):
+    """Los mensajes de un error de ProyectosTIC (uno, o varios juntos)."""
+    if not isinstance(v, dict):
+        return []
+    varios = [x.get("message") for x in (v.get("_embedded") or {}).get("errors") or []
+              if isinstance(x, dict) and x.get("message")]
+    if varios:
+        return varios
+    m = v.get("message")
+    return [m] if isinstance(m, str) and m.strip() else []
+
+
+def mensaje_error_tarea(texto, codigo):
+    """Por que ProyectosTIC no ha aceptado una tarea, para el usuario."""
+    if codigo == 403:
+        return "ProyectosTIC no te deja crear tareas en este proyecto."
+    if codigo == 404:
+        return ("ProyectosTIC no encuentra el proyecto (o la tarea de la que cuelga): "
+                "ya no existe o no lo ves.")
+    try:
+        msgs = _mensajes_error(json.loads(texto))
+    except ValueError:
+        msgs = []
+    return " ".join(msgs) if msgs else f"ProyectosTIC no ha aceptado la tarea (error {codigo})."
+
+
+def cuerpo_tarea(pid, titulo, tipo=None, padre=None, descripcion="", asignado=None):
+    """Lo que se manda para crear (o validar) una tarea. Solo el titulo y el
+    proyecto son obligatorios; lo demas toma los valores por defecto."""
+    links = {"project": {"href": f"/api/v3/projects/{int(pid)}"}}
+    if tipo:
+        links["type"] = {"href": f"/api/v3/types/{int(tipo)}"}
+    if padre:
+        links["parent"] = {"href": f"/api/v3/work_packages/{int(padre)}"}
+    if asignado:
+        links["assignee"] = {"href": f"/api/v3/users/{asignado}"}
+    cuerpo = {"subject": titulo, "_links": links}
+    if (descripcion or "").strip():
+        cuerpo["description"] = {"format": "markdown", "raw": descripcion.strip()}
+    return cuerpo
+
+
+_COLOR = re.compile(r"#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
+
+
+def opciones_tarea(form):
+    """Del formulario de crear tarea, lo que pinta el dialogo: los tipos del
+    proyecto (con su color), el que viene por defecto, si la tarea se le puede
+    asignar al usuario (se valida con el puesto) y lo que ProyectosTIC pide de
+    mas y la app no rellena (campos propios obligatorios)."""
+    emb = form.get("_embedded") or {}
+    esquema = (emb.get("schema") or {}).get("type") or {}
+    tipos = [{"id": int(t["id"]), "nombre": t.get("name") or "?",
+              "color": t["color"] if _COLOR.fullmatch(str(t.get("color") or "")) else "",
+              "hito": bool(t.get("isMilestone"))}
+             for t in (esquema.get("_embedded") or {}).get("allowedValues") or [] if t.get("id") is not None]
+    if not tipos:      # solo enlazados (sin incrustar): el nombre y el numero, sin color
+        tipos = [{"id": _id_de_href(t.get("href")), "nombre": t.get("title") or "?", "color": "", "hito": False}
+                 for t in (esquema.get("_links") or {}).get("allowedValues") or []
+                 if _id_de_href(t.get("href")) is not None]
+    errores = emb.get("validationErrors") or {}
+    faltan = [m for k, v in errores.items() if k not in ("assignee", "subject") for m in _mensajes_error(v)]
+    return {"tipos": tipos,
+            "tipo": _id_de_href((((emb.get("payload") or {}).get("_links") or {}).get("type") or {}).get("href")),
+            "asignable": "assignee" not in errores,
+            "faltan": faltan}
+
+
+def _enviar_tarea(ruta, cuerpo, oks):
+    r = requests.post(f"{BASE_URL}{ruta}", headers=_auth(), json=cuerpo, timeout=30)
+    if r.status_code in oks:
+        return r.json()
+    LOG.warning("POST %s -> %s: %s", ruta, r.status_code, r.text[:200])
+    if r.status_code == 401:
+        raise RuntimeError("Acceso denegado (401): la API key no es válida o ha caducado. "
+                           + _msg_configurar())
+    if r.status_code >= 500:
+        raise RuntimeError(f"ProyectosTIC respondió con un error ({r.status_code}).")
+    raise TareaRechazada(mensaje_error_tarea(r.text, r.status_code))
+
+
+def formulario_tarea(cuerpo):
+    """El "formulario" de crear tarea: NO crea nada. Dice que tipos admite el
+    proyecto, los valores por defecto y que le falta al cuerpo para valer."""
+    return _enviar_tarea("/api/v3/work_packages/form", cuerpo, (200,))
+
+
+def crear_tarea(cuerpo):
+    """Crea la tarea y devuelve su resumen (id, nombre, proyecto y padre)."""
+    w = _enviar_tarea("/api/v3/work_packages", cuerpo, (200, 201))
+    LOG.info("Tarea creada: %s", w.get("id"))
+    return _wp_resumen(w)
+
+
 # ----------------------- entradas de usuario -----------------------
 
 def preguntar_horas(pregunta):

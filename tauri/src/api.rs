@@ -557,6 +557,48 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
                 Err(err) => Err(err.to_string()),
             }
         }
+        // ---- crear tareas en ProyectosTIC ----
+        "nueva_tarea_proyectos" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
+            let ps = cli.proyectos_crear().await.map_err(|err| err.to_string())?;
+            Ok(json!({"proyectos": ps, "ultimo": cfg.get("nueva_tarea_proyecto").and_then(id_entero)}))
+        }
+        "nueva_tarea_opciones" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
+            let pid = args.first().and_then(id_entero).ok_or("Proyecto no válido.")?;
+            let uid = e.uid(&cli).await.map_err(|err| err.to_string())?;
+            // con el usuario puesto de asignado: asi se sabe si se le puede asignar
+            let cuerpo = openproject::cuerpo_tarea(pid, "-", args.get(1).and_then(id_entero), None, "", Some(&uid));
+            match cli.formulario_tarea(&cuerpo).await {
+                Ok(f) => Ok(openproject::opciones_tarea(&f)),
+                Err(ErrorOp::Otro(m)) => Ok(json!({"error": m})),
+                Err(err) => Err(err.to_string()),
+            }
+        }
+        "nueva_tarea_crear" => {
+            e.exigir_desbloqueo(&cfg)?;
+            nueva_tarea_crear(e, &cfg, args.first().unwrap_or(&Value::Null)).await
+        }
+        // solo la tarea (o el alta de tarea) en ProyectosTIC: el JS no abre URLs
+        "abrir_tarea" | "abrir_alta_tarea" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let base = cfg.texto("base_url").trim().trim_end_matches('/').to_string();
+            let id = args.first().and_then(id_entero).filter(|n| *n > 0).ok_or("Número no válido.")?;
+            if !(base.starts_with("https://") || base.starts_with("http://")) {
+                return Err("La dirección de ProyectosTIC no es válida.".into());
+            }
+            let url = if metodo == "abrir_tarea" {
+                format!("{base}/work_packages/{id}")
+            } else {
+                let tipo = args.get(1).and_then(id_entero).map(|t| format!("?type={t}")).unwrap_or_default();
+                format!("{base}/projects/{id}/work_packages/new{tipo}")
+            };
+            use tauri_plugin_opener::OpenerExt;
+            let _ = app.opener().open_url(url, None::<&str>);
+            Ok(json!({"ok": true}))
+        }
         "favorita" => {
             e.exigir_desbloqueo(&cfg)?;
             let id = args.first().and_then(id_entero).ok_or("Tarea no válida.")?;
@@ -787,6 +829,56 @@ fn tareas(e: &Estado, cfg: &Cfg) -> Value {
         Some(json!({"id": id, "nombre": nombre, "texto": format!("{id} - {nombre}"), "favorita": favs.contains(&id)}))
     }).collect();
     Value::Array(out)
+}
+
+/// Titulo de una tarea: como mucho, lo que admite ProyectosTIC.
+const MAX_TITULO: usize = 255;
+
+/// Crea una tarea en ProyectosTIC y la deja en el desplegable (o en favoritas).
+/// d: {proyecto, titulo, tipo, padre, descripcion, asignar, favorita}
+async fn nueva_tarea_crear(e: &Estado, cfg: &Cfg, d: &Value) -> Result<Value, String> {
+    let titulo = d["titulo"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
+    let Some(pid) = id_entero(&d["proyecto"]) else { return Ok(json!({"error": "Elige el proyecto de la tarea."})) };
+    if titulo.is_empty() {
+        return Ok(json!({"error": "Escribe el título de la tarea."}));
+    }
+    if titulo.chars().count() > MAX_TITULO {
+        return Ok(json!({"error": format!("El título es demasiado largo: como mucho, {MAX_TITULO} letras.")}));
+    }
+    let cli = Cliente::desde(cfg).map_err(|err| err.to_string())?;
+    let asignado = if d["asignar"].as_bool().unwrap_or(false) {
+        Some(e.uid(&cli).await.map_err(|err| err.to_string())?)
+    } else {
+        None
+    };
+    let cuerpo = openproject::cuerpo_tarea(pid, &titulo, id_entero(&d["tipo"]), id_entero(&d["padre"]),
+                                           d["descripcion"].as_str().unwrap_or(""), asignado.as_deref());
+    let creada = match cli.crear_tarea(&cuerpo).await {
+        Ok(w) => w,
+        Err(ErrorOp::Otro(m)) => return Ok(json!({"error": m})),
+        // sin respuesta no se sabe si llego: que no la repita a ciegas
+        Err(err @ ErrorOp::Red(_)) => return Ok(json!({"error":
+            format!("{err} Antes de repetirla, mira en ProyectosTIC si la tarea llegó a crearse.")})),
+        Err(err) => return Err(err.to_string()),
+    };
+    let Some(t) = openproject::wp_resumen(&creada) else {
+        return Ok(json!({"error": "ProyectosTIC ha respondido, pero sin los datos de la tarea. Mira allí si se ha creado."}));
+    };
+    let id = t["id"].as_i64().unwrap_or(0);
+    let nombre = t["nombre"].as_str().unwrap_or(&titulo).to_string();
+    if d["favorita"].as_bool().unwrap_or(false) {
+        favorita(e, &config::leer()?, id, &nombre, true)?;
+    } else {
+        let mut ex = candado(&e.extras);
+        if !ex.iter().any(|x| id_entero(&x["id"]) == Some(id)) {
+            ex.insert(0, json!({"id": id, "nombre": nombre}));
+        }
+    }
+    // la proxima vez, el mismo proyecto ya elegido
+    let mut m = Map::new();
+    m.insert("nueva_tarea_proyecto".into(), json!(pid));
+    let _ = config::guardar_valores(m);
+    Ok(json!({"ok": true, "tarea": t, "tareas": tareas(e, &config::leer()?)}))
 }
 
 /// La estrella del buscador: marca o quita una tarea de favoritas.

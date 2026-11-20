@@ -248,6 +248,29 @@ function ocultarAviso() {
   clearTimeout(avisoT);
   $("aviso-deshacer").hidden = true;
 }
+// Tras crear una tarea en ProyectosTIC: lo dice abajo, con un enlace para
+// verla alli (crearla no se deshace desde aqui).
+function avisoTareaCreada(t) {
+  const texto = `Tarea ${t.id} creada en ProyectosTIC: «${t.nombre}».`;
+  estado(texto);
+  const a = $("aviso-deshacer");
+  a.replaceChildren(el("span", { text: texto }),
+    el("button", { class: "enlace", text: "Abrir en ProyectosTIC",
+                   onclick: () => llamar("abrir_tarea", t.id).catch(() => {}) }),
+    el("button", { class: "cerrar-aviso", text: "×", title: "Cerrar", "aria-label": "Cerrar",
+                   onclick: ocultarAviso }));
+  a.hidden = false;
+  clearTimeout(avisoT);
+  avisoT = setTimeout(ocultarAviso, 12000);
+}
+// ¿Deja ProyectosTIC crear tareas en algun proyecto? Solo entonces se ofrece
+// («＋ Nueva» y «Crear la tarea…» en el buscador). En segundo plano: si no hay
+// red, no molesta; Archivo > Nueva tarea lo vuelve a mirar.
+async function cargarPermisoCrear() {
+  try { st.crear = await api().nueva_tarea_proyectos(); }
+  catch (_e) { st.crear = null; }
+  $("b-nueva").hidden = !st.crear?.proyectos?.length;
+}
 
 // ---------------------------------------------------------------- menus
 
@@ -279,6 +302,8 @@ function menuBajo(boton, items) {
 
 const MENUS = {
   archivo: () => [
+    { texto: "Nueva tarea en ProyectosTIC…\tCtrl+N", accion: () => dlgNuevaTarea() },
+    "-",
     { texto: "Exportar a CSV…", accion: dlgExportar },
     { texto: "Resumen del mes", accion: () => entrarEstadisticas("mes") },
     { texto: "Estadísticas", accion: () => entrarEstadisticas() },
@@ -432,6 +457,7 @@ async function arrancar() {
   refrescarFranja();
   refrescarPendientes(0);
   pintarCampana();
+  cargarPermisoCrear();
   // "Abrir «Por completar»" desde el aviso diario
   if (ini.abrir_pendientes) entrarPendientes();
   if (st.tareas.size) elegirTarea();
@@ -1855,6 +1881,7 @@ for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
 }
 $("b-buscar").onclick = () => dlgBuscar();
+$("b-nueva").onclick = () => dlgNuevaTarea();
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
   { texto: "Copiar día anterior a los días marcados", accion: dlgCopiarDia },
   { texto: "Copiar semana anterior completa", accion: dlgCopiarSemana },
@@ -1906,6 +1933,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); dlgBuscarApuntes(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") { e.preventDefault(); dlgNuevaTarea(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "q") { e.preventDefault(); salirDeLaApp(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") { e.preventDefault(); bloquearOActivar(); return; }
   if (e.altKey && /^[1-5]$/.test(e.key) && st.vista === "semana") {

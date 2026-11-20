@@ -1740,6 +1740,90 @@ class Api:
                 self._extras.insert(0, t)
         return self.tareas()
 
+    # ---- crear tareas en ProyectosTIC ----
+    MAX_TITULO = 255      # lo que admite ProyectosTIC
+
+    @staticmethod
+    def _id(v):
+        try:
+            return int(str(v).strip().lstrip("#"))
+        except (TypeError, ValueError):
+            return None
+
+    def nueva_tarea_proyectos(self):
+        """Los proyectos en los que se puede crear, y el ultimo que se uso."""
+        self._exigir_desbloqueo()
+        return {"proyectos": core.proyectos_crear(),
+                "ultimo": self._id(core.config_valor("nueva_tarea_proyecto"))}
+
+    def nueva_tarea_opciones(self, pid, tipo=None):
+        """Tipos del proyecto, el de por defecto, si se le puede asignar y lo
+        que falta. Usa el formulario de ProyectosTIC: no crea nada."""
+        self._exigir_desbloqueo()
+        pid = self._id(pid)
+        if pid is None:
+            raise ValueError("Proyecto no válido.")
+        # con el usuario puesto de asignado: asi se sabe si se le puede asignar
+        cuerpo = core.cuerpo_tarea(pid, "-", self._id(tipo), asignado=core._user_id(estricto=True))
+        try:
+            return core.opciones_tarea(core.formulario_tarea(cuerpo))
+        except core.TareaRechazada as e:
+            return {"error": str(e)}
+
+    def nueva_tarea_crear(self, d):
+        """Crea una tarea en ProyectosTIC y la deja en el desplegable (o en
+        favoritas). d: {proyecto, titulo, tipo, padre, descripcion, asignar, favorita}"""
+        self._exigir_desbloqueo()
+        d = d or {}
+        titulo = " ".join(str(d.get("titulo") or "").split())
+        pid = self._id(d.get("proyecto"))
+        if pid is None:
+            return {"error": "Elige el proyecto de la tarea."}
+        if not titulo:
+            return {"error": "Escribe el título de la tarea."}
+        if len(titulo) > self.MAX_TITULO:
+            return {"error": f"El título es demasiado largo: como mucho, {self.MAX_TITULO} letras."}
+        asignado = core._user_id(estricto=True) if d.get("asignar") else None
+        cuerpo = core.cuerpo_tarea(pid, titulo, self._id(d.get("tipo")), self._id(d.get("padre")),
+                                   d.get("descripcion") or "", asignado)
+        try:
+            t = core.crear_tarea(cuerpo)
+        except core.TareaRechazada as e:
+            return {"error": str(e)}
+        except (core.requests.ConnectionError, core.requests.Timeout):
+            # sin respuesta no se sabe si llego: que no la repita a ciegas
+            return {"error": "No se pudo conectar con ProyectosTIC. Antes de repetirla, "
+                             "mira en ProyectosTIC si la tarea llegó a crearse."}
+        if d.get("favorita"):
+            core.anadir_favorito(t)
+        elif all(int(e["id"]) != t["id"] for e in self._extras):
+            self._extras.insert(0, {"id": t["id"], "nombre": t["nombre"]})
+        core.guardar_config_valores({"nueva_tarea_proyecto": pid})   # la proxima vez, el mismo
+        return {"ok": True, "tarea": t, "tareas": self.tareas()}
+
+    def _abrir_en_proyectostic(self, ruta):
+        base = (core.BASE_URL or "").strip().rstrip("/")
+        if not base.startswith(("https://", "http://")):
+            raise ValueError("La dirección de ProyectosTIC no es válida.")
+        webbrowser.open(base + ruta)
+        return {"ok": True}
+
+    def abrir_tarea(self, wp_id):
+        """Solo la tarea en ProyectosTIC (el JS no puede abrir URLs arbitrarias)."""
+        self._exigir_desbloqueo()
+        n = self._id(wp_id)
+        if not n or n < 1:
+            raise ValueError("Número no válido.")
+        return self._abrir_en_proyectostic(f"/work_packages/{n}")
+
+    def abrir_alta_tarea(self, pid, tipo=None):
+        """La pagina de ProyectosTIC para dar de alta una tarea en ese proyecto."""
+        self._exigir_desbloqueo()
+        n, t = self._id(pid), self._id(tipo)
+        if not n or n < 1:
+            raise ValueError("Número no válido.")
+        return self._abrir_en_proyectostic(f"/projects/{n}/work_packages/new" + (f"?type={t}" if t else ""))
+
     # ---- copiar dia / semana anterior ----
     def _copiar(self, pares, saltar_no_laborables):
         """pares: [(iso_destino, apuntes_origen)]. Nunca a ciegas: un dia que no

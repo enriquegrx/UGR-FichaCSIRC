@@ -48,7 +48,11 @@
     ok(b, `no hay botón «${texto}» en el diálogo`);
     b.click();
   };
-  const cerrarTodo = () => { while (pila.length) pila[pila.length - 1].cerrar(); };
+  // con tope: un dialogo que no se deja cerrar colgaria el navegador en vez de fallar
+  const cerrarTodo = () => {
+    for (let i = 0; pila.length && i < 20; i++) pila[pila.length - 1].cerrar();
+    ok(!pila.length, "queda un diálogo que no se deja cerrar");
+  };
   const teclado = (key, extra = {}) => document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...extra }));
 
   async function escenarioPin() {
@@ -746,6 +750,78 @@
       ok(await hasta(() => !$("modal").hidden), "no pregunta antes de desactivar");
       $("modal-si").click();
       ok(await hasta(() => /Activar aviso/.test(b.textContent)), `tras quitar: ${b.textContent}`);
+      cerrarTodo();
+    });
+    await prueba("nueva tarea: se crea en ProyectosTIC y queda en el formulario", async () => {
+      ok(await hasta(() => !$("b-nueva").hidden), "no ofrece «＋ Nueva» a quien puede crear");
+      $("b-nueva").click();
+      ok(await hasta(() => document.querySelector(".nt-tipo")), "no pinta los tipos del proyecto");
+      ok(!/\bnull\b|undefined/.test(dlg().textContent), "escribe null/undefined");
+      const crear = () => document.querySelector(".dlg-pie button.primario");
+      // sin titulo no crea: lo dice
+      crear().click();
+      ok(await hasta(() => !document.querySelector(".nt-error").hidden), "sin título no avisa");
+      const tit = document.querySelector(".nt-titulo");
+      tit.value = "Tarea de humo"; tit.dispatchEvent(new Event("input"));
+      ok(document.querySelector(".nt-error").hidden, "el aviso del título no se quita al escribirlo");
+      ok(document.querySelector(".nt-vista").textContent.includes("Tarea de humo"), "la vista previa no sigue al título");
+      // otro proyecto: ahi no deja asignarse, y el tipo Incidencia pide un campo que la app no rellena
+      const proy = document.querySelector(".nt-dos select");
+      proy.value = "3"; proy.dispatchEvent(new Event("change"));
+      ok(await hasta(() => document.querySelector(".nt-opciones input").disabled), "deja asignarse donde no se puede");
+      ok(document.querySelector(".nt-vista").textContent.includes("Sin asignar"), "la vista previa la da por asignada");
+      const tipo = (n) => [...document.querySelectorAll(".nt-tipo")].find((b) => b.textContent.includes(n));
+      tipo("Incidencia").click();
+      ok(await hasta(() => !document.querySelector(".nt-aviso").hidden && crear().disabled), "no avisa de lo que pide ProyectosTIC");
+      ok(document.querySelector(".nt-aviso").textContent.includes("Servicio afectado"), "no dice qué falta");
+      tipo("Tarea").click();
+      ok(await hasta(() => document.querySelector(".nt-aviso").hidden && !crear().disabled), "con otro tipo no vuelve a dejar crear");
+      // cuelga de una tarea del proyecto
+      const padre = document.querySelector(".nt-padre input");
+      padre.dispatchEvent(new Event("focus"));
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      ok(await hasta(() => caja()?.textContent.includes("15002")), "no lista las tareas del proyecto");
+      ok(!caja().querySelector(".bt-fav, .bt-crear"), "la lista de padres lleva estrella o «crear»");
+      [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes("15002"))
+        .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      ok(document.querySelector(".nt-ruta").textContent.includes("› [2026_AUL] Mantenimientos"), "la vista previa no dice de cuál cuelga");
+      crear().click();
+      ok(await hasta(() => !dlg()), "no se cierra al crear");
+      ok(await hasta(() => $("tarea").value.endsWith("- Tarea de humo")), `formulario: ${$("tarea").value}`);
+      ok(await hasta(() => !$("aviso-deshacer").hidden && /creada en ProyectosTIC/.test($("aviso-deshacer").textContent)), "no dice que se ha creado");
+      ok(st.crear.ultimo === 3, "no recuerda el proyecto para la próxima");
+      ocultarAviso();
+    });
+    await prueba("nueva tarea: desde el buscador, y lo que rechaza ProyectosTIC", async () => {
+      const inp = $("tarea");
+      inp.dispatchEvent(new Event("focus"));
+      inp.value = "Algo que no existe"; inp.dispatchEvent(new Event("input"));
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      ok(await hasta(() => caja()?.querySelector(".bt-crear")), "el buscador no ofrece crearla");
+      caja().querySelector(".bt-crear").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      ok(await hasta(() => document.querySelector(".nt-titulo")?.value === "Algo que no existe"), "no lleva lo escrito al título");
+      ok(await hasta(() => document.querySelector(".nt-tipo")), "sin tipos");
+      ok(document.querySelector(".nt-dos select").value === "3", "no propone el proyecto de la última vez");
+      const tit = document.querySelector(".nt-titulo");
+      tit.value = "Esta la rechaza"; tit.dispatchEvent(new Event("input"));
+      botonDlg("Crear tarea");
+      ok(await hasta(() => document.querySelector(".nt-error").textContent.includes("ya está en uso")), "no dice por qué la rechaza");
+      ok(dlg(), "se cierra aunque no se haya creado");
+      // con una descripcion escrita, cerrar pregunta antes
+      const desc = document.querySelector(".nt-desc");
+      desc.value = "Algo escrito";
+      teclado("Escape");
+      ok(await hasta(() => !$("modal").hidden), "cierra sin preguntar con una descripción escrita");
+      $("modal-no").click();
+      await espera(50);
+      ok(dlg(), "«Seguir escribiendo» cierra el diálogo");
+      desc.value = "";
+      cerrarTodo();
+      inp.dispatchEvent(new Event("blur"));
+      // desde Buscar tarea tambien se ofrece
+      dlgBuscar();
+      ok(await hasta(() => dlg()), "no abre Buscar tarea");
+      ok([...document.querySelectorAll(".dlg-pie button")].some((b) => b.textContent.includes("Nueva tarea") && !b.hidden), "Buscar tarea no ofrece crearla");
       cerrarTodo();
     });
     await prueba("sin errores de JS por el camino", async () => {

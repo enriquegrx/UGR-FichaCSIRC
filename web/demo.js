@@ -89,6 +89,22 @@
   }
   const espera = (v) => new Promise((r) => setTimeout(() => r(v), 120));
 
+  // Crear tareas: se puede en dos proyectos. En "Aulas" no deja asignarse y el
+  // tipo Incidencia pide un campo propio (la app no lo rellena). Con ?sincrear,
+  // en ninguno. Un titulo con "rechaza" lo rechaza, como haria ProyectosTIC.
+  const proyectosCrear = /[?&]sincrear\b/.test(location.search) ? []
+    : [{ id: 1, nombre: "Sistemas de Gestión" }, { id: 3, nombre: "Aulas y Teledocencia" }];
+  const tiposDemo = {
+    1: [{ id: 1, nombre: "Tarea", color: "#1a67a3", hito: false }, { id: 2, nombre: "Hito", color: "#35a35a", hito: true },
+        { id: 3, nombre: "Fase", color: "#d9822b", hito: false }],
+    3: [{ id: 1, nombre: "Tarea", color: "#1a67a3", hito: false }, { id: 4, nombre: "Incidencia", color: "#c0392b", hito: false }],
+  };
+  const tareasAulas = [
+    { id: 15001, nombre: "[2026_AUL] Servicio", proyecto: "Aulas y Teledocencia", padre: "" },
+    { id: 15002, nombre: "[2026_AUL] Mantenimientos", proyecto: "Aulas y Teledocencia", padre: "[2026_AUL] Servicio" },
+    { id: 15010, nombre: "[AUL] Renovación de proyectores", proyecto: "Aulas y Teledocencia", padre: "[2026_AUL] Proyectos" }];
+  let ultimoCrear = null, sigTarea = 14100;
+
   window.pywebview = { api: {
     inicio: () => espera({
       version: "3.1.0", plataforma: "Demo", lunes: iso(l), inari: false, logo: "../logo_ugr.png",
@@ -427,7 +443,32 @@
     desasociar: (act) => { delete asoc[act]; return espera({ ...asoc }); },
     proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" }]),
     tareas_de_proyecto: (pid) => espera(pid === "2" ? { error: "No tienes permiso para ver las tareas de este proyecto." }
+      : pid === "3" ? { tareas: tareasAulas.map((t) => ({ ...t })) }
       : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
+    // ---- crear tareas ----
+    nueva_tarea_proyectos: () => espera({ proyectos: proyectosCrear.map((p) => ({ ...p })), ultimo: ultimoCrear }),
+    nueva_tarea_opciones: (pid, tipo) => {
+      const ts = tiposDemo[Number(pid)];
+      if (!ts) return espera({ error: "ProyectosTIC no te deja crear tareas en este proyecto." });
+      return espera({ tipos: ts.map((t) => ({ ...t })), tipo: ts[0].id, asignable: Number(pid) !== 3,
+                      faltan: Number(tipo) === 4 ? ["Servicio afectado no puede estar en blanco."] : [] });
+    },
+    nueva_tarea_crear: (n) => {
+      const titulo = String(n.titulo || "").trim().replace(/\s+/g, " ");
+      const p = proyectosCrear.find((x) => String(x.id) === String(n.proyecto));
+      if (!p) return espera({ error: "Elige el proyecto de la tarea." });
+      if (!titulo) return espera({ error: "Escribe el título de la tarea." });
+      if (/rechaza/i.test(titulo)) return espera({ error: "Asunto ya está en uso." });
+      const nueva = { id: sigTarea++, nombre: titulo };
+      tareas.unshift(nueva);
+      if (n.favorita) favDemo.add(nueva.id);
+      ultimoCrear = p.id;
+      const padre = [...tareasAulas, ...tareas].find((x) => String(x.id) === String(n.padre));
+      return espera({ ok: true, tarea: { ...nueva, proyecto: p.nombre, padre: padre ? padre.nombre : "" },
+                      tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })) });
+    },
+    abrir_tarea: () => espera({ ok: true }),
+    abrir_alta_tarea: () => espera({ ok: true }),
     buscar_tareas: (t) => {
       const q = t.trim().replace(/^#/, "");
       const todas = [{ id: 14000, nombre: "[ASG] Migración de correo", proyecto: "Sistemas de Gestión", padre: "[2026_ASG] Proyectos" },
