@@ -118,7 +118,7 @@ impl Cliente {
 
     pub async fn tareas_proyecto(&self, pid: i64) -> Result<Vec<Value>, ErrorOp> {
         Ok(self.get_todos(&format!("/api/v3/projects/{pid}/work_packages"), vec![]).await?
-            .iter().filter_map(wp_resumen).collect())
+            .iter().filter_map(wp_en_arbol).collect())
     }
 
     /// Tareas de TODOS los proyectos visibles: por su NUMERO (la exacta), por
@@ -391,6 +391,14 @@ pub fn wp_resumen(w: &Value) -> Option<Value> {
                 "padre": w["_links"]["parent"]["title"].as_str().unwrap_or("")}))
 }
 
+/// Una tarea de la lista de un proyecto: el resumen y, para pintarlas en
+/// arbol, el numero de la tarea de la que cuelga (null si cuelga del proyecto).
+pub fn wp_en_arbol(w: &Value) -> Option<Value> {
+    let mut t = wp_resumen(w)?;
+    t["padre_id"] = json!(id_de_href(&w["_links"]["parent"]["href"]));
+    Some(t)
+}
+
 /// 3.5 -> "PT3H30M" (como _iso_dur).
 pub fn iso_dur(horas: f64) -> String {
     let total = (horas * 60.0).round() as i64;
@@ -524,6 +532,18 @@ mod tests {
                                   "activity": {"title": "Formación"}}});
         let a = apunte(&e);
         assert_eq!((a.id.as_str(), a.wp_id.as_str(), a.horas, a.actividad.as_str()), ("64077", "11754", 4.0, "Formación"));
+    }
+
+    #[test]
+    fn las_tareas_de_un_proyecto_dicen_de_cual_cuelgan() {
+        let hija = json!({"id": 7, "subject": "Hija", "_links": {
+            "project": {"title": "ATE"}, "parent": {"href": "/api/v3/work_packages/5", "title": "Madre"}}});
+        assert_eq!(wp_en_arbol(&hija).unwrap(),
+                   json!({"id": 7, "nombre": "Hija", "proyecto": "ATE", "padre": "Madre", "padre_id": 5}));
+        // la que cuelga del proyecto: el enlace viene sin href
+        let raiz = json!({"id": 5, "subject": "Madre", "_links": {"parent": {"href": null}}});
+        assert_eq!(wp_en_arbol(&raiz).unwrap()["padre_id"], Value::Null);
+        assert_eq!(wp_en_arbol(&json!({"id": 6, "subject": "Sin enlaces"})).unwrap()["padre_id"], Value::Null);
     }
 
     #[test]

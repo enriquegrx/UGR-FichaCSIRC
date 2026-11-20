@@ -1481,6 +1481,37 @@ async function dlgPin(opciones) {
    propia: () => ({ titulo, tareas (null: cargando), vacio(q) }). La usa "Cuelga
    de" en Nueva tarea, con las tareas del proyecto. Sin fuente, y si ProyectosTIC
    deja crear tareas, al final se ofrece crear una con lo escrito. */
+/* Las tareas de un proyecto en orden de arbol: cada una debajo de la que
+   cuelga, con su nivel. Con filtro quedan las que encajan y, de contexto, las
+   que tienen encima (para ver donde estan). 'suelta': cuelga de una tarea que
+   no esta en la lista (cerrada, o de otro proyecto). */
+function tareasEnArbol(tareas, encaja = null) {
+  const porId = new Map(tareas.map((t) => [Number(t.id), t]));
+  const hijas = new Map(), raices = [];
+  for (const t of tareas) {
+    const p = Number(t.padre_id);
+    if (p && p !== Number(t.id) && porId.has(p)) hijas.set(p, [...(hijas.get(p) || []), t]);
+    else raices.push(t);
+  }
+  const out = [], vistas = new Set();
+  const bajar = (t, nivel) => {
+    if (vistas.has(Number(t.id))) return false;
+    vistas.add(Number(t.id));
+    const i = out.length;
+    const fila = { ...t, nivel, contexto: false, suelta: nivel === 0 && !!t.padre };
+    out.push(fila);
+    let dentro = false;
+    for (const h of hijas.get(Number(t.id)) || []) dentro = bajar(h, nivel + 1) || dentro;
+    const mia = !encaja || encaja(t);
+    if (!mia && !dentro) { out.length = i; return false; }
+    fila.contexto = !mia;
+    return true;
+  };
+  for (const t of raices) bajar(t, 0);
+  for (const t of tareas) bajar(t, 0);      // por si ProyectosTIC diera un ciclo: que no se pierdan
+  return out;
+}
+
 function buscadorTarea(input, { alElegir, fuente = null }) {
   input.removeAttribute("list");
   input.setAttribute("autocomplete", "off");
@@ -1490,6 +1521,8 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
   caja.hidden = true;
   document.body.append(caja);
   let items = [], activo = -1, seq = 0, espera = null, remoto = { q: "", tareas: null, error: "" };
+  let sobran = 0;                     // tareas de la fuente que no caben en la lista
+  const MAX_FUENTE = 300;
   const normal = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const consulta = () => normal(input.value.trim()).replace(/^#/, "");
 
@@ -1497,7 +1530,11 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
     const encaja = (t) => !q || normal(`${t.id} ${t.nombre}`).includes(q);
     if (fuente) {
       const f = fuente();
-      return [[f.titulo, f.tareas === null ? null : f.tareas.filter(encaja).slice(0, 80)]];
+      sobran = 0;
+      if (f.tareas === null) return [[f.titulo, null]];
+      const todas = f.arbol ? tareasEnArbol(f.tareas, q ? encaja : null) : f.tareas.filter(encaja);
+      sobran = Math.max(0, todas.length - MAX_FUENTE);
+      return [[f.titulo, todas.slice(0, MAX_FUENTE)]];
     }
     const max = q ? 8 : 5;
     const vistas = new Set();
@@ -1564,14 +1601,26 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
           estado(fav ? `«${t.nombre}» ya no es favorita.` : `«${t.nombre}» añadida a favoritas.`);
           pintar();
         });
-        const ruta = (fuente ? [t.padre] : [t.proyecto, t.padre]).filter(Boolean).join(" › ");
-        const fila = el("div", { class: `bt-item${fuente ? " sin-fav" : ""}${i === activo ? " activo" : ""}`, role: "option" },
+        // en arbol la de arriba ya dice de cual cuelga; solo se escribe si no esta en la lista
+        const enArbol = t.nivel !== undefined;
+        const ruta = (enArbol ? [t.suelta ? `Cuelga de ${t.padre}` : ""] : fuente ? [t.padre] : [t.proyecto, t.padre])
+          .filter(Boolean).join(" › ");
+        const fila = el("div", { class: `bt-item${fuente ? " sin-fav" : ""}${enArbol ? " bt-rama" : ""}`
+            + `${t.contexto ? " bt-contexto" : ""}${i === activo ? " activo" : ""}`, role: "option" },
           estrella,
+          enArbol && t.nivel ? el("span", { class: "bt-codo", "aria-hidden": "true", text: "└" }) : null,
           el("div", { class: "bt-texto" },
             el("div", { class: "bt-nombre" }, el("span", { class: "bt-id", text: String(t.id) }), ` ${t.nombre}`),
             ruta ? el("div", { class: "bt-ruta", text: ruta }) : null));
+        if (enArbol) {
+          fila.style.setProperty("--nivel", String(Math.min(t.nivel, 8)));
+          fila.setAttribute("aria-level", String(t.nivel + 1));
+        }
         fila.addEventListener("mousedown", (e) => { e.preventDefault(); elegir(t); });
         nodos.push(fila);
+      }
+      if (fuente && sobran) {
+        nodos.push(el("div", { class: "bt-nada", text: `…y ${sobran} más: escribe parte del nombre o el número para acotar.` }));
       }
     }
     if (!nodos.length) {
@@ -1814,7 +1863,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
         el("span", { class: `txt${texto ? "" : " vacio"}`, text: texto || "Sin título todavía" })),
       el("div", { class: "nt-ruta" },
         el("span", { text: p ? p.nombre : "" }),
-        padreSel ? el("span", { text: ` › ${padreSel.nombre}` })
+        padreSel ? el("span", { text: ramaDelPadre().map((n) => ` › ${n}`).join("") })
                  : el("span", { class: "tenue", text: " · directamente en el proyecto" })),
       el("div", { class: "nt-marcas" },
         el("span", { class: "chip chip-tele", text: asignar.checked ? "👤 Asignada a ti" : "Sin asignar" }),
@@ -1881,6 +1930,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
       if (proy.value !== pid) return;
       tareasProy = ts;
       listaPadre.repintar();
+      if (padreSel) pintarVista();
     });
     const r = await opciones(null);
     if (!r) return;
@@ -1919,8 +1969,22 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     pintarVista();
   }
   const listaPadre = buscadorTarea(padre, { alElegir: ponerPadre, fuente: () => ({
-    titulo: "Tareas del proyecto", tareas: tareasProy,
-    vacio: (q) => (q ? "Ninguna tarea del proyecto con eso." : "Este proyecto aún no tiene tareas.") }) });
+    titulo: "Tareas abiertas del proyecto", tareas: tareasProy, arbol: true,
+    vacio: (q) => (q ? "Ninguna tarea abierta del proyecto con eso." : "Este proyecto no tiene tareas abiertas.") }) });
+  // De quien cuelga la elegida, hasta arriba: lo que se vera en ProyectosTIC.
+  function ramaDelPadre() {
+    if (!padreSel) return [];
+    const porId = new Map((tareasProy || []).map((t) => [Number(t.id), t]));
+    const out = [];
+    let t = porId.get(Number(padreSel.id)) || padreSel;
+    for (let n = 0; t && n < 12; n++) {
+      out.unshift(t.nombre);
+      const arriba = porId.get(Number(t.padre_id));
+      if (!arriba && t.padre) out.unshift(t.padre);       // cuelga de una que no esta en la lista
+      t = arriba;
+    }
+    return out;
+  }
   // lo escrito sin elegir no vale: o la elegida, o ninguna
   padre.addEventListener("blur", () => setTimeout(() => {
     if (!padre.value.trim()) ponerPadre(null);

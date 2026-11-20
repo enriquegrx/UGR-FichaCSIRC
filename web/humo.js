@@ -782,9 +782,23 @@
       const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
       ok(await hasta(() => caja()?.textContent.includes("15002")), "no lista las tareas del proyecto");
       ok(!caja().querySelector(".bt-fav, .bt-crear"), "la lista de padres lleva estrella o «crear»");
-      [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes("15002"))
-        .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
-      ok(document.querySelector(".nt-ruta").textContent.includes("› [2026_AUL] Mantenimientos"), "la vista previa no dice de cuál cuelga");
+      // en arbol: cada una bajo la que cuelga, y metida un nivel mas
+      const ramas = () => [...caja().querySelectorAll(".bt-item")].map((x) =>
+        `${x.getAttribute("aria-level")}:${x.querySelector(".bt-id").textContent}`).join(" ");
+      ok(ramas() === "1:15001 2:15002 3:15004 3:15005 2:15003 1:15010 2:15011", `árbol: ${ramas()}`);
+      const fila = (n) => [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes(n));
+      ok(parseFloat(getComputedStyle(fila("15004")).paddingLeft) > parseFloat(getComputedStyle(fila("15002")).paddingLeft),
+         "las hijas no van metidas bajo su madre");
+      ok(/Cuelga de \[2026_AUL\] Proyectos/.test(fila("15010").textContent), "no dice de cuál cuelga la que tiene la madre cerrada");
+      ok(!fila("15004").querySelector(".bt-ruta"), "repite la madre, que ya está encima");
+      // al buscar quedan las que encajan y, de contexto, las de encima
+      padre.value = "megaf"; padre.dispatchEvent(new Event("input"));
+      ok(ramas() === "1:15001 2:15002 3:15004", `árbol filtrado: ${ramas()}`);
+      ok(fila("15002").classList.contains("bt-contexto") && !fila("15004").classList.contains("bt-contexto"), "no distingue las de contexto");
+      padre.value = ""; padre.dispatchEvent(new Event("input"));
+      fila("15004").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      ok(document.querySelector(".nt-ruta").textContent.includes("› [2026_AUL] Servicio › [2026_AUL] Mantenimientos › Revisión de megafonía"),
+         `la vista previa no dice de cuál cuelga: ${document.querySelector(".nt-ruta").textContent}`);
       crear().click();
       ok(await hasta(() => !dlg()), "no se cierra al crear");
       ok(await hasta(() => $("tarea").value.endsWith("- Tarea de humo")), `formulario: ${$("tarea").value}`);

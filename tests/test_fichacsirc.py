@@ -363,6 +363,21 @@ class TestApi(unittest.TestCase):
             self.assertEqual(core._get("/x"), {"x": 1})
 
 
+class TestTareasProyecto(unittest.TestCase):
+    @mock.patch.object(core, "_get_todos")
+    def test_dicen_de_cual_cuelgan(self, m_todos):
+        m_todos.return_value = [
+            {"id": 7, "subject": "Hija", "_links": {
+                "project": {"title": "ATE"}, "parent": {"href": "/api/v3/work_packages/5", "title": "Madre"}}},
+            {"id": 5, "subject": "Madre", "_links": {"parent": {"href": None}}},   # cuelga del proyecto
+            {"id": 6, "subject": "Sin enlaces"}]
+        self.assertEqual(core.tareas_proyecto(3), [
+            {"id": 7, "nombre": "Hija", "proyecto": "ATE", "padre": "Madre", "padre_id": 5},
+            {"id": 5, "nombre": "Madre", "proyecto": "", "padre": "", "padre_id": None},
+            {"id": 6, "nombre": "Sin enlaces", "proyecto": "", "padre": "", "padre_id": None}])
+        m_todos.assert_called_once_with("/api/v3/projects/3/work_packages")
+
+
 class TestBuscarWp(unittest.TestCase):
     @mock.patch.object(core, "_get")
     def test_devuelve_resultados(self, m_get):

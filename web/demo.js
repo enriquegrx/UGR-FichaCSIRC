@@ -99,10 +99,16 @@
         { id: 3, nombre: "Fase", color: "#d9822b", hito: false }],
     3: [{ id: 1, nombre: "Tarea", color: "#1a67a3", hito: false }, { id: 4, nombre: "Incidencia", color: "#c0392b", hito: false }],
   };
+  const aul = (id, nombre, padre_id = null, padre = "") => ({ id, nombre, proyecto: "Aulas y Teledocencia", padre, padre_id });
   const tareasAulas = [
-    { id: 15001, nombre: "[2026_AUL] Servicio", proyecto: "Aulas y Teledocencia", padre: "" },
-    { id: 15002, nombre: "[2026_AUL] Mantenimientos", proyecto: "Aulas y Teledocencia", padre: "[2026_AUL] Servicio" },
-    { id: 15010, nombre: "[AUL] Renovación de proyectores", proyecto: "Aulas y Teledocencia", padre: "[2026_AUL] Proyectos" }];
+    aul(15001, "[2026_AUL] Servicio"),
+    aul(15002, "[2026_AUL] Mantenimientos", 15001, "[2026_AUL] Servicio"),
+    aul(15003, "[2026_AUL] Atención a usuarios", 15001, "[2026_AUL] Servicio"),
+    aul(15004, "Revisión de megafonía del Aulario", 15002, "[2026_AUL] Mantenimientos"),
+    aul(15005, "Sustitución de lámparas", 15002, "[2026_AUL] Mantenimientos"),
+    // cuelga de una tarea que ya esta cerrada: no viene en la lista
+    aul(15010, "[AUL] Renovación de proyectores", 14990, "[2026_AUL] Proyectos"),
+    aul(15011, "Proyectores de la Facultad de Ciencias", 15010, "[AUL] Renovación de proyectores")];
   let ultimoCrear = null, sigTarea = 14100;
 
   window.pywebview = { api: {

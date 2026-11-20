@@ -647,7 +647,15 @@ def _wp_resumen(w):
 
 
 def tareas_proyecto(pid):
-    return [_wp_resumen(w) for w in _get_todos(f"/api/v3/projects/{pid}/work_packages")]
+    """Las tareas abiertas de un proyecto. Cada una dice ademas de cual cuelga
+    (padre_id; None si cuelga del proyecto), para pintarlas en arbol."""
+    out = []
+    for w in _get_todos(f"/api/v3/projects/{pid}/work_packages"):
+        t = _wp_resumen(w)
+        padre = ((w.get("_links") or {}).get("parent") or {}).get("href")
+        t["padre_id"] = _id_de_href(padre) if padre else None
+        out.append(t)
+    return out
 
 
 MAX_TODAS = 1000      # "Buscar en todo" sin texto: tope de tareas que se traen
