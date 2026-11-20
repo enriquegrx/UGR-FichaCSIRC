@@ -997,7 +997,7 @@ dependencies = [
 
 [[package]]
 name = "fichacsirc"
-version = "4.0.0-rc.2"
+version = "4.0.0-rc.3"
 dependencies = [
  "base64 0.22.1",
  "chrono",
