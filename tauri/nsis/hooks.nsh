@@ -54,6 +54,14 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+  ; "Editor" en "Aplicaciones instaladas": el mismo que ponia la 3.x (Tauri
+  ; deja "ugr", sacado del identificador). Se escribe aqui y no con
+  ; bundle.publisher porque Tauri usa ese valor tambien como nombre de su
+  ; clave del registro (Software\<editor>\<producto>, donde guarda la carpeta
+  ; de instalacion): cambiarlo dejaria sin ella a quien ya tenga instalada una
+  ; version anterior de la 4.x, y su "desinstalar antes de instalar" fallaria.
+  WriteRegStr SHCTX "${UNINSTKEY}" "Publisher" "Universidad de Granada - CSIRC"
+
   !if "${PRODUCTNAME}" == "FichaCSIRC"
     ; --- La 4.x sustituye a la 3.x (Inno Setup) ---
     ; NO se usa el desinstalador de la 3.x: borraria la tarea programada del
