@@ -15,52 +15,54 @@ Y si eres de **SisGes**, también sabe fichar tus **días de teletrabajo en INAR
 
 1. **Descarga** el instalador **`FichaCSIRC-Instalador.exe`** desde:
    **https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest**
-   (en el apartado *Assets*). La propia aplicación te avisará 🔔 cuando haya una
-   versión nueva, así que esto solo lo haces una vez.
+   (en el apartado *Assets*). Ocupa unos 3 MB. La propia aplicación te avisará
+   🔔 cuando haya una versión nueva, así que esto solo lo haces una vez.
 
-2. **Haz doble clic** en el instalador descargado.
+2. **Haz doble clic** en el instalador, mejor desde el Explorador de archivos
+   (la carpeta *Descargas*) que desde la lista de descargas del navegador.
 
    - Si Windows muestra un aviso azul de **SmartScreen** («Windows protegió su
      equipo»), pulsa **Más información → Ejecutar de todas formas**. Es normal en
      aplicaciones internas sin firma comercial; solo pasa la primera vez. 🛡️
 
-3. **Sigue el asistente** (Siguiente → Siguiente → Instalar). Sin sustos:
+3. **Sigue el asistente** (Siguiente → Instalar). Sin sustos:
 
    - **No pide permisos de administrador** 🙅: se instala solo para tu usuario.
-   - Deja marcada **«Crear un acceso directo en el escritorio»** si quieres el
-     icono a mano (viene marcada).
-   - Al terminar, si es tu **primera instalación**, deja marcada **«Abrir
-     FichaCSIRC y configurarlo»**: la app arranca directamente el asistente
-     (necesitarás tu **API key**: tenla a mano, sección 2). Si es una
-     **actualización**, verás **«Abrir FichaCSIRC al terminar»** y la app se
-     reabrirá sola con todo lo tuyo. 🔁
+   - Al terminar, deja marcado que **abra FichaCSIRC**. Si es tu **primera
+     instalación**, arranca el asistente de configuración (necesitarás tu
+     **API key**: tenla a mano, sección 2). Si es una **actualización**, se
+     abre con todo lo tuyo. 🔁
 
-4. En el menú Inicio (y, si lo marcaste, en el escritorio) tienes:
+4. En el menú Inicio (y en el escritorio, si dejas marcado el acceso directo)
+   tienes **FichaCSIRC**. El asistente de configuración va dentro de la app,
+   en *Herramientas*.
 
-   - 📝 **FichaCSIRC (Registrar horas)** — la que usarás cada día.
-   - 🔧 **FichaCSIRC - Configurar** — abre directamente el asistente de
-     configuración (también está dentro de la app, en *Herramientas*).
+   > 🔁 **¿Tenías la versión 3?** No tienes que hacer nada: el instalador la
+   > cierra, la retira y deja la 4 en su sitio, con tu API key, tus favoritas,
+   > plantillas, permisos, PIN y el aviso diario a la misma hora. Si te dice que
+   > FichaCSIRC sigue abierta, ciérrala (botón derecho sobre su icono junto al
+   > reloj → *Salir*) y pulsa *Reintentar*.
 
    > 🧩 Necesita **Microsoft Edge WebView2**, que ya viene con Windows 11 y con
-   > Windows 10 actualizado. Si faltara, el instalador te avisa.
+   > Windows 10 actualizado.
 
    > 🗑️ **Para desinstalar:** *Configuración de Windows → Aplicaciones →
    > FichaCSIRC → Desinstalar*. Tu configuración y tus horas no se tocan.
 
-### 🐧 Linux (Ubuntu)
+### 🐧 Linux
 
-1. Descarga **fichacsirc_X.Y.Z_all.deb** de la página de versiones
+1. En Ubuntu o Debian, descarga el **`.deb`** de la página de versiones
    (https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest).
 2. **Doble clic** sobre él → *Instalar* (o en una terminal:
-   `sudo apt install ./fichacsirc_*_all.deb`). Instala solo lo que le falte.
+   `sudo apt install ./FichaCSIRC_*.deb`). Instala solo lo que le falte.
 3. Ábrela desde el menú de aplicaciones: **FichaCSIRC**.
 
 ¿Otra distribución? Usa **FichaCSIRC-linux-x86_64.AppImage**: dale permiso de
-ejecución (botón derecho → *Propiedades* → *Permitir ejecutar*) y ábrelo. Si
-falta WebKitGTK, te dice qué instalar.
+ejecución (botón derecho → *Propiedades* → *Permitir ejecutar*) y ábrelo.
 
 Tu configuración se guarda en `~/.config/FichaCSIRC`. Al salir una versión
-nueva, la app te avisa y abre la página para descargarla.
+nueva, la app te avisa y abre la página para descargarla. En Linux no hay
+aviso diario de fichaje ni icono junto al reloj.
 
 ### 🍎 macOS
 
@@ -80,18 +82,12 @@ nueva, la app te avisa y abre la página para descargarla.
    pulsa **«Abrir igualmente»**. Solo la primera vez. 🔓 La primera vez arranca
    sola el asistente de configuración.
 
-> 🧹 **¿Vienes de una versión anterior a la 3.0?** Ya no hay
-> *FichaCSIRC-Configurar.app*: el asistente va dentro de la app (*Herramientas →
-> Configuración*). Puedes mandar la antigua a la Papelera.
-
-> 🔄 **Actualizar en Mac:** cuando haya versión nueva, la app te ofrece
-> descargarla. Se abre el instalador y la app se cierra; arrastra FichaCSIRC a
+> 🔄 **Actualizar en Mac:** cuando haya versión nueva, la app te avisa y abre
+> la página para descargarla. Baja el `.dmg`, arrastra FichaCSIRC a
 > Aplicaciones y elige **«Reemplazar»**.
 >
-> 🧹 **¿Te salen varios iconos de FichaCSIRC en Launchpad?** Son copias viejas
-> (de cuando se distribuía en `.zip`). Deja solo las de **Aplicaciones** y manda
-> el resto a la Papelera desde el Finder; suelen estar en **Descargas**. Si
-> Launchpad sigue mostrándolas, ejecuta `killall Dock` en Terminal.
+> 🍏 En Mac no hay todavía aviso diario de fichaje ni icono en la barra de
+> menús.
 >
 > 🖱️ En Mac, el **botón derecho** de estas instrucciones es el clic secundario
 > (dos dedos en el trackpad) o **Ctrl+clic**.
@@ -120,8 +116,7 @@ Se saca de tu propio perfil de OpenProject:
 ## 3. ⚙️ Configuración inicial (2 minutos)
 
 La primera vez que abres FichaCSIRC arranca solo el asistente. Para volver a
-él más adelante: **Herramientas → Configuración (asistente)** (o, en Windows,
-el acceso **FichaCSIRC - Configurar**).
+él más adelante: **Herramientas → Configuración (asistente)**.
 
 - 🔌 **Conexión**: la dirección ya viene puesta (`https://proyectostic.ugr.es`);
   pega tu **API key** y pulsa **Probar conexión** — debe saludarte con tu nombre. 👋
@@ -141,7 +136,7 @@ no se vuelve a mostrar: si dejas su campo vacío, se conserva la guardada.
 
 ## 4. 📅 Uso diario (medio minuto)
 
-Abre **FichaCSIRC (Registrar horas)**:
+Abre **FichaCSIRC**:
 
 1. Cada día de la semana es una **tarjeta** 🗂️ con una barra de progreso
    (🟢 verde = día completo, 🟠 ámbar = a medias). Haz **clic en el día** que
@@ -239,8 +234,10 @@ La app recuerda la vista que dejaste.
 - 📅 **Días propios de la UGR**: *Importar festivos* los propone calculados
   (cierre de Navidad, Semana Santa, San Pascual, Feria); compáralos con el
   calendario laboral del PTGAS y desmarca los que no coincidan.
-- 🧰 **Bandeja del sistema** (Windows, *Herramientas*): cerrar la ventana la
-  esconde junto al reloj, y puede arrancar con Windows ya escondida.
+- 🧰 **Icono junto al reloj** (Windows, *Herramientas → Bandeja del sistema*):
+  cerrar la ventana la esconde junto al reloj, y puede arrancar con Windows ya
+  escondida. El icono dice cuántos días tienes por completar y su menú trae
+  **«Completar hoy con…»** tu tarea habitual, sin abrir la ventana.
 - 🧩 **Plantillas**: guarda tu «día típico» y aplícalo con un clic. La forma
   más rápida de crear una: **botón derecho sobre el día** → *Guardar este día
   como plantilla*.
@@ -266,12 +263,31 @@ La app recuerda la vista que dejaste.
   olvidas, *He olvidado el PIN* borra la configuración de ese equipo y vuelves a
   configurar con el asistente (tus horas en ProyectosTIC no se pierden;
   reinstalar no sirve, la configuración no está en la carpeta del programa).
-- 📊 **Resumen del mes**: cuántas horas llevas, tu objetivo y qué días te faltan.
-- 📤 **Exportar CSV**: tus horas en un archivo que abre Excel.
-- ⏰ **Aviso diario de fichaje** (*Herramientas*): si sueles olvidarte, actívalo y
-  el sistema te avisará a la hora que elijas (por defecto las **16:00**), solo si
-  te faltan horas (Windows y macOS). **Desde el propio aviso puedes fichar**: cada
-  día con huecos trae tu tarea habitual y las horas que faltan; un clic y listo.
+- 📊 **Estadísticas** (botón 📊 de la barra): semanal, mensual o anual, con tus
+  tareas más realizadas y la jornada cumplida. El bloque **«Cómo va»** dice
+  cuántas horas llevas, tu objetivo y qué días te faltan, cada uno con su
+  enlace. *Informe del periodo* lo deja en una página para imprimir o guardar
+  como PDF.
+- 🧩 **Por completar** (botón 🧩, con el número de días): los días del año a los
+  que les faltan horas, en fichas por mes. Marca uno, varios o todos y
+  **rellénalos de una vez**: completar con una tarea, repartir entre varias,
+  aplicar una plantilla o copiar un día. Antes te enseña un resumen y todo se
+  deshace junto. En **«Te pasas»** salen los días con horas de más y los
+  apuntes repetidos.
+- 🗓️ **Plantillas de semana**: guarda de lunes a viernes, cada día con sus
+  apuntes, y aplícala entera.
+- 🔍 **Buscar en mis apuntes** (Ctrl+F): en qué días fichaste una tarea o un
+  comentario a lo largo del año.
+- 📤 **Exportar CSV** (*Archivo*): tus horas en un archivo que abre Excel.
+- ⏰ **Aviso diario de fichaje** (Windows): la **campana 🔔 de la barra** lo
+  activa, cambia la hora o lo quita. Se propone a las **14:00** y solo salta
+  si te faltan horas. **Desde el propio aviso puedes fichar**: cada día con
+  huecos trae tu tarea habitual y las horas que faltan; un clic y listo, o
+  **«Fichar todo»** si son varios días. *Probar el aviso ahora* te lo enseña
+  aunque hoy no te falte nada.
+- 🚪 **Salir y Bloquear**, arriba a la derecha: *Salir* (Ctrl+Q) cierra el
+  programa del todo; *Bloquear* (Ctrl+L) tapa la ventana hasta que escribas
+  tu PIN.
 - 📣 Al abrir, si la **semana pasada** quedó con huecos, un aviso te dice qué días
   y te lleva allí.
 
@@ -416,7 +432,7 @@ para que no tengas que saltar de una herramienta a otra.
 
 - En el **pie de la ventana** tienes dos semáforos: **● ProyectosTIC** y
   **● INARI**. En verde 🟢 = conectado.
-- El **Resumen del mes** cuenta esos días como *teletrabajo* y suma sus horas de
+- El resumen del mes (**«Cómo va»**, en *Estadísticas*) cuenta esos días como *teletrabajo* y suma sus horas de
   INARI, así que el total sigue cuadrando. 🧮
 
 > 🧭 **Regla de oro:** un día de teletrabajo va a **INARI o a ProyectosTIC, nunca
@@ -431,11 +447,13 @@ para que no tengas que saltar de una herramienta a otra.
 | «Sin conexión con ProyectosTic» | Comprueba que tienes red de la UGR (o la VPN encendida 🌐). |
 | «Acceso denegado (401)» | Tu API key ya no vale: genera otra (sección 2) y pégala en *Herramientas → Configuración (asistente)*. |
 | «No tienes permiso para ver las tareas de este proyecto» (403) | Es normal: solo ves los proyectos en los que participas. Elige otro. |
-| Varios iconos de FichaCSIRC en Launchpad (Mac) | Son copias viejas en Descargas: deja solo las de Aplicaciones (ver sección 1, macOS). |
+| Al instalar dice que «FichaCSIRC sigue abierta» | Ciérrala: botón derecho sobre su icono junto al reloj → *Salir*. Si no tiene icono ni ventana, en el Administrador de tareas (Ctrl+Mayús+Esc) → *FichaCSIRC* → *Finalizar tarea*. Después, *Reintentar*. |
+| «FichaCSIRC no ha podido abrir su ventana» | Pasa si la abre un instalador lanzado desde las descargas del navegador. Cierra el aviso y ábrela desde el escritorio o el menú Inicio. |
+| Varios iconos de FichaCSIRC en Launchpad (Mac) | Son copias viejas: deja solo la de Aplicaciones y manda el resto a la Papelera (suelen estar en Descargas). Si siguen saliendo, `killall Dock` en Terminal. |
 | El aviso diario de fichaje no salta | Abre FichaCSIRC una vez: si el aviso apuntaba a una instalación vieja, la app lo reprograma sola a la misma hora. |
 | He olvidado el PIN | En la pantalla del PIN, *He olvidado el PIN*: se borra la configuración de este equipo y empiezas de nuevo con el asistente (necesitarás tu API key, sección 2). Tus horas no se tocan. |
 | El indicador **● INARI** está en rojo | Revisa tu token en *Herramientas → Integraciones (INARI)…* y prueba la conexión (solo aplica a SisGes). |
-| Cualquier otra cosa rara 🐛 | Junto a tu configuración (`%APPDATA%\FichaCSIRC` en Windows, `~/Library/Application Support/FichaCSIRC` en macOS) hay un archivo `fichacsirc.log`: adjúntalo al pedir ayuda. |
+| Cualquier otra cosa rara 🐛 | *Ayuda → Copiar diagnóstico* copia un texto con el estado de la aplicación (sin tu API key ni tu PIN): pégalo en un correo a quien te ayude. |
 
 ---
 

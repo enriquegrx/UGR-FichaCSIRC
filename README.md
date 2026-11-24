@@ -13,16 +13,30 @@ integración con **INARI (Kanboard)** para fichar los días de teletrabajo. 🏡
 
 ## 📌 Estado del proyecto
 
-- Plataforma: Windows y macOS.
-- Interfaz (desde la 3.0): HTML/CSS/JavaScript en una ventana nativa con
-  [pywebview](https://pywebview.flowrl.com/) (WebView2 en Windows, WKWebView en
-  macOS). Toda la lógica sigue en Python.
+- Versión actual: **4.0**, reescrita por dentro en Rust.
+- Plataformas: Windows, macOS y Linux.
+- Interfaz: HTML/CSS/JavaScript (carpeta `web/`) en una ventana nativa de
+  [Tauri 2](https://tauri.app/), con el motor que ya trae el sistema: WebView2
+  en Windows, WebKit en macOS y WebKitGTK en Linux. Es la misma ventana de la
+  versión 3.
+- Motor: Rust (carpeta `tauri/`). Hace los mismos cálculos que el de Python de
+  la versión 3; se compararon día a día con apuntes reales.
 - API: OpenProject REST v3.
-- Distribución: instalador Windows combinado y paquetes macOS para Apple Silicon
-  e Intel.
+- Distribución: instalador de Windows (unos 3 MB), `.dmg` para Apple Silicon e
+  Intel, y `.deb` y AppImage para Linux.
 - Última versión publicada: <https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest>
 
-La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES.md).
+La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES.md);
+lo que cambia en cada versión, en [NOVEDADES.md](NOVEDADES.md); y con qué está
+hecha, en [TECNOLOGIA.md](TECNOLOGIA.md).
+
+**Versión 3 (histórico).** De la 3.0 a la 3.2.2 la aplicación era Python con
+pywebview, empaquetada con PyInstaller e Inno Setup. Su código sigue en el
+repositorio (`registrar_web.py`, `rellenar_horas.py` y compañía) y se mantiene
+a la par: usa la misma ventana y sus tests son los que prueban la interfaz. Ya
+no se publica: quien tenga una 3.x recibe la 4.0 como una actualización más y
+conserva su configuración. `NOVEDADES.md` guarda las cuatro últimas versiones
+de la 3 (de la 3.1.4 a la 3.2.2).
 
 ## ✨ Qué permite hacer
 
@@ -66,8 +80,10 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
   (`tareas_local`: `{motivo: {id, nombre} | {ninguna: true}}`) o deducida por el
   nombre. Las etiquetas del día salen rellenas si está imputado y con borde si
   solo es local.
-- 🧰 **Bandeja del sistema** e inicio con Windows (`bandeja.py`, pystray; solo
-  Windows: en Mac pystray exige el hilo principal, que es de pywebview).
+- 🧰 **Icono junto al reloj** e inicio con Windows (solo Windows): dice cuántos
+  días hay por completar y trae «Completar hoy con…» la tarea habitual, sin
+  abrir la ventana. Con el icono, la X solo esconde la ventana; **Salir** la
+  cierra del todo.
 - 📅 Días propios de la UGR **propuestos** por año (`propuesta_dias_ugr`) y
   revisables al importar festivos, más altas a mano (`dias_ugr`).
 - ➕ Trabajar **desde las propias fichas**: «+» con las tareas habituales,
@@ -107,11 +123,22 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - 🆕 Ver las **novedades de cada versión dentro de la app** (Ayuda → Novedades),
   sin pasar por GitHub; tras actualizar se abren solas una vez
   (`ultima_version_abierta`).
-- 📊 Consultar un resumen mensual con objetivo, horas registradas y días
-  incompletos.
+- 📊 **Estadísticas** dentro de la ventana (semanal, mensual o anual): tareas
+  más realizadas, jornada cumplida y el año mes a mes, con el bloque «Cómo va»
+  y un informe del periodo para imprimir o guardar como PDF.
+- 🧩 **Por completar**: los días del año con horas pendientes, en fichas por
+  mes. Se rellenan de una vez (completar con una tarea, repartir entre varias,
+  aplicar una plantilla o copiar un día), con resumen previo y un solo
+  *Deshacer*. Incluye «Te pasas»: los días con horas de más y los apuntes
+  repetidos.
+- 🗓️ **Plantillas de semana** (de lunes a viernes) además de las de día.
+- 🔍 **Buscar en los apuntes** del año (Ctrl+F).
 - 📤 Exportar horas a CSV.
-- ⏰ Activar un aviso diario de fichaje en Windows y macOS.
-- 🔔 Comprobar actualizaciones y, en Windows, descargar y lanzar el instalador.
+- ⏰ **Aviso diario de fichaje** (Windows, con el Programador de tareas): una
+  campana en la barra con la hora, propuesto a las 14:00. Desde la ventanita
+  del aviso se ficha sin abrir la app.
+- 🔔 Comprobar actualizaciones: en Windows descarga el instalador y lo abre; en
+  macOS y Linux abre la página de la versión nueva.
 
 ## 🚀 Cómo se usa
 
@@ -122,8 +149,8 @@ de entrada o salida.
 El flujo habitual es:
 
 1. Abrir `FichaCSIRC`: la primera vez (sin configuración) arranca solo el
-   asistente. Luego está en *Herramientas → Configuración (asistente)* y, en
-   Windows, en el acceso *FichaCSIRC - Configurar* (`FichaCSIRC.exe --configurar`).
+   asistente. Luego está en *Herramientas → Configuración (asistente)* (o
+   arrancando el programa con `--configurar`).
 2. Introducir la URL de ProyectosTic y la API key personal.
 3. Configurar jornada (oficial y desayuno), jornada de verano, tareas favoritas
    y actividad por defecto.
@@ -155,69 +182,81 @@ Guía de uso paso a paso en [INSTRUCCIONES.md](INSTRUCCIONES.md), sección 6.
 
 ## 💾 Instalación
 
-### Windows
-
-Descargar `FichaCSIRC-Instalador.exe` desde la última release:
-
+Todos los instaladores están en la última release:
 <https://github.com/enriquegrx/UGR-FichaCSIRC/releases/latest>
 
-El instalador es por usuario, no requiere permisos de administrador y crea los
-accesos directos necesarios. Necesita *Microsoft Edge WebView2 Runtime* (viene
-con Windows 11 y Windows 10 actualizado); si falta, el instalador avisa.
-Al actualizar desde una versión 2.x instala encima, en la misma carpeta, y borra
-antes los restos de la versión Tkinter (`FichaCSIRC-Configurar` y el `_internal`
-viejo); la configuración no se toca. Si Windows muestra SmartScreen, hay que usar
-`Más información` y después `Ejecutar de todas formas`; la aplicación no está
-firmada con certificado comercial.
+### Windows
 
-El instalador deja dos accesos: la aplicación de registro y el configurador.
+Descargar `FichaCSIRC-Instalador.exe` y abrirlo con doble clic.
+
+- Ocupa unos 3 MB, es por usuario y no pide permisos de administrador. Instala
+  en `%LOCALAPPDATA%\Programs\FichaCSIRC` y deja un acceso, **FichaCSIRC**,
+  en el menú Inicio y en el escritorio. El asistente de configuración va
+  dentro de la app.
+- Necesita *Microsoft Edge WebView2 Runtime*, que viene con Windows 11 y con
+  Windows 10 actualizado.
+- **Sobre una versión 3**: el instalador la cierra, retira su programa y sus
+  accesos y deja la 4 en su sitio. La configuración (`%APPDATA%\FichaCSIRC`),
+  la API key, el PIN, el inicio con Windows y el aviso diario se conservan; el
+  aviso se reapunta solo al programa nuevo, a la misma hora, la primera vez
+  que se abre. Si la versión 3 sigue abierta y no se puede cerrar, el
+  instalador lo dice y no instala nada.
+- Si Windows muestra SmartScreen, hay que usar `Más información` y después
+  `Ejecutar de todas formas`: la aplicación no está firmada con certificado
+  comercial.
+
+Para desinstalar: *Configuración de Windows → Aplicaciones → FichaCSIRC →
+Desinstalar*. La configuración no se toca.
 
 ### macOS
 
-Descargar el `.dmg` correspondiente desde la última release:
+Descargar el `.dmg` correspondiente:
 
 - `FichaCSIRC-mac-arm64.dmg` para Apple Silicon.
 - `FichaCSIRC-mac-x64.dmg` para Intel.
 
 Al abrirlo aparece `FichaCSIRC.app` junto a un acceso a **Aplicaciones**: hay
-que arrastrarla ahí (si ya estaba, elegir *Reemplazar*). Desde la 3.0 no hay
-`FichaCSIRC-Configurar.app` (el asistente va dentro): quien venga de la 2.x
-puede borrarla de Aplicaciones. Desde la 2.9.2 se distribuye como `.dmg` y no como `.zip`: con el
-zip cada actualización se descomprimía en otra carpeta de Descargas y Launchpad
-acababa mostrando un icono por copia. La app avisa si se abre fuera de
-Aplicaciones y, al actualizarse, descarga el `.dmg` de la arquitectura del Mac
-(mirando el hardware, no el proceso: una app Intel bajo Rosetta pasa a arm64).
+que arrastrarla ahí (si ya estaba, elegir *Reemplazar*).
 
 Las apps no están firmadas ni notarizadas por Apple. La primera vez macOS las
 bloquea; se abren en *Ajustes del Sistema → Privacidad y seguridad → Abrir
-igualmente* (desde macOS 15 ya no vale el clic derecho → *Abrir*). Si macOS
-marca la descarga con cuarentena y no permite abrirla, se puede limpiar desde
-Terminal:
+igualmente*. Si macOS marca la descarga con cuarentena y no permite abrirla, se
+puede limpiar desde Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/FichaCSIRC.app
 ```
 
-Para localizar copias antiguas (las que generaban iconos repetidos):
+En Mac el menú contextual se abre con clic secundario o con **Ctrl+clic**. En
+la 4.0 el Mac no tiene todavía aviso diario de fichaje ni icono en la barra de
+menús, y al salir una versión nueva la app abre su página para descargarla.
 
-```bash
-find ~ /Applications -maxdepth 4 -name "FichaCSIRC*.app" -prune 2>/dev/null
-```
+### Linux
 
-En Mac el menú contextual se abre con clic secundario o con **Ctrl+clic**.
+- Ubuntu y Debian: el `.deb` de la release (`sudo apt install ./FichaCSIRC_*.deb`).
+- Otras distribuciones: `FichaCSIRC-linux-x86_64.AppImage`, con permiso de
+  ejecución.
+
+Como en Mac: sin aviso diario ni icono junto al reloj, y las versiones nuevas
+se descargan desde su página.
 
 ## 🗂️ Configuración y datos locales
 
 La configuración se guarda en `config.json`. Contiene la URL, la API key, la
-jornada, favoritos, no laborables, plantillas y preferencias de ventana.
+jornada, favoritos, no laborables, plantillas y preferencias de ventana. Es el
+**mismo fichero, en el mismo sitio, que usaba la versión 3**: pasar a la 4 no
+exige configurar nada.
 
-Ubicación de la configuración empaquetada:
+Ubicación:
 
 - Windows: `%APPDATA%\FichaCSIRC`
 - macOS: `~/Library/Application Support/FichaCSIRC`
+- Linux: `~/.config/FichaCSIRC`
 
-En ejecución desde scripts, la configuración vive junto al código. Para pruebas
-o configuraciones alternativas se puede usar la variable:
+Las compilaciones **de pruebas** (ver *Desarrollo local*) usan una carpeta
+aparte, `FichaCSIRC-rust`, copiada de la real solo la primera vez: así no tocan
+los datos de la aplicación instalada. Para tests o configuraciones alternativas
+se puede usar la variable:
 
 ```bash
 FICHACSIRC_CONFIG=/ruta/config.json
@@ -226,24 +265,29 @@ FICHACSIRC_CONFIG=/ruta/config.json
 No se debe subir nunca `config.json` al repositorio: contiene una API key
 personal. Existe [config.example.json](config.example.json) como plantilla.
 
-La aplicación escribe un log de diagnóstico en `fichacsirc.log`, junto a la
-configuración.
+Para pedir ayuda, *Ayuda → Copiar diagnóstico* genera un texto con el estado
+de la aplicación, sin API key ni PIN.
 
 **Protección de `config.json`** (desde la 3.2.2, tras perderse una entera en la
-3.2.0): nunca se escribe encima de un fichero que no se ha podido leer
-(`configurar.leer_para_cambiar`), ninguna escritura quita `base_url`/`api_key`,
-y al arrancar, si falta la conexión o el fichero está roto, se recupera sola de
-la última copia de `copias/` que la tenga (y se avisa). La copia buena más
-reciente nunca se purga.
+3.2.0): nunca se escribe encima de un fichero que no se ha podido leer, ninguna
+escritura quita `base_url`/`api_key`, y al arrancar, si falta la conexión o el
+fichero está roto, se recupera sola de la última copia de `copias/` que la
+tenga (y se avisa). La copia buena más reciente nunca se purga.
 
 ## 🧱 Estructura del repositorio
 
+La versión 4 vive en `tauri/` y comparte `web/` con la versión 3 (Python),
+cuyo código se conserva: sus tests prueban la interfaz y sirven de referencia
+para los cálculos. Todo lo que termina en `.py`, y los scripts de empaquetado
+de la raíz, son de la versión 3.
+
 | Ruta | Descripción |
 |---|---|
-| `rellenar_horas.py` | Motor principal: API, jornada, apuntes, exportación y modo consola. |
+| `tauri/` | **La app (4.0)**: Rust + Tauri 2. En `src/`: `main.rs` (arranque, ventana y argumentos), `api.rs` (los métodos que llama la interfaz), `openproject.rs` (cliente de la API), `reglas.rs` (jornada, festivos y permisos), `apuntes.rs`, `tarea.rs` (crear, modificar y duplicar tareas), `completar.rs`, `estadisticas.rs`, `resumen.rs`, `permisos.rs`, `herramientas.rs`, `inari.rs`, `copias.rs`, `config.rs`, `pin.rs`, `asistente.rs`, `ayuda.rs`, `sistema.rs` (aviso diario, icono junto al reloj y actualizaciones) y `modo.rs` (pruebas o producción). `nsis/hooks.nsh` hace que el instalador de Windows sustituya a la versión 3. |
+| `rellenar_horas.py` | Versión 3 (Python). Motor: API, jornada, apuntes, exportación y modo consola. |
 | `configurar.py` | Utilidades de configuración y comprobación de conexión. |
-| `registrar_web.py` | **La app (3.0)**: ventana pywebview y la clase `Api` que usa la interfaz; asistente, aviso (`--recordatorio`) y actualizaciones. |
-| `web/` | Interfaz: `index.html` + `app.js` (ventana), `dialogos.js`, `configurar.html/js` (asistente), `aviso.html/js`, `comun.js`, `app.css`. `demo.js` solo con `?demo`. |
+| `registrar_web.py` | Versión 3 (Python): ventana pywebview y la clase `Api` que usa la interfaz; asistente, aviso (`--recordatorio`) y actualizaciones. Los métodos de `Api` se llaman igual que los de `tauri/src/api.rs`. |
+| `web/` | Interfaz, la misma para la 4 y la 3: `index.html` + `app.js` (ventana), `dialogos.js`, `configurar.html/js` (asistente), `aviso.html/js`, `comun.js`, `app.css`. `demo.js` solo con `?demo`. `puente-tauri.js` conecta la ventana con el motor de Rust. |
 | `requirements-web.txt` | Dependencias de la app (requests, pywebview). |
 | `registrar_gui.py`, `configurar_gui.py`, `dialogos.py`, `fichaui.py` | Interfaz Tkinter **anterior a la 3.0**. Ya no se empaqueta; se conserva de referencia y sus tests siguen pasando. |
 | `inari.py` | Cliente JSON-RPC de INARI (Kanboard): credenciales, slots y descubrimiento de proyecto, columna, carril y categoría. |
@@ -259,8 +303,8 @@ reciente nunca se purga.
 | `bandeja.py` | Icono en la bandeja (pystray) e inicio con Windows; solo Windows. |
 | `web/humo.js` + `tests/test_js_humo.py` | Pruebas de humo de la interfaz en Edge/Chrome sin ventana (se saltan sin navegador; desde Git Bash no arranca el navegador: usar PowerShell/cmd). |
 | `TECNOLOGIA.md` | Stack y plan de migración a Rust/Tauri, para usuarios; se empaqueta y se ve en Ayuda → Tecnología utilizada. |
-| `.github/workflows/` | Tests y publicación automática de releases. |
-| `tests/` | Tests del motor, del cliente INARI, del puente de destinos y de flujos de la GUI. |
+| `.github/workflows/` | `tests.yml` (tests de Python), `rust.yml` (en ramas `rust/**`: tests de Rust e instaladores de pruebas como artefactos, sin publicar) y `release.yml` (publica la 4.x al etiquetar). |
+| `tests/` | Tests de Python: motor, clase `Api`, cliente INARI, copias, y las pruebas de humo de la ventana. `paridad_rust.py` compara los cálculos de Rust con los de Python sobre datos reales. Los tests de Rust van en cada módulo de `tauri/src/`. |
 
 Otros documentos:
 
@@ -272,57 +316,72 @@ Otros documentos:
 
 ## 🧑‍💻 Desarrollo local
 
-Los usuarios que descargan una release no necesitan instalar Python. Esta sección
-es solo para desarrollo, pruebas o empaquetado local.
+Los usuarios que descargan una release no necesitan instalar nada más. Esta
+sección es solo para desarrollo, pruebas o empaquetado local.
 
-Requisitos recomendados:
+### La app (Rust y Tauri)
 
-- Python 3.12.
-- `requests` y `pywebview` (en Windows usa WebView2; en macOS, pyobjc).
+Requisitos: Rust estable, Node.js (para la CLI de Tauri, con `npx`) y, en
+Linux, WebKitGTK 4.1 y sus cabeceras.
 
-Instalar dependencias:
+Tests y ejecución, desde `tauri/`:
+
+```bash
+cargo test
+cargo run
+```
+
+Sin más, compila **de pruebas**: se llama «FichaCSIRC-Rust», usa su propia
+configuración (`FichaCSIRC-rust`) y sus propios nombres para el aviso diario y
+el inicio con Windows, de modo que convive con la aplicación instalada sin
+tocarla. Con `--features produccion` es FichaCSIRC de verdad: misma
+configuración y mismos nombres que la instalada.
+
+Instalador local de Windows:
+
+```bash
+# de pruebas: se instala al lado de la de verdad
+npx @tauri-apps/cli@2 build --bundles nsis --config tauri.pruebas.json
+# de producción: sustituye a la instalada
+npx @tauri-apps/cli@2 build --bundles nsis --features produccion
+```
+
+Las dos cosas van siempre juntas: `--config tauri.pruebas.json` sin la
+feature, o la feature sin ese fichero.
+
+### La ventana, sin red
+
+Para revisar solo el diseño: `python -m http.server 8765 --directory web` y
+abrir `http://localhost:8765/index.html?demo`. `web/demo.js` simula la
+aplicación con datos de ejemplo.
+
+### Tests de Python
+
+Prueban la ventana (con Edge o Chrome sin ventana) y el motor de la versión 3:
 
 ```bash
 python -m pip install -r requirements-web.txt
-```
-
-Ejecutar la aplicación (sin configuración abre el asistente):
-
-```bash
-python registrar_web.py
-```
-
-El asistente, a propósito:
-
-```bash
-python registrar_web.py --configurar
-```
-
-Para probar algo arriesgado sin tocar la configuración real, poner
-`EXPERIMENTO = True` en `registrar_web.py` (configuración aparte, sin instalar
-actualizaciones ni tocar el aviso diario). Para revisar solo el diseño, sin red:
-`python -m http.server 8765 --directory web` y abrir
-`http://localhost:8765/index.html?demo`.
-
-Ejecutar tests:
-
-```bash
 python -m unittest discover -s tests -t .
 ```
 
-Los tests no usan la red real: simulan la API y escriben una configuración
-temporal mediante `FICHACSIRC_CONFIG`.
+No usan la red real: simulan la API y escriben una configuración temporal
+mediante `FICHACSIRC_CONFIG`. Toda función nueva de la interfaz tiene que
+existir en `tauri/src/api.rs`, en la clase `Api` de `registrar_web.py` y en
+`web/demo.js`; hay un test que lo comprueba para las dos últimas.
+
+La versión 3 se sigue pudiendo ejecutar con `python registrar_web.py`.
 
 ## 📦 Construcción y releases
 
-La publicación oficial se hace con GitHub Actions. El flujo genera el instalador
-combinado de Windows, los paquetes macOS y los sube a GitHub Releases.
+La publicación se hace con GitHub Actions (`.github/workflows/release.yml`) al
+subir una etiqueta de versión. El flujo pasa los tests de Python y de Rust,
+compila en Windows, macOS (Apple Silicon e Intel) y Linux en modo producción y
+sube a la release:
 
-Los ejecutables de Windows se empaquetan con PyInstaller en **modo carpeta**
-(`--onedir --noupx`, versión fijada): cada app es un `.exe` junto a su carpeta
-`_internal`. Por eso **el único artefacto Windows de cada Release es
-`FichaCSIRC-Instalador.exe`** (ya no hay `.exe` sueltos portables: el ejecutable
-necesita su carpeta al lado). Es también lo que descarga el autoactualizador.
+- `FichaCSIRC-Instalador.exe` (Windows, NSIS). Es también lo que descarga el
+  actualizador, tanto el de la 4.x como el de la 3.x.
+- `FichaCSIRC-mac-arm64.dmg` y `FichaCSIRC-mac-x64.dmg`.
+- El `.deb` y `FichaCSIRC-linux-x86_64.AppImage`.
 
 Para publicar una versión:
 
@@ -331,30 +390,24 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-Antes de etiquetar hay que actualizar:
+Antes de etiquetar:
 
-- `VERSION` en `rellenar_horas.py`
-- `version_info.txt` para los metadatos del ejecutable Windows
+- La versión en `tauri/Cargo.toml` y `tauri/tauri.conf.json` (y `Cargo.lock`):
+  la etiqueta tiene que coincidir con ella o el flujo no publica.
+- La entrada de la versión en `NOVEDADES.md`, y `README.md` e
+  `INSTRUCCIONES.md` al día.
 
-El instalador Windows cierra procesos de FichaCSIRC antes de reemplazar archivos,
-borra la tarea programada al desinstalar y usa instalación por usuario.
+Una etiqueta con guion (`v4.0.0-rc.1`) se publica como **pre-release**: las
+aplicaciones instaladas no la ven, porque miran la última release estable, y
+solo la instala quien tenga el enlace. Sirve para ensayar antes de que le
+llegue a nadie.
 
-### Build local de macOS
+Las ramas `rust/**` compilan en cada subida (`rust.yml`) y dejan los
+instaladores **de pruebas** como artefactos del run, sin publicar nada.
 
-En macOS:
-
-```bash
-./build_macos.sh
-```
-
-Artefactos generados:
-
-- `dist/FichaCSIRC.app`
-- `dist/FichaCSIRC-mac-arm64.dmg` o `dist/FichaCSIRC-mac-x64.dmg`
-
-El script crea su propio entorno virtual e instala ahí `requirements-web.txt`.
-
-Los detalles de mantenimiento y scripts auxiliares están en
+Los scripts `build_exe.bat`, `build_instalador.bat`, `build_macos.sh` y
+`build_linux.sh`, con `instalador.iss`, son los de la versión 3 (PyInstaller e
+Inno Setup). Los detalles de mantenimiento están en
 [CONTEXTO_DESARROLLO.md](CONTEXTO_DESARROLLO.md).
 
 ## 🔧 Decisiones técnicas relevantes
@@ -367,15 +420,26 @@ Los detalles de mantenimiento y scripts auxiliares están en
 - Los listados paginan por `offset` para no perder proyectos o tareas.
 - Los errores 403 al listar proyectos se tratan como falta de permisos, no como
   fallo de la aplicación.
-- La GUI ejecuta llamadas de red en hilos de fondo y cachea datos de la semana.
+- La interfaz solo pinta: todo cálculo y toda llamada a la API están en el
+  motor. Las llamadas de red no bloquean la ventana y los datos de la semana se
+  cachean.
 - El aviso diario tiene autocierre para no dejar procesos bloqueando una futura
   actualización.
 - La integración con INARI usa la API JSON-RPC 2.0 de Kanboard (Basic Auth
   `usuario:token`); cada franja de teletrabajo es una tarea con las horas en
   `time_spent` y un marcador de día en `reference`. Es opcional y solo para SisGes.
-- Los ejecutables de Windows se empaquetan en modo carpeta (PyInstaller
-  `--onedir`): el `.exe` carga sus DLL desde su carpeta contigua, sin extraer nada
-  a `%TEMP%`, lo que evita errores de carga al lanzarlo recién instalado.
+- La 4.x es un único ejecutable nativo, sin Python dentro: desaparecen los
+  errores de carga de DLL y los archivos bloqueados al instalar o actualizar
+  que daba el empaquetado con PyInstaller.
+- El instalador de la 4.x **sustituye** a la versión 3 sin usar su
+  desinstalador, que borraría la tarea programada del aviso diario y, con
+  ella, su hora.
+- Dos modos de compilación, pruebas y producción (`tauri/src/modo.rs`): el de
+  pruebas no comparte ni configuración ni nombres con la aplicación instalada.
+- Crear tareas usa `POST /api/v3/work_packages` y, antes, su formulario
+  (`/work_packages/form`), que no crea nada y dice qué tipos admite el
+  proyecto y qué falta. Duplicar un árbol no tiene operación en la API: se lee
+  nivel a nivel con el filtro `parent` y se crea cada copia por separado.
 
 ## ⚠️ Limitaciones
 
@@ -385,7 +449,10 @@ Los detalles de mantenimiento y scripts auxiliares están en
   obligatorios de un tipo no se rellenan: en ese caso la app lo avisa y no
   deja empezar.
 - Windows y macOS pueden mostrar avisos de seguridad porque los binarios no
-  están firmados con certificados comerciales.
+  están firmados con certificados comerciales. Las actualizaciones tampoco van
+  firmadas todavía.
+- En macOS y Linux, la 4.0 no tiene aviso diario de fichaje ni icono junto al
+  reloj, y no instala sola las versiones nuevas: abre su página.
 - La lista de festivos conocidos debe revisarse cada año.
 - En Windows necesita *Microsoft Edge WebView2 Runtime* (viene con Windows 11 y
   Windows 10 actualizado).

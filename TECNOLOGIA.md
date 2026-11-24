@@ -26,6 +26,8 @@ debajo, cómo estaban hechas las anteriores.
 - Habla con **ProyectosTIC (OpenProject)** a través de su API oficial (versión 3)
   con tu clave personal (API key), igual que antes. Tus horas viven allí; la
   aplicación solo las lee y las escribe.
+- Si ProyectosTIC te da permiso en algún proyecto, también **crea, modifica y
+  duplica tareas** allí, siempre con tu clave y con lo que te deje tu rol.
 
 **Tus datos en el equipo**
 - El **mismo config.json**, en el mismo sitio: al pasar de la 3 a la 4 no hay

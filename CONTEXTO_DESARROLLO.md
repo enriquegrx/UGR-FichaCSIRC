@@ -1,11 +1,65 @@
 # Contexto de desarrollo - FichaCSIRC
 
-App de escritorio (Windows y macOS) para fichar horas en OpenProject (instancia
-ProyectosTic de la UGR) vía su API REST v3. Desde la **3.0** la interfaz es HTML
-en una ventana pywebview; la lógica sigue en Python. Ver `README.md` para la
-definición completa y el historial de decisiones.
+App de escritorio (Windows, macOS y Linux) para fichar horas en OpenProject
+(instancia ProyectosTic de la UGR) vía su API REST v3. Desde la **4.0** el motor
+es Rust y la ventana la pone Tauri 2; la interfaz HTML es la misma de la 3.0.
+Ver `README.md` para la definición completa y el historial de decisiones.
 
-## Estructura
+## Versión 4 (Rust y Tauri)
+- **`tauri/`** — LA APP (4.0). `src/main.rs` arranca (argumentos: `--configurar`,
+  `--recordatorio`, `--minimizado`, `--prueba-aviso`, `--por-completar`) y crea
+  la ventana; `api.rs` es el único comando que ve el JS (`api(metodo, args)`):
+  un `match` con los mismos nombres que los métodos de la clase `Api` de Python.
+  Motor: `openproject.rs` (cliente), `reglas.rs` (jornada, festivos, permisos),
+  `apuntes.rs`, `tarea.rs` (crear, modificar y duplicar tareas, plantillas de
+  tarea), `completar.rs`, `estadisticas.rs`, `resumen.rs`, `permisos.rs`,
+  `herramientas.rs`, `inari.rs`, `copias.rs`, `config.rs`, `pin.rs`,
+  `asistente.rs`, `ayuda.rs`, `sistema.rs` (aviso diario, bandeja,
+  actualizaciones).
+- **`web/`** es la misma para Rust y Python. `puente-tauri.js` define
+  `window.pywebview.api` sobre el comando de Tauri, así que el JS no sabe con
+  qué motor habla.
+- **Python se mantiene a la par.** Cada función nueva se escribe en Rust y en
+  Python (los commits lo dicen: «(Python y Rust)»): la clase `Api` de
+  `registrar_web.py` es la que usan los tests de la ventana, y `web/demo.js` la
+  imita para el diseño sin red. Hay un test que exige que todo método llamado
+  desde el JS exista en `Api` y en la demo. `tests/paridad_rust.py` compara los
+  cálculos de los dos motores con datos reales.
+- **Dos modos** (`tauri/src/modo.rs`): sin nada, **pruebas** (producto
+  «FichaCSIRC-Rust», config en `FichaCSIRC-rust` copiada de la real solo la
+  primera vez, nombres propios para el aviso y el inicio con Windows); con
+  `--features produccion`, FichaCSIRC de verdad (misma config y mismos nombres
+  que la 3.x). El instalador de pruebas se compila con
+  `--config tauri.pruebas.json`; el de producción, sin él y con la feature.
+  Las dos cosas van siempre juntas.
+- **El instalador de producción sustituye a la 3.x** (`tauri/nsis/hooks.nsh`):
+  la cierra y comprueba que se ha cerrado, retira su carpeta, su entrada de
+  «Aplicaciones instaladas» y sus accesos, y reapunta el acceso del escritorio
+  y el inicio con Windows. NO usa el desinstalador de Inno: borraría la tarea
+  del aviso diario. La app reapunta esa tarea al exe nuevo, a la misma hora
+  (`sistema::reparar_recordatorio`).
+- **Solo Windows** en la 4.0: aviso diario (`schtasks`), bandeja, inicio con el
+  sistema e instalar sola la actualización. En Mac y Linux la app abre la
+  página de la versión nueva.
+- **Cuidado al probar instaladores**: lanzados desde una app empaquetada (MSIX)
+  se instalan virtualizados; y en una sesión de Administrador, lo que lanza el
+  navegador corre con menos permisos y no puede crear WebView2 (la app lo dice
+  con un cuadro de Windows, `sistema::salir_sin_ventana`). Abrirlos con doble
+  clic desde el Explorador.
+- **Tareas de ProyectosTIC** (`tarea.rs`): crear con `POST /work_packages`,
+  preguntando antes a su formulario (`/work_packages/form`, que no crea nada)
+  los tipos del proyecto y lo que falta; solo en los proyectos que traen el
+  enlace `createWorkPackage`. Modificar con `PATCH` y `lockVersion`, mandando
+  solo lo que cambia. Duplicar no tiene operación en la API: se lee el árbol
+  nivel a nivel (filtro `parent`) y la interfaz crea cada copia de arriba
+  abajo, sin avisos (`notify=false`), parando en la que falle.
+- CI: `rust.yml` (ramas `rust/**`: tests de Rust e instaladores de pruebas como
+  artefactos) y `release.yml` (al etiquetar: tests, compila producción en los
+  tres sistemas y publica; con guion en la etiqueta, pre-release).
+
+## Estructura de la versión 3 (Python)
+Lo que sigue describe la app de Python (3.0 a 3.2.2). Ya no se publica, pero su
+código se conserva y se mantiene a la par.
 - **`registrar_web.py`** — LA APP (3.0): ventana pywebview + clase `Api` (lo único
   que ve el JS, como `window.pywebview.api`). Toda la lógica en Python; el JS
   solo pinta. Incluye asistente (`cfg_*`, `--configurar`, y se abre solo sin
@@ -56,7 +110,9 @@ definición completa y el historial de decisiones.
 
 ## Al cerrar una version (checklist, NO saltarse)
 Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquetar:
-1. `VERSION` en `rellenar_horas.py` **y** las 4 cadenas de `version_info.txt`.
+1. La version en `tauri/Cargo.toml`, `tauri/tauri.conf.json` y `tauri/Cargo.lock`
+   (la etiqueta tiene que coincidir o `release.yml` no publica). `VERSION` en
+   `rellenar_horas.py` y `version_info.txt` solo se tocan si se publica una 3.x.
 2. **`NOVEDADES.md`**: una entrada de la version en lenguaje llano (Mejoras /
    Correcciones). Es lo que el usuario ve en Ayuda > Novedades; si falta, la
    version "no existe" para el.
@@ -70,6 +126,9 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
 7. `python -m unittest discover -s tests -t .` en verde. Desde **PowerShell o
    cmd** (`run_tests.bat`): lanzado desde Git Bash/MSYS, Edge sin ventana sale
    sin pintar nada y `test_js_humo` falla aunque todo esté bien.
+8. `cargo test` en `tauri/`, en verde y sin avisos.
+9. Una etiqueta con guion (`v4.0.0-rc.4`) sale como pre-release: nadie la recibe
+   sola. Las pre-releases no se ven entre si: se instalan con su enlace.
 
 ## Hecho recientemente
 - Revisión UX aplicada (jul 2026): quick wins + llamadas a la API en hilos en la
@@ -704,8 +763,11 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
     habituales, formulario más denso).
 
 ## Tests
-- `python -m unittest discover -s tests -t .` (o `run_tests.bat`). **179 tests** con la
-  red mockeada, repartidos así:
+- Rust: `cargo test` en `tauri/` (67 tests en la 4.0.0-rc.4), en cada módulo.
+- Python: `python -m unittest discover -s tests -t .` (o `run_tests.bat`), 323
+  tests en la 4.0.0-rc.4 con la red simulada. Incluyen las pruebas de humo de
+  la ventana (`web/humo.js`, en Edge o Chrome sin ventana). El reparto de abajo
+  es el de la 3.0 y se deja como referencia:
   - `test_fichacsirc.py` (109) — motor: duraciones ISO, jornada/verano, parsing y
     paginación de la API, payloads, pendientes, festivos, franjas, permisos
     (saldo, actividad, año nuevo), instalacion en Mac y aviso diario.
@@ -734,4 +796,4 @@ Se ha olvidado varias veces y la documentacion queda mintiendo. Antes de etiquet
 - Credenciales (API key, token INARI) en el llavero del sistema, no en el JSON.
 - Rellenar la config `dias_ugr` con el calendario laboral PTGAS oficial cada año
   (San Pascual, Feria del Corpus, cierres de Navidad/Semana Santa).
-- Posible versión Tauri/Rust si se quiere un ejecutable más ligero/pulido.
+- Versión 4: aviso diario e icono en Mac y Linux, y actualizaciones firmadas.
