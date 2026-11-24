@@ -110,6 +110,31 @@
     aul(15010, "[AUL] Renovación de proyectores", 14990, "[2026_AUL] Proyectos"),
     aul(15011, "Proyectores de la Facultad de Ciencias", 15010, "[AUL] Renovación de proyectores")];
   let ultimoCrear = null, sigTarea = 14100;
+  // Plantillas de tarea (ninguna con ?sinplantillas).
+  let plantillasDemo = /[?&]sinplantillas\b/.test(location.search) ? [] : [{
+    nombre: "Incidencia de Iris", titulo: "Incidencia de Iris con ticket: *", proyecto: 3, tipo: 1,
+    padre: { id: 15003, nombre: "[2026_AUL] Atención a usuarios" }, estimado: 1, descripcion: "",
+    asignar: false, favorita: false }];
+  // Modificar y duplicar. De Aulas se sabe el arbol entero: una cerrada que ya no
+  // sale en la lista (15006), una con tiempo estimado (15005) y una Incidencia
+  // (15011: en Sistemas de Gestion no hay ese tipo, y en Aulas pide un campo propio).
+  // La 15010 no se deja modificar; en la 15001 no se puede tocar el tiempo estimado.
+  // Al duplicar, un titulo con "a la segunda" falla la primera vez.
+  const cerradasAulas = [aul(15006, "Inventario de aulas de 2025", 15002, "[2026_AUL] Mantenimientos")];
+  const TIPOS_DEMO = { 1: "Tarea", 2: "Hito", 3: "Fase", 4: "Incidencia" };
+  const detalleDemo = new Map([[15005, { estimado: 2 }], [15011, { tipo: 4 }], [15006, { cerrada: true }],
+    [15002, { descripcion: "Lo que se revisa cada trimestre en las aulas." }]]);
+  const detalle = (id) => detalleDemo.get(id) || {};
+  const NO_ESTA = "ProyectosTIC no encuentra la tarea: ya no existe o no la ves.";
+  const deOtros = [{ id: 14000, nombre: "[ASG] Migración de correo" }, { id: 11754, nombre: "[2026_ATE] Mantenimientos" }];
+  const tareaDemo = (id) => {
+    const a = [...tareasAulas, ...cerradasAulas].find((x) => x.id === id);
+    if (a) return { ...a, pid: 3 };
+    const t = [...tareas, ...deOtros].find((x) => x.id === id);
+    return t ? { id: t.id, nombre: t.nombre, proyecto: "Sistemas de Gestión", pid: 1, padre_id: null, padre: "" } : null;
+  };
+  const listaDemo = () => tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) }));
+  const yaFallo = new Set();
 
   window.pywebview = { api: {
     inicio: () => espera({
@@ -452,11 +477,12 @@
       : pid === "3" ? { tareas: tareasAulas.map((t) => ({ ...t })) }
       : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
     // ---- crear tareas ----
-    nueva_tarea_proyectos: () => espera({ proyectos: proyectosCrear.map((p) => ({ ...p })), ultimo: ultimoCrear }),
+    nueva_tarea_proyectos: () => espera({ proyectos: proyectosCrear.map((p) => ({ ...p })), ultimo: ultimoCrear,
+                                          plantillas: plantillasDemo.map((p) => ({ ...p })) }),
     nueva_tarea_opciones: (pid, tipo) => {
       const ts = tiposDemo[Number(pid)];
       if (!ts) return espera({ error: "ProyectosTIC no te deja crear tareas en este proyecto." });
-      return espera({ tipos: ts.map((t) => ({ ...t })), tipo: ts[0].id, asignable: Number(pid) !== 3,
+      return espera({ tipos: ts.map((t) => ({ ...t })), tipo: ts[0].id, asignable: Number(pid) !== 3, estimable: true,
                       faltan: Number(tipo) === 4 ? ["Servicio afectado no puede estar en blanco."] : [] });
     },
     nueva_tarea_crear: (n) => {
@@ -466,12 +492,92 @@
       if (!titulo) return espera({ error: "Escribe el título de la tarea." });
       if (/rechaza/i.test(titulo)) return espera({ error: "Asunto ya está en uso." });
       const nueva = { id: sigTarea++, nombre: titulo };
+      const horas = Number(String(n.estimado || "").replace(",", "."));
+      if (horas > 0) detalleDemo.set(nueva.id, { estimado: horas });
       tareas.unshift(nueva);
       if (n.favorita) favDemo.add(nueva.id);
       ultimoCrear = p.id;
       const padre = [...tareasAulas, ...tareas].find((x) => String(x.id) === String(n.padre));
       return espera({ ok: true, tarea: { ...nueva, proyecto: p.nombre, padre: padre ? padre.nombre : "" },
                       tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })) });
+    },
+    // ---- plantillas de tarea ----
+    plantilla_tarea_guardar: (p) => {
+      const nombre = String(p.nombre || "").trim().replace(/\s+/g, " ");
+      if (!nombre) return espera({ error: "Ponle un nombre a la plantilla." });
+      const horas = Number(String(p.estimado || "").replace(",", "."));
+      const nueva = { nombre, titulo: String(p.titulo || "").trim(), proyecto: Number(p.proyecto) || null, tipo: p.tipo ?? null,
+                      padre: p.padre ? { id: p.padre.id, nombre: p.padre.nombre } : null, estimado: horas > 0 ? horas : null,
+                      descripcion: String(p.descripcion || "").trim(), asignar: !!p.asignar, favorita: !!p.favorita };
+      const i = plantillasDemo.findIndex((x) => x.nombre.toLowerCase() === nombre.toLowerCase());
+      if (i >= 0) plantillasDemo[i] = nueva; else plantillasDemo.push(nueva);
+      return espera({ plantillas: plantillasDemo.map((x) => ({ ...x })) });
+    },
+    plantilla_tarea_borrar: (nombre) => {
+      plantillasDemo = plantillasDemo.filter((x) => x.nombre.toLowerCase() !== String(nombre).trim().toLowerCase());
+      return espera({ plantillas: plantillasDemo.map((x) => ({ ...x })) });
+    },
+    // ---- modificar una tarea ----
+    tarea_datos: (id) => {
+      const t = tareaDemo(Number(id));
+      if (!t) return espera({ error: NO_ESTA });
+      const x = detalle(t.id);
+      return espera({ id: t.id, titulo: t.nombre, descripcion: x.descripcion || "", estimado: x.estimado || null,
+        version: x.version || 0, proyecto: { id: t.pid, nombre: t.proyecto }, tipo: TIPOS_DEMO[x.tipo || 1],
+        estado: x.cerrada ? "Cerrada" : "En curso", padre: t.padre_id ? { id: t.padre_id, nombre: t.padre } : null,
+        editable: t.id !== 15010,
+        puede: { titulo: true, descripcion: true, estimado: t.id !== 15001, padre: true } });
+    },
+    tarea_modificar: (d) => {
+      const id = Number(d.id), t = tareaDemo(id);
+      if (!t) return espera({ error: NO_ESTA });
+      if ("titulo" in d && /rechaza/i.test(d.titulo)) return espera({ error: "Asunto ya está en uso." });
+      const x = { ...detalle(id), version: (detalle(id).version || 0) + 1 };
+      if ("descripcion" in d) x.descripcion = String(d.descripcion).trim();
+      if ("estimado" in d) x.estimado = Number(String(d.estimado).replace(",", ".")) || null;
+      detalleDemo.set(id, x);
+      const nombre = "titulo" in d ? d.titulo : t.nombre;
+      const madre = "padre" in d ? tareaDemo(Number(d.padre)) : null;
+      for (const lista of [tareasAulas, cerradasAulas, tareas]) {
+        for (const y of lista) {
+          if (y.id === id) {
+            y.nombre = nombre;
+            if ("padre" in d && lista !== tareas) { y.padre_id = madre ? madre.id : null; y.padre = madre ? madre.nombre : ""; }
+          }
+          if (y.padre_id === id) y.padre = nombre;
+        }
+      }
+      const ya = tareaDemo(id);
+      return espera({ ok: true, tarea: { id, nombre, proyecto: ya.proyecto, padre: ya.padre }, tareas: listaDemo() });
+    },
+    // ---- duplicar una tarea con su arbol ----
+    duplicar_plan: (id) => {
+      const raiz = tareaDemo(Number(id));
+      if (!raiz) return espera({ error: NO_ESTA });
+      const todas = [...tareasAulas, ...cerradasAulas], out = [raiz];
+      for (let i = 0; i < out.length; i++) out.push(...todas.filter((x) => x.padre_id === out[i].id));
+      return espera({ raiz: raiz.id, proyecto: { id: raiz.pid, nombre: raiz.proyecto }, tareas: out.map((t) => {
+        const x = detalle(t.id);
+        return { id: t.id, nombre: t.nombre, padre_id: t.padre_id, tipo: { id: x.tipo || 1, nombre: TIPOS_DEMO[x.tipo || 1] },
+                 cerrada: !!x.cerrada, estimado: x.estimado || null };
+      }) });
+    },
+    duplicar_una: (d) => {
+      const titulo = String(d.titulo || "").trim().replace(/\s+/g, " ");
+      const p = proyectosCrear.find((x) => String(x.id) === String(d.proyecto));
+      if (!p) return espera({ error: "Elige el proyecto de destino." });
+      if (!titulo) return espera({ error: "Escribe el título de la tarea." });
+      if (/rechaza/i.test(titulo)) return espera({ error: "Asunto ya está en uso." });
+      if (/a la segunda/i.test(titulo) && !yaFallo.has(titulo)) {
+        yaFallo.add(titulo);
+        return espera({ error: "ProyectosTIC no ha aceptado la tarea (error 422)." });
+      }
+      const madre = d.padre ? tareaDemo(Number(d.padre)) : null;
+      const nueva = aul(sigTarea++, titulo, madre ? madre.id : null, madre ? madre.nombre : "");
+      if (p.id === 3) tareasAulas.push(nueva);
+      const origen = detalle(Number(d.origen));
+      detalleDemo.set(nueva.id, { tipo: d.tipo || 1, estimado: d.estimado ? origen.estimado : null, descripcion: origen.descripcion });
+      return espera({ ok: true, tarea: { id: nueva.id, nombre: titulo, proyecto: p.nombre, padre: madre ? madre.nombre : "" } });
     },
     abrir_tarea: () => espera({ ok: true }),
     abrir_alta_tarea: () => espera({ ok: true }),

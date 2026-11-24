@@ -10,6 +10,7 @@ use crate::inari::{self, Inari};
 use crate::permisos as perm;
 use crate::resumen;
 use crate::sistema;
+use crate::tarea;
 use crate::config::{self, Cfg};
 use crate::openproject::{self, Cliente, ErrorOp};
 use crate::pin;
@@ -38,7 +39,7 @@ pub struct Estado {
     /// tipo de permiso -> horas imputadas con su actividad (ultima lectura)
     pub(crate) usadas_pt: Mutex<Option<HashMap<String, f64>>>,
     /// tareas elegidas con Buscar en esta sesion ({id, nombre})
-    extras: Mutex<Vec<Value>>,
+    pub(crate) extras: Mutex<Vec<Value>>,
     /// motivo -> tarea de ausencias encontrada buscando (o null)
     pub(crate) ausencias: Mutex<HashMap<String, Value>>,
     /// ultimo CSV exportado (el unico que se puede abrir desde la app)
@@ -562,7 +563,8 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
             let ps = cli.proyectos_crear().await.map_err(|err| err.to_string())?;
-            Ok(json!({"proyectos": ps, "ultimo": cfg.get("nueva_tarea_proyecto").and_then(id_entero)}))
+            Ok(json!({"proyectos": ps, "ultimo": cfg.get("nueva_tarea_proyecto").and_then(id_entero),
+                      "plantillas": tarea::plantillas(&cfg)}))
         }
         "nueva_tarea_opciones" => {
             e.exigir_desbloqueo(&cfg)?;
@@ -579,7 +581,34 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         }
         "nueva_tarea_crear" => {
             e.exigir_desbloqueo(&cfg)?;
-            nueva_tarea_crear(e, &cfg, args.first().unwrap_or(&Value::Null)).await
+            tarea::crear(e, &cfg, args.first().unwrap_or(&Value::Null)).await
+        }
+        // plantillas de tarea: lo que rellena el dialogo de Nueva tarea
+        "plantilla_tarea_guardar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::guardar_plantilla(&cfg, args.first().unwrap_or(&Value::Null))
+        }
+        "plantilla_tarea_borrar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::borrar_plantilla(&cfg, &arg(&args, 0))
+        }
+        // modificar una tarea que ya existe
+        "tarea_datos" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::datos(&cfg, args.first().unwrap_or(&Value::Null)).await
+        }
+        "tarea_modificar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::modificar(e, &cfg, args.first().unwrap_or(&Value::Null)).await
+        }
+        // duplicar una tarea con las que cuelgan de ella
+        "duplicar_plan" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::plan_duplicar(&cfg, args.first().unwrap_or(&Value::Null)).await
+        }
+        "duplicar_una" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::duplicar_una(&cfg, args.first().unwrap_or(&Value::Null)).await
         }
         // solo la tarea (o el alta de tarea) en ProyectosTIC: el JS no abre URLs
         "abrir_tarea" | "abrir_alta_tarea" => {
@@ -809,7 +838,7 @@ fn paneles(cfg: &Cfg) -> Value {
     Value::Object(out)
 }
 
-fn id_entero(v: &Value) -> Option<i64> {
+pub(crate) fn id_entero(v: &Value) -> Option<i64> {
     v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse().ok()))
 }
 
@@ -818,7 +847,7 @@ fn ids_favoritas(cfg: &Cfg) -> std::collections::HashSet<i64> {
 }
 
 /// Tareas del desplegable: las buscadas en la sesion y las favoritas.
-fn tareas(e: &Estado, cfg: &Cfg) -> Value {
+pub(crate) fn tareas(e: &Estado, cfg: &Cfg) -> Value {
     let favs = ids_favoritas(cfg);
     let mut vistas = std::collections::HashSet::new();
     let todas: Vec<Value> = candado(&e.extras).iter().cloned().chain(cfg.lista("favoritos")).collect();
@@ -831,58 +860,8 @@ fn tareas(e: &Estado, cfg: &Cfg) -> Value {
     Value::Array(out)
 }
 
-/// Titulo de una tarea: como mucho, lo que admite ProyectosTIC.
-const MAX_TITULO: usize = 255;
-
-/// Crea una tarea en ProyectosTIC y la deja en el desplegable (o en favoritas).
-/// d: {proyecto, titulo, tipo, padre, descripcion, asignar, favorita}
-async fn nueva_tarea_crear(e: &Estado, cfg: &Cfg, d: &Value) -> Result<Value, String> {
-    let titulo = d["titulo"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ");
-    let Some(pid) = id_entero(&d["proyecto"]) else { return Ok(json!({"error": "Elige el proyecto de la tarea."})) };
-    if titulo.is_empty() {
-        return Ok(json!({"error": "Escribe el título de la tarea."}));
-    }
-    if titulo.chars().count() > MAX_TITULO {
-        return Ok(json!({"error": format!("El título es demasiado largo: como mucho, {MAX_TITULO} letras.")}));
-    }
-    let cli = Cliente::desde(cfg).map_err(|err| err.to_string())?;
-    let asignado = if d["asignar"].as_bool().unwrap_or(false) {
-        Some(e.uid(&cli).await.map_err(|err| err.to_string())?)
-    } else {
-        None
-    };
-    let cuerpo = openproject::cuerpo_tarea(pid, &titulo, id_entero(&d["tipo"]), id_entero(&d["padre"]),
-                                           d["descripcion"].as_str().unwrap_or(""), asignado.as_deref());
-    let creada = match cli.crear_tarea(&cuerpo).await {
-        Ok(w) => w,
-        Err(ErrorOp::Otro(m)) => return Ok(json!({"error": m})),
-        // sin respuesta no se sabe si llego: que no la repita a ciegas
-        Err(err @ ErrorOp::Red(_)) => return Ok(json!({"error":
-            format!("{err} Antes de repetirla, mira en ProyectosTIC si la tarea llegó a crearse.")})),
-        Err(err) => return Err(err.to_string()),
-    };
-    let Some(t) = openproject::wp_resumen(&creada) else {
-        return Ok(json!({"error": "ProyectosTIC ha respondido, pero sin los datos de la tarea. Mira allí si se ha creado."}));
-    };
-    let id = t["id"].as_i64().unwrap_or(0);
-    let nombre = t["nombre"].as_str().unwrap_or(&titulo).to_string();
-    if d["favorita"].as_bool().unwrap_or(false) {
-        favorita(e, &config::leer()?, id, &nombre, true)?;
-    } else {
-        let mut ex = candado(&e.extras);
-        if !ex.iter().any(|x| id_entero(&x["id"]) == Some(id)) {
-            ex.insert(0, json!({"id": id, "nombre": nombre}));
-        }
-    }
-    // la proxima vez, el mismo proyecto ya elegido
-    let mut m = Map::new();
-    m.insert("nueva_tarea_proyecto".into(), json!(pid));
-    let _ = config::guardar_valores(m);
-    Ok(json!({"ok": true, "tarea": t, "tareas": tareas(e, &config::leer()?)}))
-}
-
 /// La estrella del buscador: marca o quita una tarea de favoritas.
-fn favorita(e: &Estado, cfg: &Cfg, id: i64, nombre: &str, si: bool) -> Result<(), String> {
+pub(crate) fn favorita(e: &Estado, cfg: &Cfg, id: i64, nombre: &str, si: bool) -> Result<(), String> {
     let mut favs = cfg.lista("favoritos");
     let esta = favs.iter().any(|f| id_entero(&f["id"]) == Some(id));
     if si && !esta {

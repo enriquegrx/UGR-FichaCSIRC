@@ -734,6 +734,15 @@ def _mensajes_error(v):
     return [m] if isinstance(m, str) and m.strip() else []
 
 
+def _motivo_o(texto, si_no):
+    """Lo que dice ProyectosTIC en su respuesta de error; si no dice nada, si_no."""
+    try:
+        msgs = _mensajes_error(json.loads(texto))
+    except ValueError:
+        msgs = []
+    return " ".join(msgs) if msgs else si_no
+
+
 def mensaje_error_tarea(texto, codigo):
     """Por que ProyectosTIC no ha aceptado una tarea, para el usuario."""
     if codigo == 403:
@@ -741,16 +750,28 @@ def mensaje_error_tarea(texto, codigo):
     if codigo == 404:
         return ("ProyectosTIC no encuentra el proyecto (o la tarea de la que cuelga): "
                 "ya no existe o no lo ves.")
-    try:
-        msgs = _mensajes_error(json.loads(texto))
-    except ValueError:
-        msgs = []
-    return " ".join(msgs) if msgs else f"ProyectosTIC no ha aceptado la tarea (error {codigo})."
+    return _motivo_o(texto, f"ProyectosTIC no ha aceptado la tarea (error {codigo}).")
 
 
-def cuerpo_tarea(pid, titulo, tipo=None, padre=None, descripcion="", asignado=None):
+TAREA_NO_ESTA = "ProyectosTIC no encuentra la tarea: ya no existe o no la ves."
+
+
+def mensaje_error_cambio(texto, codigo):
+    """Por que ProyectosTIC no ha aceptado el cambio de una tarea."""
+    if codigo == 403:
+        return "ProyectosTIC no te deja modificar esta tarea."
+    if codigo == 404:
+        return TAREA_NO_ESTA
+    if codigo == 409:
+        return ("Alguien ha cambiado la tarea mientras tanto. Vuelve a abrirla para ver "
+                "cómo está y repite el cambio.")
+    return _motivo_o(texto, f"ProyectosTIC no ha aceptado el cambio (error {codigo}).")
+
+
+def cuerpo_tarea(pid, titulo, tipo=None, padre=None, descripcion="", asignado=None, estimado=None):
     """Lo que se manda para crear (o validar) una tarea. Solo el titulo y el
-    proyecto son obligatorios; lo demas toma los valores por defecto."""
+    proyecto son obligatorios; lo demas toma los valores por defecto.
+    estimado: horas de tiempo estimado (sin el, no se manda)."""
     links = {"project": {"href": f"/api/v3/projects/{int(pid)}"}}
     if tipo:
         links["type"] = {"href": f"/api/v3/types/{int(tipo)}"}
@@ -761,7 +782,105 @@ def cuerpo_tarea(pid, titulo, tipo=None, padre=None, descripcion="", asignado=No
     cuerpo = {"subject": titulo, "_links": links}
     if (descripcion or "").strip():
         cuerpo["description"] = {"format": "markdown", "raw": descripcion.strip()}
+    if estimado:
+        cuerpo["estimatedTime"] = _iso_dur(estimado)
     return cuerpo
+
+
+def _horas_estimadas(w):
+    """ "PT1H30M" -> 1.5; sin tiempo (o a cero), None."""
+    h = _parse_horas(w.get("estimatedTime"))
+    return round(h, 4) if h > 0 else None
+
+
+def es_editable(w):
+    """¿Deja ProyectosTIC a este usuario modificar la tarea? (solo entonces le
+    pone el enlace "update")."""
+    links = w.get("_links") or {}
+    return any((links.get(k) or {}).get("href") for k in ("updateImmediately", "update"))
+
+
+def datos_tarea(w, form=None):
+    """De una tarea de ProyectosTIC, lo que ensena el dialogo de Modificar. Con
+    el formulario de modificarla (form) se sabe que campos deja tocar; sin el se
+    dan por buenos (lo que no deje, lo dira al guardar)."""
+    links = w.get("_links") or {}
+    esquema = ((form or {}).get("_embedded") or {}).get("schema") or {}
+
+    def deja(campo):
+        v = (esquema.get(campo) or {}).get("writable")
+        return v if isinstance(v, bool) else True
+
+    def enlace(k):
+        return links.get(k) or {}
+
+    padre = _id_de_href(enlace("parent").get("href")) if enlace("parent").get("href") else None
+    proyecto = _id_de_href(enlace("project").get("href")) if enlace("project").get("href") else None
+    return {
+        "id": int(w["id"]),
+        "titulo": w.get("subject") or "",
+        "descripcion": (w.get("description") or {}).get("raw") or "",
+        "estimado": _horas_estimadas(w),
+        "version": int(w.get("lockVersion") or 0),
+        "proyecto": {"id": proyecto, "nombre": enlace("project").get("title") or ""},
+        "tipo": enlace("type").get("title") or "",
+        "estado": enlace("status").get("title") or "",
+        "padre": {"id": padre, "nombre": enlace("parent").get("title") or "?"} if padre is not None else None,
+        "editable": es_editable(w),
+        "puede": {"titulo": deja("subject"), "descripcion": deja("description"),
+                  "estimado": deja("estimatedTime"), "padre": deja("parent")},
+    }
+
+
+def cuerpo_cambio(version, cambios):
+    """Lo que se manda para modificar una tarea: la version que se leyo (si
+    alguien la cambio despues, ProyectosTIC lo rechaza) y SOLO lo que cambia.
+    cambios: las claves que cambian de titulo, descripcion, estimado (None lo
+    quita) y padre (None: que no cuelgue de ninguna)."""
+    cuerpo = {"lockVersion": version}
+    if "titulo" in cambios:
+        cuerpo["subject"] = cambios["titulo"]
+    if "descripcion" in cambios:
+        cuerpo["description"] = {"format": "markdown", "raw": cambios["descripcion"]}
+    if "estimado" in cambios:
+        cuerpo["estimatedTime"] = _iso_dur(cambios["estimado"]) if cambios["estimado"] else None
+    if "padre" in cambios:
+        p = cambios["padre"]
+        cuerpo["_links"] = {"parent": {"href": f"/api/v3/work_packages/{int(p)}" if p else None}}
+    return cuerpo
+
+
+def nodo_plan(w, cerrados):
+    """Una tarea del arbol que se va a duplicar: su tipo, de cual cuelga, si
+    esta cerrada (su estado esta entre 'cerrados') y su tiempo estimado."""
+    links = w.get("_links") or {}
+
+    def num(k):
+        href = (links.get(k) or {}).get("href")
+        return _id_de_href(href) if href else None
+
+    return {"id": int(w["id"]), "nombre": w.get("subject") or "?", "padre_id": num("parent"),
+            "tipo": {"id": num("type"), "nombre": (links.get("type") or {}).get("title") or ""},
+            "cerrada": num("status") in cerrados,
+            "estimado": _horas_estimadas(w)}
+
+
+def cuerpo_copia(origen, pid, titulo, tipo=None, padre=None, con_estimado=False):
+    """Lo que se manda para crear la copia de 'origen' en el proyecto pid: su
+    descripcion y su prioridad, con el titulo, el tipo y el padre que se digan.
+    El tiempo estimado, solo si se pide (en las que tendran tareas colgando lo
+    calcula ProyectosTIC). Ni asignado, ni fechas, ni estado: nace como nueva."""
+    cuerpo = cuerpo_tarea(pid, titulo, tipo, padre, (origen.get("description") or {}).get("raw") or "",
+                          estimado=_horas_estimadas(origen) if con_estimado else None)
+    prioridad = ((origen.get("_links") or {}).get("priority") or {}).get("href") or ""
+    if "/api/v3/priorities/" in prioridad:
+        cuerpo["_links"]["priority"] = {"href": prioridad}
+    return cuerpo
+
+
+def filtro_hijas(ids):
+    """El filtro "las que cuelgan directamente de estas tareas"."""
+    return json.dumps([{"parent": {"operator": "=", "values": [str(i) for i in ids]}}], separators=(",", ":"))
 
 
 _COLOR = re.compile(r"#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})")
@@ -784,23 +903,28 @@ def opciones_tarea(form):
                  if _id_de_href(t.get("href")) is not None]
     errores = emb.get("validationErrors") or {}
     faltan = [m for k, v in errores.items() if k not in ("assignee", "subject") for m in _mensajes_error(v)]
+    estimable = (((emb.get("schema") or {}).get("estimatedTime") or {}).get("writable"))
     return {"tipos": tipos,
             "tipo": _id_de_href((((emb.get("payload") or {}).get("_links") or {}).get("type") or {}).get("href")),
             "asignable": "assignee" not in errores,
+            # el tiempo estimado se puede poner salvo que el formulario diga que no
+            "estimable": estimable if isinstance(estimable, bool) else True,
             "faltan": faltan}
 
 
-def _enviar_tarea(ruta, cuerpo, oks):
-    r = requests.post(f"{BASE_URL}{ruta}", headers=_auth(), json=cuerpo, timeout=30)
+def _enviar_tarea(ruta, cuerpo, oks, metodo="post", motivo=mensaje_error_tarea):
+    """Peticion que crea, valida o cambia una tarea: lo que diga ProyectosTIC,
+    con su motivo en claro (motivo) si no la acepta (422, 403, 404, 409)."""
+    r = getattr(requests, metodo)(f"{BASE_URL}{ruta}", headers=_auth(), json=cuerpo, timeout=30)
     if r.status_code in oks:
         return r.json()
-    LOG.warning("POST %s -> %s: %s", ruta, r.status_code, r.text[:200])
+    LOG.warning("%s %s -> %s: %s", metodo.upper(), ruta, r.status_code, r.text[:200])
     if r.status_code == 401:
         raise RuntimeError("Acceso denegado (401): la API key no es válida o ha caducado. "
                            + _msg_configurar())
     if r.status_code >= 500:
         raise RuntimeError(f"ProyectosTIC respondió con un error ({r.status_code}).")
-    raise TareaRechazada(mensaje_error_tarea(r.text, r.status_code))
+    raise TareaRechazada(motivo(r.text, r.status_code))
 
 
 def formulario_tarea(cuerpo):
@@ -809,11 +933,71 @@ def formulario_tarea(cuerpo):
     return _enviar_tarea("/api/v3/work_packages/form", cuerpo, (200,))
 
 
-def crear_tarea(cuerpo):
-    """Crea la tarea y devuelve su resumen (id, nombre, proyecto y padre)."""
-    w = _enviar_tarea("/api/v3/work_packages", cuerpo, (200, 201))
+def crear_tarea(cuerpo, avisar=True):
+    """Crea la tarea y devuelve su resumen (id, nombre, proyecto y padre).
+    avisar: con los avisos de siempre a quien siga el proyecto; al duplicar un
+    arbol entero se crean sin avisos (notify=false), que serian decenas."""
+    w = _enviar_tarea("/api/v3/work_packages" + ("" if avisar else "?notify=false"), cuerpo, (200, 201))
     LOG.info("Tarea creada: %s", w.get("id"))
     return _wp_resumen(w)
+
+
+# ---- modificar y duplicar tareas ----
+
+def tarea(wp_id):
+    """Una tarea tal como esta en ProyectosTIC (la respuesta entera)."""
+    try:
+        return _get(f"/api/v3/work_packages/{int(wp_id)}")
+    except requests.HTTPError as e:
+        if getattr(e.response, "status_code", None) in (403, 404):
+            raise TareaRechazada(TAREA_NO_ESTA) from None
+        raise
+
+
+def formulario_cambio(wp_id, version):
+    """El "formulario" de MODIFICAR una tarea: no cambia nada; dice que campos
+    deja tocar ProyectosTIC a este usuario (schema.<campo>.writable)."""
+    return _enviar_tarea(f"/api/v3/work_packages/{int(wp_id)}/form", {"lockVersion": version}, (200,),
+                         motivo=mensaje_error_cambio)
+
+
+def modificar_tarea(wp_id, cuerpo):
+    """Cambia una tarea (solo lo que va en el cuerpo) y devuelve su resumen."""
+    w = _enviar_tarea(f"/api/v3/work_packages/{int(wp_id)}", cuerpo, (200,), metodo="patch",
+                      motivo=mensaje_error_cambio)
+    LOG.info("Tarea modificada: %s", w.get("id"))
+    return _wp_resumen(w)
+
+
+def estados_cerrados():
+    """Los estados de ProyectosTIC que cuentan como "cerrada"."""
+    return {int(s["id"]) for s in _get_todos("/api/v3/statuses") if s.get("isClosed") and s.get("id") is not None}
+
+
+MAX_NIVELES = 15      # hasta donde se baja buscando las que cuelgan de una tarea
+
+
+def descendientes(wp_id, tope):
+    """Todas las tareas que cuelgan de wp_id, a cualquier nivel, abiertas y
+    cerradas (con el filtro puesto no se aplica el de "solo abiertas"). Nivel a
+    nivel, primero las de arriba. None si pasan de 'tope'."""
+    out, vistas, nivel = [], {int(wp_id)}, [int(wp_id)]
+    for _ in range(MAX_NIVELES):
+        siguiente = []
+        for i in range(0, len(nivel), 40):
+            for w in _get_todos("/api/v3/work_packages", {"filters": filtro_hijas(nivel[i:i + 40])}):
+                n = w.get("id")
+                if n is None or int(n) in vistas:
+                    continue
+                vistas.add(int(n))
+                if len(out) >= tope:
+                    return None
+                siguiente.append(int(n))
+                out.append(w)
+        if not siguiente:
+            break
+        nivel = siguiente
+    return out
 
 
 # ----------------------- entradas de usuario -----------------------

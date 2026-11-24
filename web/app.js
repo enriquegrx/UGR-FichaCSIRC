@@ -251,12 +251,15 @@ function ocultarAviso() {
 // Tras crear una tarea en ProyectosTIC: lo dice abajo, con un enlace para
 // verla alli (crearla no se deshace desde aqui).
 function avisoTareaCreada(t) {
-  const texto = `Tarea ${t.id} creada en ProyectosTIC: «${t.nombre}».`;
+  avisoTarea(`Tarea ${t.id} creada en ProyectosTIC: «${t.nombre}».`, t.id);
+}
+// Lo mismo tras modificar o duplicar: el texto, y la tarea que abre el enlace.
+function avisoTarea(texto, id) {
   estado(texto);
   const a = $("aviso-deshacer");
   a.replaceChildren(el("span", { text: texto }),
     el("button", { class: "enlace", text: "Abrir en ProyectosTIC",
-                   onclick: () => llamar("abrir_tarea", t.id).catch(() => {}) }),
+                   onclick: () => llamar("abrir_tarea", id).catch(() => {}) }),
     el("button", { class: "cerrar-aviso", text: "×", title: "Cerrar", "aria-label": "Cerrar",
                    onclick: ocultarAviso }));
   a.hidden = false;
@@ -269,8 +272,20 @@ function avisoTareaCreada(t) {
 async function cargarPermisoCrear() {
   try { st.crear = await api().nueva_tarea_proyectos(); }
   catch (_e) { st.crear = null; }
-  $("b-nueva").hidden = !st.crear?.proyectos?.length;
+  pintarPermisoCrear();
 }
+function pintarPermisoCrear() {
+  const no = !st.crear?.proyectos?.length;
+  $("b-nueva").hidden = no;
+  $("b-nueva-mas").hidden = no;
+}
+// Lo que se hace con las tareas de ProyectosTIC ademas de crearlas. Modificar
+// y duplicar parten de la tarea que haya puesta en el formulario.
+const menuTareas = () => [
+  { texto: "Nueva tarea…\tCtrl+N", accion: () => dlgNuevaTarea() },
+  { texto: "Modificar una tarea…", accion: () => dlgModificarTarea({ tarea: tareaDelFormulario() }) },
+  { texto: "Duplicar una tarea con las que cuelgan de ella…", accion: () => dlgDuplicarTarea({ tarea: tareaDelFormulario() }) },
+];
 
 // ---------------------------------------------------------------- menus
 
@@ -303,6 +318,9 @@ function menuBajo(boton, items) {
 const MENUS = {
   archivo: () => [
     { texto: "Nueva tarea en ProyectosTIC…\tCtrl+N", accion: () => dlgNuevaTarea() },
+    // solo a quien ProyectosTIC deja crear tareas en algun proyecto
+    st.crear?.proyectos?.length ? { texto: "Modificar una tarea de ProyectosTIC…", accion: () => dlgModificarTarea({ tarea: tareaDelFormulario() }) } : null,
+    st.crear?.proyectos?.length ? { texto: "Duplicar una tarea con las que cuelgan de ella…", accion: () => dlgDuplicarTarea({ tarea: tareaDelFormulario() }) } : null,
     "-",
     { texto: "Exportar a CSV…", accion: dlgExportar },
     { texto: "Resumen del mes", accion: () => entrarEstadisticas("mes") },
@@ -1882,6 +1900,7 @@ for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
 }
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-nueva").onclick = () => dlgNuevaTarea();
+$("b-nueva-mas").onclick = (e) => { e.stopPropagation(); menuBajo($("b-nueva-mas"), menuTareas()); };
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
   { texto: "Copiar día anterior a los días marcados", accion: dlgCopiarDia },
   { texto: "Copiar semana anterior completa", accion: dlgCopiarSemana },

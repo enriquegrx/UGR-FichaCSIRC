@@ -845,7 +845,7 @@ class TestDialogos(Base):
         with mock.patch.object(core, "_get_todos", return_value=ps), \
              mock.patch.object(core, "config_valor", return_value=42):
             r = self.api.nueva_tarea_proyectos()
-        self.assertEqual(r, {"proyectos": [{"id": 42, "nombre": "ATE"}], "ultimo": 42})
+        self.assertEqual(r, {"proyectos": [{"id": 42, "nombre": "ATE"}], "ultimo": 42, "plantillas": []})
 
     def test_nueva_tarea_opciones_salen_del_formulario(self):
         form = {"_embedded": {
@@ -865,7 +865,9 @@ class TestDialogos(Base):
                           "assignee": {"href": "/api/v3/users/5"}})
         self.assertEqual(r, {"tipos": [{"id": 1, "nombre": "Tarea", "color": "#1A67A3", "hito": False},
                                        {"id": 2, "nombre": "Hito", "color": "", "hito": True}],
-                             "tipo": 1, "asignable": False, "faltan": ["Servicio no puede estar en blanco."]})
+                             "tipo": 1, "asignable": False, "estimable": True,
+                             "faltan": ["Servicio no puede estar en blanco."]})
+        self.assertFalse(core.opciones_tarea({"_embedded": {"schema": {"estimatedTime": {"writable": False}}}})["estimable"])
         with mock.patch.object(core, "_user_id", return_value="5"), \
              mock.patch.object(core, "formulario_tarea", side_effect=core.TareaRechazada("No te deja.")):
             self.assertEqual(self.api.nueva_tarea_opciones(42), {"error": "No te deja."})
@@ -931,6 +933,223 @@ class TestDialogos(Base):
             with self.assertRaises(core.TareaRechazada) as cm:
                 core.crear_tarea({"subject": ""})
         self.assertEqual(str(cm.exception), "Asunto no puede estar en blanco.")
+
+    def test_nueva_tarea_con_tiempo_estimado(self):
+        creada = {"id": 14012, "nombre": "Incidencia", "proyecto": "ATE", "padre": ""}
+        with mock.patch.object(core, "crear_tarea", return_value=creada) as m_crear, \
+             mock.patch.object(core, "guardar_config_valores"):
+            self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Incidencia", "estimado": "1,5"})
+            self.assertEqual(m_crear.call_args.args[0]["estimatedTime"], "PT1H30M")
+            self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Incidencia", "estimado": ""})
+            self.assertNotIn("estimatedTime", m_crear.call_args.args[0])
+            for malo in ("una hora", 0, -2, 20000, True):
+                self.assertIn("estimado", self.api.nueva_tarea_crear(
+                    {"proyecto": 42, "titulo": "Incidencia", "estimado": malo})["error"], malo)
+        self.assertEqual(m_crear.call_count, 2)
+
+    # ---- plantillas de tarea ----
+    def test_plantilla_de_tarea(self):
+        p = self.api._plantilla_tarea({
+            "nombre": "  Incidencia   de Iris ", "titulo": "Incidencia de Iris con ticket: *", "proyecto": "42",
+            "tipo": 3, "padre": {"id": 11754, "nombre": "[2026_ATE] Servicio"}, "estimado": "1",
+            "descripcion": "  Abierta por Iris.\n", "asignar": True, "sobra": 1})
+        self.assertEqual(p, {"nombre": "Incidencia de Iris", "titulo": "Incidencia de Iris con ticket: *",
+                             "proyecto": 42, "tipo": 3, "padre": {"id": 11754, "nombre": "[2026_ATE] Servicio"},
+                             "estimado": 1.0, "descripcion": "Abierta por Iris.", "asignar": True, "favorita": False})
+        # solo el nombre es obligatorio
+        p = self.api._plantilla_tarea({"nombre": "Vacía"})
+        self.assertEqual((p["titulo"], p["proyecto"], p["padre"], p["estimado"]), ("", None, None, None))
+        for mala, falta in (({"nombre": "  "}, "nombre"), ({"nombre": "x" * 61}, "largo"),
+                            ({"nombre": "x", "estimado": "mucho"}, "estimado"), (None, "nombre")):
+            with self.assertRaises(ValueError) as cm:
+                self.api._plantilla_tarea(mala)
+            self.assertIn(falta, str(cm.exception))
+
+    def test_plantillas_de_tarea_guardar_y_borrar(self):
+        cfg = {"plantillas_tarea": [{"nombre": "Iris", "titulo": "a"}, {"nombre": "Otra", "titulo": "b"}, {"rota": 1}]}
+        with mock.patch.object(core, "config_valor", side_effect=lambda k, d=None: cfg.get(k, d)), \
+             mock.patch.object(core, "guardar_config_valores", side_effect=cfg.update) as m_guardar:
+            # la del mismo nombre (sin mirar mayusculas) se sustituye; la rota no cuenta
+            r = self.api.plantilla_tarea_guardar({"nombre": "iris", "titulo": "c", "estimado": 2})
+            self.assertEqual([(p["nombre"], p["titulo"], p["estimado"]) for p in r["plantillas"]],
+                             [("iris", "c", 2.0), ("Otra", "b", None)])
+            r = self.api.plantilla_tarea_guardar({"nombre": "Nueva"})
+            self.assertEqual([p["nombre"] for p in r["plantillas"]], ["iris", "Otra", "Nueva"])
+            self.assertEqual(cfg["plantillas_tarea"], r["plantillas"])
+            self.assertIn("nombre", self.api.plantilla_tarea_guardar({"titulo": "sin nombre"})["error"])
+            r = self.api.plantilla_tarea_borrar(" OTRA ")
+            self.assertEqual([p["nombre"] for p in r["plantillas"]], ["iris", "Nueva"])
+            self.assertEqual(m_guardar.call_count, 3)
+            # con el cupo lleno no se guarda otra, pero si se sustituye una
+            cfg["plantillas_tarea"] = [{"nombre": f"P{i}"} for i in range(self.api.MAX_PLANTILLAS_TAREA)]
+            self.assertIn("borra alguna", self.api.plantilla_tarea_guardar({"nombre": "Una más"})["error"])
+            self.assertEqual(len(self.api.plantilla_tarea_guardar({"nombre": "p3", "titulo": "x"})["plantillas"]),
+                             self.api.MAX_PLANTILLAS_TAREA)
+        # las plantillas viajan con la lista de proyectos
+        with mock.patch.object(core, "_get_todos", return_value=[]), \
+             mock.patch.object(core, "config_valor", side_effect=lambda k, d=None: {"plantillas_tarea": [{"nombre": "Iris"}]}.get(k, d)):
+            self.assertEqual([p["nombre"] for p in self.api.nueva_tarea_proyectos()["plantillas"]], ["Iris"])
+
+    # ---- modificar una tarea ----
+    TAREA_OP = {"id": 7, "subject": "Hija", "lockVersion": 4, "estimatedTime": "PT1H30M",
+                "description": {"format": "markdown", "raw": "Lo que hay que hacer."},
+                "_links": {"project": {"href": "/api/v3/projects/42", "title": "ATE"},
+                           "type": {"href": "/api/v3/types/3", "title": "Fase"},
+                           "status": {"href": "/api/v3/statuses/12", "title": "Cerrada"},
+                           "priority": {"href": "/api/v3/priorities/8", "title": "Normal"},
+                           "assignee": {"href": "/api/v3/users/5", "title": "Otra persona"},
+                           "parent": {"href": "/api/v3/work_packages/5", "title": "Madre"},
+                           "updateImmediately": {"href": "/api/v3/work_packages/7", "method": "patch"}}}
+
+    def test_tarea_datos_para_modificarla(self):
+        form = {"_embedded": {"schema": {"subject": {"writable": True}, "parent": {"writable": False}}}}
+        with mock.patch.object(core, "tarea", return_value=self.TAREA_OP), \
+             mock.patch.object(core, "formulario_cambio", return_value=form) as m_form:
+            r = self.api.tarea_datos("7")
+        m_form.assert_called_once_with(7, 4)
+        self.assertEqual(r, {
+            "id": 7, "titulo": "Hija", "descripcion": "Lo que hay que hacer.", "estimado": 1.5, "version": 4,
+            "proyecto": {"id": 42, "nombre": "ATE"}, "tipo": "Fase", "estado": "Cerrada",
+            "padre": {"id": 5, "nombre": "Madre"}, "editable": True,
+            "puede": {"titulo": True, "descripcion": True, "estimado": True, "padre": False}})
+        # sin permiso para modificarla no se pide el formulario; sin padre ni tiempo
+        suelta = {"id": 9, "subject": "Suelta", "lockVersion": 0, "estimatedTime": None, "_links": {"parent": {"href": None}}}
+        with mock.patch.object(core, "tarea", return_value=suelta), \
+             mock.patch.object(core, "formulario_cambio") as m_form:
+            r = self.api.tarea_datos(9)
+        m_form.assert_not_called()
+        self.assertEqual((r["editable"], r["padre"], r["estimado"], r["puede"]["padre"]), (False, None, None, True))
+        # si el formulario no responde, se da por bueno
+        with mock.patch.object(core, "tarea", return_value=self.TAREA_OP), \
+             mock.patch.object(core, "formulario_cambio", side_effect=RuntimeError("500")):
+            self.assertTrue(self.api.tarea_datos(7)["puede"]["padre"])
+        with mock.patch.object(core, "tarea", side_effect=core.TareaRechazada(core.TAREA_NO_ESTA)):
+            self.assertIn("no encuentra la tarea", self.api.tarea_datos(7)["error"])
+        self.assertIn("Elige", self.api.tarea_datos("x")["error"])
+        # la que ProyectosTIC no ensena (403 o 404) se dice asi
+        resp = mock.Mock(status_code=404)
+        with mock.patch.object(core, "_get", side_effect=core.requests.HTTPError(response=resp)):
+            with self.assertRaises(core.TareaRechazada):
+                core.tarea(7)
+
+    def test_tarea_modificar_solo_manda_lo_que_cambia(self):
+        self.assertEqual(core.cuerpo_cambio(4, {"padre": 12}),
+                         {"lockVersion": 4, "_links": {"parent": {"href": "/api/v3/work_packages/12"}}})
+        self.assertEqual(core.cuerpo_cambio(4, {"titulo": "Otro", "descripcion": "", "estimado": None, "padre": None}),
+                         {"lockVersion": 4, "subject": "Otro", "description": {"format": "markdown", "raw": ""},
+                          "estimatedTime": None, "_links": {"parent": {"href": None}}})
+        self.assertEqual(core.cuerpo_cambio(4, {"estimado": 0.5}), {"lockVersion": 4, "estimatedTime": "PT30M"})
+        hecha = {"id": 7, "nombre": "Otro nombre", "proyecto": "ATE", "padre": "Nueva madre"}
+        self.api._extras = [{"id": 7, "nombre": "Hija"}]
+        with mock.patch.object(core, "modificar_tarea", return_value=hecha) as m_mod, \
+             mock.patch.object(core, "FAVORITOS", [{"id": 7, "nombre": "Hija"}, {"id": 8, "nombre": "Otra"}]), \
+             mock.patch.object(core, "guardar_config_valor") as m_guardar:
+            r = self.api.tarea_modificar({"id": "7", "version": 4, "titulo": "  Otro   nombre ", "padre": "12"})
+            # el nombre nuevo, tambien en el desplegable y en favoritas
+            self.assertEqual(core.FAVORITOS, [{"id": 7, "nombre": "Otro nombre"}, {"id": 8, "nombre": "Otra"}])
+            m_guardar.assert_called_once_with("favoritos", core.FAVORITOS)
+        m_mod.assert_called_once_with(7, {"lockVersion": 4, "subject": "Otro nombre",
+                                          "_links": {"parent": {"href": "/api/v3/work_packages/12"}}})
+        self.assertEqual((r["ok"], r["tarea"]), (True, hecha))
+        self.assertEqual(self.api._extras, [{"id": 7, "nombre": "Otro nombre"}])
+        with mock.patch.object(core, "modificar_tarea") as m_mod:
+            for d, falta in (({"id": 7, "version": 4}, "nada"), ({"id": 7, "version": 4, "padre": 7}, "sí misma"),
+                             ({"id": 7, "version": 4, "titulo": " "}, "título"),
+                             ({"id": 7, "version": 4, "estimado": "x"}, "estimado"),
+                             ({"id": 7, "titulo": "x"}, "Vuelve a abrir"), ({"version": 4, "titulo": "x"}, "Elige")):
+                self.assertIn(falta, self.api.tarea_modificar(d)["error"], d)
+        m_mod.assert_not_called()
+        with mock.patch.object(core, "modificar_tarea", side_effect=core.requests.Timeout()):
+            self.assertIn("llegó a guardarse", self.api.tarea_modificar({"id": 7, "version": 4, "padre": None})["error"])
+
+    def test_por_que_no_se_guardo_el_cambio(self):
+        self.assertIn("no te deja modificar", core.mensaje_error_cambio("", 403))
+        self.assertIn("no encuentra la tarea", core.mensaje_error_cambio("", 404))
+        self.assertIn("mientras tanto", core.mensaje_error_cambio("", 409))
+        self.assertEqual(core.mensaje_error_cambio('{"message":"Padre no es válido."}', 422), "Padre no es válido.")
+        self.assertEqual(core.mensaje_error_cambio("<html>", 422), "ProyectosTIC no ha aceptado el cambio (error 422).")
+        # modificar es un PATCH a la tarea; si alguien la cambio antes (409), se dice
+        resp = mock.Mock(status_code=409, text="{}")
+        with mock.patch.object(core.requests, "patch", return_value=resp) as m_patch:
+            with self.assertRaises(core.TareaRechazada) as cm:
+                core.modificar_tarea(7, {"lockVersion": 4, "subject": "x"})
+        self.assertIn("mientras tanto", str(cm.exception))
+        self.assertTrue(m_patch.call_args.args[0].endswith("/api/v3/work_packages/7"))
+        self.assertEqual(m_patch.call_args.kwargs["json"], {"lockVersion": 4, "subject": "x"})
+
+    # ---- duplicar una tarea con su arbol ----
+    def test_duplicar_plan_trae_el_arbol_entero(self):
+        self.assertEqual(core.nodo_plan(self.TAREA_OP, {12}),
+                         {"id": 7, "nombre": "Hija", "padre_id": 5, "tipo": {"id": 3, "nombre": "Fase"},
+                          "cerrada": True, "estimado": 1.5})
+        n = core.nodo_plan({"id": 5, "subject": "Madre"}, {12})
+        self.assertEqual((n["padre_id"], n["cerrada"], n["estimado"]), (None, False, None))
+        self.assertEqual(core.filtro_hijas([5, 7]), '[{"parent":{"operator":"=","values":["5","7"]}}]')
+        # nivel a nivel: las hijas de la raiz, luego las de esas; las repetidas no cuentan dos veces
+        niveles = {"5": [{"id": 6, "subject": "A"}, {"id": 7, "subject": "B"}],
+                   "6,7": [{"id": 8, "subject": "C"}, {"id": 6, "subject": "A"}], "8": []}
+
+        def todos(ruta, params=None):
+            if ruta == "/api/v3/statuses":
+                return [{"id": 12, "isClosed": True}, {"id": 1, "isClosed": False}]
+            self.assertEqual(ruta, "/api/v3/work_packages")
+            return niveles[",".join(core.json.loads(params["filters"])[0]["parent"]["values"])]
+
+        with mock.patch.object(core, "_get_todos", side_effect=todos):
+            self.assertEqual([w["id"] for w in core.descendientes(5, 10)], [6, 7, 8])
+            self.assertIsNone(core.descendientes(5, 2))          # mas de las que caben
+            self.assertEqual(core.estados_cerrados(), {12})
+            raiz = {"id": 5, "subject": "Madre", "_links": {"project": {"href": "/api/v3/projects/42", "title": "ATE"}}}
+            with mock.patch.object(core, "tarea", return_value=raiz):
+                r = self.api.duplicar_plan("5")
+                self.assertEqual((r["raiz"], r["proyecto"]), (5, {"id": 42, "nombre": "ATE"}))
+                self.assertEqual([t["id"] for t in r["tareas"]], [5, 6, 7, 8])
+                with mock.patch.object(self.api, "MAX_DUPLICAR", 3):
+                    self.assertIn("demasiadas", self.api.duplicar_plan(5)["error"])
+        with mock.patch.object(core, "tarea", side_effect=core.TareaRechazada(core.TAREA_NO_ESTA)):
+            self.assertIn("no encuentra la tarea", self.api.duplicar_plan(5)["error"])
+        self.assertIn("Elige", self.api.duplicar_plan(None)["error"])
+
+    def test_duplicar_una_copia_lo_justo(self):
+        # descripcion, prioridad y tiempo estimado; ni asignado ni estado
+        self.assertEqual(core.cuerpo_copia(self.TAREA_OP, 50, "Hija (copia)", 3, 900, True),
+                         {"subject": "Hija (copia)", "estimatedTime": "PT1H30M",
+                          "description": {"format": "markdown", "raw": "Lo que hay que hacer."},
+                          "_links": {"project": {"href": "/api/v3/projects/50"}, "type": {"href": "/api/v3/types/3"},
+                                     "parent": {"href": "/api/v3/work_packages/900"},
+                                     "priority": {"href": "/api/v3/priorities/8"}}})
+        c = core.cuerpo_copia(self.TAREA_OP, 50, "Hija")
+        self.assertNotIn("estimatedTime", c)
+        self.assertEqual(set(c["_links"]), {"project", "priority"})
+        copia = {"id": 901, "nombre": "Hija (copia)", "proyecto": "Destino", "padre": "Madre (copia)"}
+        with mock.patch.object(core, "tarea", return_value=self.TAREA_OP) as m_tarea, \
+             mock.patch.object(core, "crear_tarea", return_value=copia) as m_crear:
+            r = self.api.duplicar_una({"origen": "7", "proyecto": 50, "padre": 900, "titulo": " Hija  (copia) ",
+                                       "tipo": 3, "estimado": True})
+            self.assertEqual(r, {"ok": True, "tarea": copia})
+            m_tarea.assert_called_once_with(7)
+            # sin avisos por correo: serian uno por tarea
+            self.assertEqual(m_crear.call_args.kwargs, {"avisar": False})
+            self.assertEqual(m_crear.call_args.args[0]["subject"], "Hija (copia)")
+            self.assertEqual(m_crear.call_args.args[0]["_links"]["parent"], {"href": "/api/v3/work_packages/900"})
+            for d, falta in (({"proyecto": 50, "titulo": "x"}, "origen"), ({"origen": 7, "titulo": "x"}, "destino"),
+                             ({"origen": 7, "proyecto": 50, "titulo": " "}, "título")):
+                self.assertIn(falta, self.api.duplicar_una(d)["error"], d)
+            self.assertEqual(m_crear.call_count, 1)
+        with mock.patch.object(core, "tarea", return_value=self.TAREA_OP), \
+             mock.patch.object(core, "crear_tarea", side_effect=core.TareaRechazada("Tipo no es válido.")):
+            self.assertEqual(self.api.duplicar_una({"origen": 7, "proyecto": 50, "titulo": "x"}), {"error": "Tipo no es válido."})
+        with mock.patch.object(core, "tarea", return_value=self.TAREA_OP), \
+             mock.patch.object(core, "crear_tarea", side_effect=core.requests.ConnectionError()):
+            self.assertIn("llegó a crearse", self.api.duplicar_una({"origen": 7, "proyecto": 50, "titulo": "x"})["error"])
+        # al crear sin avisos se pide notify=false
+        resp = mock.Mock(status_code=201)
+        resp.json.return_value = {"id": 901, "subject": "x"}
+        with mock.patch.object(core.requests, "post", return_value=resp) as m_post:
+            core.crear_tarea({"subject": "x"}, avisar=False)
+            core.crear_tarea({"subject": "x"})
+        self.assertEqual([c.args[0].rsplit("/", 1)[1] for c in m_post.call_args_list],
+                         ["work_packages?notify=false", "work_packages"])
 
     def test_abrir_tarea_solo_en_proyectostic(self):
         with mock.patch.object(web.webbrowser, "open") as m_open, \

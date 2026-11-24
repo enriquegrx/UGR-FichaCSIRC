@@ -33,6 +33,7 @@ import threading
 import shutil
 import base64
 import json
+import math
 import hashlib
 import hmac
 import secrets
@@ -1750,11 +1751,48 @@ class Api:
         except (TypeError, ValueError):
             return None
 
+    MAX_ESTIMADO = 10000
+    MAX_PLANTILLAS_TAREA = 40
+    MAX_NOMBRE_PLANTILLA = 60
+    MAX_DESCRIPCION = 10000
+    MAX_DUPLICAR = 200    # duplicar: tope de tareas del arbol (cada una son dos llamadas)
+
+    class _NoVale(ValueError):
+        """Lo que ha escrito el usuario no vale; el mensaje dice por que."""
+
+    @staticmethod
+    def _en_una_linea(v):
+        return " ".join(v.split()) if isinstance(v, str) else ""
+
+    def _titulo_valido(self, v):
+        t = self._en_una_linea(v)
+        if not t:
+            raise self._NoVale("Escribe el título de la tarea.")
+        if len(t) > self.MAX_TITULO:
+            raise self._NoVale(f"El título es demasiado largo: como mucho, {self.MAX_TITULO} letras.")
+        return t
+
+    def _estimado(self, v):
+        """El tiempo estimado: vacio (None) o las horas ("1", "1,5", 1.5)."""
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        try:
+            if isinstance(v, bool):
+                raise ValueError
+            h = float(str(v).strip().replace(",", "."))
+            if not (math.isfinite(h) and 0 < h <= self.MAX_ESTIMADO):
+                raise ValueError
+        except (TypeError, ValueError):
+            raise self._NoVale("El tiempo estimado no vale: escribe las horas (ej. 1 o 1,5).") from None
+        return h
+
     def nueva_tarea_proyectos(self):
-        """Los proyectos en los que se puede crear, y el ultimo que se uso."""
+        """Los proyectos en los que se puede crear, el ultimo que se uso y las
+        plantillas de tarea."""
         self._exigir_desbloqueo()
         return {"proyectos": core.proyectos_crear(),
-                "ultimo": self._id(core.config_valor("nueva_tarea_proyecto"))}
+                "ultimo": self._id(core.config_valor("nueva_tarea_proyecto")),
+                "plantillas": self._plantillas_tarea()}
 
     def nueva_tarea_opciones(self, pid, tipo=None):
         """Tipos del proyecto, el de por defecto, si se le puede asignar y lo
@@ -1771,21 +1809,21 @@ class Api:
             return {"error": str(e)}
 
     def nueva_tarea_crear(self, d):
-        """Crea una tarea en ProyectosTIC y la deja en el desplegable (o en
-        favoritas). d: {proyecto, titulo, tipo, padre, descripcion, asignar, favorita}"""
+        """Crea una tarea en ProyectosTIC y la deja en el desplegable (o en favoritas).
+        d: {proyecto, titulo, tipo, padre, descripcion, estimado, asignar, favorita}"""
         self._exigir_desbloqueo()
         d = d or {}
-        titulo = " ".join(str(d.get("titulo") or "").split())
         pid = self._id(d.get("proyecto"))
         if pid is None:
             return {"error": "Elige el proyecto de la tarea."}
-        if not titulo:
-            return {"error": "Escribe el título de la tarea."}
-        if len(titulo) > self.MAX_TITULO:
-            return {"error": f"El título es demasiado largo: como mucho, {self.MAX_TITULO} letras."}
+        try:
+            titulo = self._titulo_valido(d.get("titulo"))
+            estimado = self._estimado(d.get("estimado"))
+        except self._NoVale as e:
+            return {"error": str(e)}
         asignado = core._user_id(estricto=True) if d.get("asignar") else None
         cuerpo = core.cuerpo_tarea(pid, titulo, self._id(d.get("tipo")), self._id(d.get("padre")),
-                                   d.get("descripcion") or "", asignado)
+                                   d.get("descripcion") or "", asignado, estimado=estimado)
         try:
             t = core.crear_tarea(cuerpo)
         except core.TareaRechazada as e:
@@ -1800,6 +1838,192 @@ class Api:
             self._extras.insert(0, {"id": t["id"], "nombre": t["nombre"]})
         core.guardar_config_valores({"nueva_tarea_proyecto": pid})   # la proxima vez, el mismo
         return {"ok": True, "tarea": t, "tareas": self.tareas()}
+
+    # ---- plantillas de tarea: lo que rellena el dialogo de Nueva tarea ----
+    def _plantilla_tarea(self, p):
+        """Una plantilla de tarea tal como se guarda. Solo el nombre es
+        obligatorio; en el titulo, un * marca lo que se cambia cada vez
+        ("Incidencia de Iris con ticket: *"). Lanza _NoVale si no vale."""
+        p = p if isinstance(p, dict) else {}
+        nombre = self._en_una_linea(p.get("nombre"))
+        if not nombre:
+            raise self._NoVale("Ponle un nombre a la plantilla.")
+        if len(nombre) > self.MAX_NOMBRE_PLANTILLA:
+            raise self._NoVale(f"El nombre es demasiado largo: como mucho, {self.MAX_NOMBRE_PLANTILLA} letras.")
+        titulo = self._en_una_linea(p.get("titulo"))
+        if len(titulo) > self.MAX_TITULO:
+            raise self._NoVale(f"El título es demasiado largo: como mucho, {self.MAX_TITULO} letras.")
+        descripcion = p["descripcion"].strip() if isinstance(p.get("descripcion"), str) else ""
+        if len(descripcion) > self.MAX_DESCRIPCION:
+            raise self._NoVale("La descripción es demasiado larga para guardarla en una plantilla.")
+        padre = p.get("padre") if isinstance(p.get("padre"), dict) else {}
+        padre_id = self._id(padre.get("id"))
+        return {"nombre": nombre, "titulo": titulo,
+                "proyecto": self._id(p.get("proyecto")), "tipo": self._id(p.get("tipo")),
+                "padre": ({"id": padre_id, "nombre": self._en_una_linea(padre.get("nombre"))}
+                          if padre_id and padre_id > 0 else None),
+                "estimado": self._estimado(p.get("estimado")), "descripcion": descripcion,
+                "asignar": p.get("asignar") is True, "favorita": p.get("favorita") is True}
+
+    def _plantillas_tarea(self):
+        """Las plantillas de tarea guardadas (las que no valgan, fuera)."""
+        guardadas = core.config_valor("plantillas_tarea")
+        out = []
+        for p in guardadas if isinstance(guardadas, list) else []:
+            try:
+                out.append(self._plantilla_tarea(p))
+            except self._NoVale:
+                pass
+        return out
+
+    def plantilla_tarea_guardar(self, p):
+        """Guarda una plantilla de tarea: sustituye a la del mismo nombre o va al final."""
+        self._exigir_desbloqueo()
+        try:
+            nueva = self._plantilla_tarea(p)
+        except self._NoVale as e:
+            return {"error": str(e)}
+        lista = self._plantillas_tarea()
+        iguales = [i for i, x in enumerate(lista) if x["nombre"].lower() == nueva["nombre"].lower()]
+        if iguales:
+            lista[iguales[0]] = nueva
+        elif len(lista) >= self.MAX_PLANTILLAS_TAREA:
+            return {"error": f"Ya tienes {self.MAX_PLANTILLAS_TAREA} plantillas de tarea: "
+                             "borra alguna antes de guardar otra."}
+        else:
+            lista.append(nueva)
+        core.guardar_config_valores({"plantillas_tarea": lista})
+        return {"plantillas": lista}
+
+    def plantilla_tarea_borrar(self, nombre):
+        self._exigir_desbloqueo()
+        nombre = str(nombre or "").strip().lower()
+        lista = [p for p in self._plantillas_tarea() if p["nombre"].lower() != nombre]
+        core.guardar_config_valores({"plantillas_tarea": lista})
+        return {"plantillas": lista}
+
+    # ---- modificar una tarea que ya existe ----
+    SIN_RESPUESTA = "No se pudo conectar con ProyectosTIC."
+
+    def tarea_datos(self, wp_id):
+        """Lo que el dialogo de Modificar ensena de una tarea y lo que
+        ProyectosTIC deja cambiarle (lo dice su formulario, que no cambia nada)."""
+        self._exigir_desbloqueo()
+        n = self._id(wp_id)
+        if not n or n < 1:
+            return {"error": "Elige la tarea."}
+        try:
+            w = core.tarea(n)
+        except core.TareaRechazada as e:
+            return {"error": str(e)}
+        form = None
+        if core.es_editable(w):
+            try:
+                form = core.formulario_cambio(n, w.get("lockVersion") or 0)
+            except Exception:   # noqa: BLE001  si no responde se da por bueno: lo que no deje, lo dira al guardar
+                form = None
+        if w.get("id") is None:
+            return {"error": "ProyectosTIC ha respondido, pero sin los datos de la tarea."}
+        return core.datos_tarea(w, form)
+
+    def _cambios_de(self, n, d):
+        """Lo que cambia de la tarea n. d trae SOLO lo que cambia: titulo,
+        descripcion, estimado ("" o None lo quita), padre (None: que no cuelgue
+        de ninguna). Lanza _NoVale si no vale."""
+        cambios = {}
+        if "titulo" in d:
+            cambios["titulo"] = self._titulo_valido(d["titulo"])
+        if "descripcion" in d:
+            cambios["descripcion"] = d["descripcion"].strip() if isinstance(d["descripcion"], str) else ""
+        if "estimado" in d:
+            cambios["estimado"] = self._estimado(d["estimado"])
+        if "padre" in d:
+            p = self._id(d["padre"])
+            cambios["padre"] = p if p and p > 0 else None
+            if cambios["padre"] == n:
+                raise self._NoVale("Una tarea no puede colgar de sí misma.")
+        if not cambios:
+            raise self._NoVale("No has cambiado nada.")
+        return cambios
+
+    def tarea_modificar(self, d):
+        """Cambia una tarea de ProyectosTIC. d: {id, version} y lo que cambia."""
+        self._exigir_desbloqueo()
+        d = d if isinstance(d, dict) else {}
+        n = self._id(d.get("id"))
+        if not n or n < 1:
+            return {"error": "Elige la tarea."}
+        version = d.get("version")
+        if isinstance(version, bool) or not isinstance(version, int):
+            return {"error": "Vuelve a abrir la tarea antes de modificarla."}
+        try:
+            cambios = self._cambios_de(n, d)
+            t = core.modificar_tarea(n, core.cuerpo_cambio(version, cambios))
+        except (self._NoVale, core.TareaRechazada) as e:
+            return {"error": str(e)}
+        except (core.requests.ConnectionError, core.requests.Timeout):
+            return {"error": f"{self.SIN_RESPUESTA} Antes de repetirlo, mira en ProyectosTIC "
+                             "si el cambio llegó a guardarse."}
+        # el nombre nuevo, tambien donde la app lo tiene guardado
+        for e in self._extras:
+            if int(e["id"]) == t["id"]:
+                e["nombre"] = t["nombre"]
+        if any(int(f["id"]) == t["id"] and f.get("nombre") != t["nombre"] for f in core.FAVORITOS):
+            for f in core.FAVORITOS:
+                if int(f["id"]) == t["id"]:
+                    f["nombre"] = t["nombre"]
+            core.guardar_config_valor("favoritos", core.FAVORITOS)
+        return {"ok": True, "tarea": t, "tareas": self.tareas()}
+
+    # ---- duplicar una tarea con las que cuelgan de ella ----
+    def duplicar_plan(self, wp_id):
+        """El arbol que se duplicaria: la tarea y todas las que cuelgan de ella
+        (abiertas y cerradas), cada una con su tipo y de cual cuelga."""
+        self._exigir_desbloqueo()
+        n = self._id(wp_id)
+        if not n or n < 1:
+            return {"error": "Elige la tarea que quieres duplicar."}
+        try:
+            raiz = core.tarea(n)
+        except core.TareaRechazada as e:
+            return {"error": str(e)}
+        try:
+            cerrados = core.estados_cerrados()
+        except Exception:   # noqa: BLE001  sin la lista de estados no se sabe cuales estan cerradas: se dan por abiertas
+            cerrados = set()
+        resto = core.descendientes(n, self.MAX_DUPLICAR - 1)
+        if resto is None:
+            return {"error": f"De esta tarea cuelgan más de {self.MAX_DUPLICAR} tareas: "
+                             "son demasiadas para duplicarlas desde aquí."}
+        proyecto = (raiz.get("_links") or {}).get("project") or {}
+        return {"raiz": n, "tareas": [core.nodo_plan(w, cerrados) for w in [raiz] + resto if w.get("id") is not None],
+                "proyecto": {"id": core._id_de_href(proyecto.get("href")) if proyecto.get("href") else None,
+                             "nombre": proyecto.get("title") or ""}}
+
+    def duplicar_una(self, d):
+        """Crea la copia de UNA tarea del arbol (la interfaz va de arriba abajo
+        y dice de cual cuelga cada copia). d: {origen, proyecto, padre, titulo,
+        tipo, estimado}. Se copian titulo, tipo, descripcion, prioridad y tiempo
+        estimado; ni horas, ni asignacion, ni fechas. Sin avisos por correo."""
+        self._exigir_desbloqueo()
+        d = d if isinstance(d, dict) else {}
+        origen, pid = self._id(d.get("origen")), self._id(d.get("proyecto"))
+        if not origen or origen < 1:
+            return {"error": "Falta la tarea de origen."}
+        if pid is None:
+            return {"error": "Elige el proyecto de destino."}
+        padre = self._id(d.get("padre"))
+        try:
+            titulo = self._titulo_valido(d.get("titulo"))
+            w = core.tarea(origen)
+            cuerpo = core.cuerpo_copia(w, pid, titulo, self._id(d.get("tipo")), padre if padre and padre > 0 else None,
+                                       d.get("estimado") is True)
+            return {"ok": True, "tarea": core.crear_tarea(cuerpo, avisar=False)}
+        except (self._NoVale, core.TareaRechazada) as e:
+            return {"error": str(e)}
+        except (core.requests.ConnectionError, core.requests.Timeout):
+            return {"error": f"{self.SIN_RESPUESTA} Antes de seguir, mira en ProyectosTIC "
+                             "si esta tarea llegó a crearse."}
 
     def _abrir_en_proyectostic(self, ruta):
         base = (core.BASE_URL or "").strip().rstrip("/")

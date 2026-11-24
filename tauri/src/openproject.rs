@@ -4,6 +4,7 @@ use crate::config::Cfg;
 use crate::reglas::{redondear, Apunte};
 use base64::Engine;
 use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
@@ -264,28 +265,98 @@ impl Cliente {
         Ok(self.get_todos("/api/v3/projects", vec![]).await?.iter().filter_map(proyecto_crear).collect())
     }
 
-    /// POST que crea o valida una tarea: lo que diga ProyectosTIC, con su
-    /// motivo en claro si no la acepta (422, 403, 404).
-    async fn enviar_tarea(&self, ruta: &str, cuerpo: &Value, oks: &[u16]) -> Result<Value, ErrorOp> {
-        let (codigo, texto) = self.enviar_crudo(reqwest::Method::POST, ruta, Some(cuerpo)).await?;
+    /// Peticion que crea, valida o cambia una tarea: lo que diga ProyectosTIC,
+    /// con su motivo en claro ('motivo') si no la acepta (422, 403, 404, 409).
+    async fn enviar_tarea(&self, metodo: reqwest::Method, ruta: &str, cuerpo: &Value, oks: &[u16],
+                          motivo: fn(&str, u16) -> String) -> Result<Value, ErrorOp> {
+        let (codigo, texto) = self.enviar_crudo(metodo, ruta, Some(cuerpo)).await?;
         match codigo {
             c if oks.contains(&c) => Ok(serde_json::from_str(&texto).unwrap_or(Value::Null)),
             401 => Err(ErrorOp::Http(401)),
             c if c >= 500 => Err(ErrorOp::Http(c)),
-            c => Err(ErrorOp::Otro(mensaje_error(&texto, c))),
+            c => Err(ErrorOp::Otro(motivo(&texto, c))),
         }
     }
 
     /// El "formulario" de crear tarea: NO crea nada. Dice que tipos admite el
     /// proyecto, los valores por defecto y que le falta al cuerpo para valer.
     pub async fn formulario_tarea(&self, cuerpo: &Value) -> Result<Value, ErrorOp> {
-        self.enviar_tarea("/api/v3/work_packages/form", cuerpo, &[200]).await
+        self.enviar_tarea(reqwest::Method::POST, "/api/v3/work_packages/form", cuerpo, &[200], mensaje_error).await
     }
 
-    /// Crea la tarea y devuelve lo que ProyectosTIC ha guardado.
-    pub async fn crear_tarea(&self, cuerpo: &Value) -> Result<Value, ErrorOp> {
-        self.enviar_tarea("/api/v3/work_packages", cuerpo, &[200, 201]).await
+    /// Crea la tarea y devuelve lo que ProyectosTIC ha guardado. 'avisar':
+    /// con los avisos de siempre a quien siga el proyecto; al duplicar un
+    /// arbol entero se crean sin avisos (notify=false), que serian decenas.
+    pub async fn crear_tarea(&self, cuerpo: &Value, avisar: bool) -> Result<Value, ErrorOp> {
+        let ruta = if avisar { "/api/v3/work_packages" } else { "/api/v3/work_packages?notify=false" };
+        self.enviar_tarea(reqwest::Method::POST, ruta, cuerpo, &[200, 201], mensaje_error).await
     }
+
+    // ---- modificar y duplicar tareas ----
+
+    /// Una tarea tal como esta en ProyectosTIC (la respuesta entera).
+    pub async fn tarea(&self, id: i64) -> Result<Value, ErrorOp> {
+        self.get(&format!("/api/v3/work_packages/{id}"), &[]).await
+    }
+
+    /// El "formulario" de MODIFICAR una tarea: no cambia nada; dice que campos
+    /// deja tocar ProyectosTIC a este usuario (schema.<campo>.writable).
+    pub async fn formulario_cambio(&self, id: i64, version: i64) -> Result<Value, ErrorOp> {
+        self.enviar_tarea(reqwest::Method::POST, &format!("/api/v3/work_packages/{id}/form"),
+                          &json!({"lockVersion": version}), &[200], mensaje_error_cambio).await
+    }
+
+    /// Cambia una tarea (solo lo que va en el cuerpo) y devuelve como queda.
+    pub async fn modificar_tarea(&self, id: i64, cuerpo: &Value) -> Result<Value, ErrorOp> {
+        self.enviar_tarea(reqwest::Method::PATCH, &format!("/api/v3/work_packages/{id}"), cuerpo, &[200],
+                          mensaje_error_cambio).await
+    }
+
+    /// Los estados de ProyectosTIC que cuentan como "cerrada".
+    pub async fn estados_cerrados(&self) -> Result<HashSet<i64>, ErrorOp> {
+        Ok(self.get_todos("/api/v3/statuses", vec![]).await?.iter()
+            .filter(|s| s["isClosed"].as_bool().unwrap_or(false))
+            .filter_map(|s| s["id"].as_i64()).collect())
+    }
+
+    /// Todas las tareas que cuelgan de 'id', a cualquier nivel, abiertas y
+    /// cerradas (con el filtro puesto no se aplica el de "solo abiertas").
+    /// Nivel a nivel, primero las de arriba. None si pasan de 'tope'.
+    pub async fn descendientes(&self, id: i64, tope: usize) -> Result<Option<Vec<Value>>, ErrorOp> {
+        let mut out: Vec<Value> = Vec::new();
+        let mut vistas: HashSet<i64> = HashSet::from([id]);
+        let mut nivel = vec![id];
+        for _ in 0..MAX_NIVELES {
+            let mut siguiente = Vec::new();
+            for trozo in nivel.chunks(40) {
+                let filtros = filtro_hijas(trozo);
+                for w in self.get_todos("/api/v3/work_packages", vec![("filters", filtros)]).await? {
+                    let Some(n) = w["id"].as_i64() else { continue };
+                    if !vistas.insert(n) {
+                        continue;
+                    }
+                    if out.len() >= tope {
+                        return Ok(None);
+                    }
+                    siguiente.push(n);
+                    out.push(w);
+                }
+            }
+            if siguiente.is_empty() {
+                break;
+            }
+            nivel = siguiente;
+        }
+        Ok(Some(out))
+    }
+}
+
+/// Hasta donde se baja buscando las que cuelgan de una tarea.
+const MAX_NIVELES: usize = 15;
+
+/// El filtro "las que cuelgan directamente de estas tareas".
+pub fn filtro_hijas(ids: &[i64]) -> String {
+    json!([{"parent": {"operator": "=", "values": ids.iter().map(|n| n.to_string()).collect::<Vec<_>>()}}]).to_string()
 }
 
 /// Un proyecto en el que se pueden crear tareas: ProyectosTIC solo pone el
@@ -299,7 +370,7 @@ pub fn proyecto_crear(p: &Value) -> Option<Value> {
 }
 
 /// ".../api/v3/types/7" -> 7
-fn id_de_href(v: &Value) -> Option<i64> {
+pub fn id_de_href(v: &Value) -> Option<i64> {
     v.as_str()?.trim_end_matches('/').rsplit('/').next()?.parse().ok()
 }
 
@@ -320,15 +391,28 @@ fn mensajes_de(v: &Value) -> Vec<String> {
     v["message"].as_str().filter(|m| !m.trim().is_empty()).map(|m| vec![m.to_string()]).unwrap_or_default()
 }
 
+/// Lo que dice ProyectosTIC en su respuesta de error; si no dice nada, 'si_no'.
+fn motivo_o(texto: &str, si_no: String) -> String {
+    let msgs = serde_json::from_str::<Value>(texto).map(|v| mensajes_de(&v)).unwrap_or_default();
+    if msgs.is_empty() { si_no } else { msgs.join(" ") }
+}
+
 /// Por que ProyectosTIC no ha aceptado una tarea, para el usuario.
 pub fn mensaje_error(texto: &str, codigo: u16) -> String {
     match codigo {
         403 => "ProyectosTIC no te deja crear tareas en este proyecto.".into(),
         404 => "ProyectosTIC no encuentra el proyecto (o la tarea de la que cuelga): ya no existe o no lo ves.".into(),
-        _ => {
-            let msgs = serde_json::from_str::<Value>(texto).map(|v| mensajes_de(&v)).unwrap_or_default();
-            if msgs.is_empty() { format!("ProyectosTIC no ha aceptado la tarea (error {codigo}).") } else { msgs.join(" ") }
-        }
+        _ => motivo_o(texto, format!("ProyectosTIC no ha aceptado la tarea (error {codigo}).")),
+    }
+}
+
+/// Por que ProyectosTIC no ha aceptado el cambio de una tarea.
+pub fn mensaje_error_cambio(texto: &str, codigo: u16) -> String {
+    match codigo {
+        403 => "ProyectosTIC no te deja modificar esta tarea.".into(),
+        404 => "ProyectosTIC no encuentra la tarea: ya no existe o no la ves.".into(),
+        409 => "Alguien ha cambiado la tarea mientras tanto. Vuelve a abrirla para ver cómo está y repite el cambio.".into(),
+        _ => motivo_o(texto, format!("ProyectosTIC no ha aceptado el cambio (error {codigo}).")),
     }
 }
 
@@ -349,6 +433,100 @@ pub fn cuerpo_tarea(pid: i64, titulo: &str, tipo: Option<i64>, padre: Option<i64
     let mut cuerpo = json!({"subject": titulo, "_links": links});
     if !descripcion.trim().is_empty() {
         cuerpo["description"] = json!({"format": "markdown", "raw": descripcion.trim()});
+    }
+    cuerpo
+}
+
+/// El tiempo estimado de una tarea que se va a crear (sin el, no se manda).
+pub fn poner_estimado(cuerpo: &mut Value, horas: Option<f64>) {
+    if let Some(h) = horas {
+        cuerpo["estimatedTime"] = json!(iso_dur(h));
+    }
+}
+
+/// "PT1H30M" -> 1.5; sin tiempo (o a cero), None.
+fn horas_estimadas(w: &Value) -> Option<f64> {
+    w["estimatedTime"].as_str().map(duracion).filter(|h| *h > 0.0)
+}
+
+/// ¿Deja ProyectosTIC a este usuario modificar la tarea? (solo entonces le
+/// pone el enlace "update").
+pub fn es_editable(w: &Value) -> bool {
+    ["updateImmediately", "update"].iter().any(|k| w["_links"][*k]["href"].as_str().is_some_and(|h| !h.is_empty()))
+}
+
+/// De una tarea de ProyectosTIC, lo que ensena el dialogo de Modificar. Con el
+/// formulario de modificarla ('form') se sabe que campos deja tocar; sin el se
+/// dan por buenos (lo que no deje, lo dira al guardar).
+pub fn datos_tarea(w: &Value, form: Option<&Value>) -> Option<Value> {
+    let id = w["id"].as_i64()?;
+    let links = &w["_links"];
+    let deja = |campo: &str| form.is_none_or(|f| f["_embedded"]["schema"][campo]["writable"].as_bool().unwrap_or(true));
+    let padre = id_de_href(&links["parent"]["href"])
+        .map(|p| json!({"id": p, "nombre": links["parent"]["title"].as_str().unwrap_or("?")}));
+    Some(json!({
+        "id": id,
+        "titulo": w["subject"].as_str().unwrap_or(""),
+        "descripcion": w["description"]["raw"].as_str().unwrap_or(""),
+        "estimado": horas_estimadas(w),
+        "version": w["lockVersion"].as_i64().unwrap_or(0),
+        "proyecto": {"id": id_de_href(&links["project"]["href"]), "nombre": links["project"]["title"].as_str().unwrap_or("")},
+        "tipo": links["type"]["title"].as_str().unwrap_or(""),
+        "estado": links["status"]["title"].as_str().unwrap_or(""),
+        "padre": padre,
+        "editable": es_editable(w),
+        "puede": {"titulo": deja("subject"), "descripcion": deja("description"),
+                  "estimado": deja("estimatedTime"), "padre": deja("parent")},
+    }))
+}
+
+/// Lo que se manda para modificar una tarea: la version que se leyo (si
+/// alguien la cambio despues, ProyectosTIC lo rechaza) y SOLO lo que cambia.
+/// estimado / padre: Some(None) lo quita.
+pub fn cuerpo_cambio(version: i64, titulo: Option<&str>, descripcion: Option<&str>, estimado: Option<Option<f64>>,
+                     padre: Option<Option<i64>>) -> Value {
+    let mut cuerpo = json!({"lockVersion": version});
+    if let Some(t) = titulo {
+        cuerpo["subject"] = json!(t);
+    }
+    if let Some(d) = descripcion {
+        cuerpo["description"] = json!({"format": "markdown", "raw": d});
+    }
+    if let Some(e) = estimado {
+        cuerpo["estimatedTime"] = json!(e.map(iso_dur));
+    }
+    if let Some(p) = padre {
+        cuerpo["_links"] = json!({"parent": {"href": p.map(|n| format!("/api/v3/work_packages/{n}"))}});
+    }
+    cuerpo
+}
+
+/// Una tarea del arbol que se va a duplicar: su tipo, de cual cuelga, si esta
+/// cerrada (su estado esta entre 'cerrados') y su tiempo estimado.
+pub fn nodo_plan(w: &Value, cerrados: &HashSet<i64>) -> Option<Value> {
+    let links = &w["_links"];
+    Some(json!({
+        "id": w["id"].as_i64()?,
+        "nombre": w["subject"].as_str().unwrap_or("?"),
+        "padre_id": id_de_href(&links["parent"]["href"]),
+        "tipo": {"id": id_de_href(&links["type"]["href"]), "nombre": links["type"]["title"].as_str().unwrap_or("")},
+        "cerrada": id_de_href(&links["status"]["href"]).is_some_and(|s| cerrados.contains(&s)),
+        "estimado": horas_estimadas(w),
+    }))
+}
+
+/// Lo que se manda para crear la copia de 'origen' en el proyecto 'pid': su
+/// descripcion y su prioridad, con el titulo, el tipo y el padre que se digan.
+/// El tiempo estimado, solo si se pide (en las que tendran tareas colgando lo
+/// calcula ProyectosTIC). Ni asignado, ni fechas, ni estado: nace como nueva.
+pub fn cuerpo_copia(origen: &Value, pid: i64, titulo: &str, tipo: Option<i64>, padre: Option<i64>,
+                    con_estimado: bool) -> Value {
+    let mut cuerpo = cuerpo_tarea(pid, titulo, tipo, padre, origen["description"]["raw"].as_str().unwrap_or(""), None);
+    if let Some(p) = origen["_links"]["priority"]["href"].as_str().filter(|h| h.contains("/api/v3/priorities/")) {
+        cuerpo["_links"]["priority"] = json!({"href": p});
+    }
+    if con_estimado {
+        poner_estimado(&mut cuerpo, horas_estimadas(origen));
     }
     cuerpo
 }
@@ -377,6 +555,8 @@ pub fn opciones_tarea(form: &Value) -> Value {
     json!({"tipos": tipos,
            "tipo": id_de_href(&form["_embedded"]["payload"]["_links"]["type"]["href"]),
            "asignable": !errores.contains_key("assignee"),
+           // el tiempo estimado se puede poner salvo que el formulario diga que no
+           "estimable": form["_embedded"]["schema"]["estimatedTime"]["writable"].as_bool().unwrap_or(true),
            "faltan": faltan})
 }
 
@@ -592,6 +772,84 @@ mod tests {
         let o = opciones_tarea(&form);
         assert_eq!(o["tipos"], json!([{"id": 3, "nombre": "Fase", "color": "", "hito": false}]));
         assert_eq!((o["asignable"].clone(), o["faltan"].clone()), (json!(true), json!([])));
+        assert_eq!(o["estimable"], true);
+        let form = json!({"_embedded": {"schema": {"estimatedTime": {"writable": false}}}});
+        assert_eq!(opciones_tarea(&form)["estimable"], false);
+    }
+
+    fn tarea_de_ejemplo() -> Value {
+        json!({"id": 7, "subject": "Hija", "lockVersion": 4, "estimatedTime": "PT1H30M",
+               "description": {"format": "markdown", "raw": "Lo que hay que hacer."},
+               "_links": {"project": {"href": "/api/v3/projects/42", "title": "ATE"},
+                          "type": {"href": "/api/v3/types/3", "title": "Fase"},
+                          "status": {"href": "/api/v3/statuses/12", "title": "Cerrada"},
+                          "priority": {"href": "/api/v3/priorities/8", "title": "Normal"},
+                          "assignee": {"href": "/api/v3/users/5", "title": "Otra persona"},
+                          "parent": {"href": "/api/v3/work_packages/5", "title": "Madre"},
+                          "updateImmediately": {"href": "/api/v3/work_packages/7", "method": "patch"}}})
+    }
+
+    #[test]
+    fn lo_que_se_ve_de_una_tarea_al_modificarla() {
+        let w = tarea_de_ejemplo();
+        let form = json!({"_embedded": {"schema": {"subject": {"writable": true}, "parent": {"writable": false}}}});
+        assert_eq!(datos_tarea(&w, Some(&form)).unwrap(), json!({
+            "id": 7, "titulo": "Hija", "descripcion": "Lo que hay que hacer.", "estimado": 1.5, "version": 4,
+            "proyecto": {"id": 42, "nombre": "ATE"}, "tipo": "Fase", "estado": "Cerrada",
+            "padre": {"id": 5, "nombre": "Madre"}, "editable": true,
+            "puede": {"titulo": true, "descripcion": true, "estimado": true, "padre": false}}));
+        // sin permiso para modificarla (sin enlace "update"), sin padre y sin tiempo
+        let suelta = json!({"id": 9, "subject": "Suelta", "lockVersion": 0, "estimatedTime": null,
+                            "_links": {"parent": {"href": null}}});
+        let d = datos_tarea(&suelta, None).unwrap();
+        assert_eq!((d["editable"].clone(), d["padre"].clone(), d["estimado"].clone(), d["puede"]["padre"].clone()),
+                   (json!(false), Value::Null, Value::Null, json!(true)));
+    }
+
+    #[test]
+    fn solo_se_manda_lo_que_cambia() {
+        assert_eq!(cuerpo_cambio(4, None, None, None, Some(Some(12))),
+                   json!({"lockVersion": 4, "_links": {"parent": {"href": "/api/v3/work_packages/12"}}}));
+        // quitarle el padre y el tiempo estimado: a null
+        assert_eq!(cuerpo_cambio(4, Some("Otro"), Some(""), Some(None), Some(None)),
+                   json!({"lockVersion": 4, "subject": "Otro", "description": {"format": "markdown", "raw": ""},
+                          "estimatedTime": null, "_links": {"parent": {"href": null}}}));
+        assert_eq!(cuerpo_cambio(4, None, None, Some(Some(0.5)), None), json!({"lockVersion": 4, "estimatedTime": "PT30M"}));
+    }
+
+    #[test]
+    fn por_que_no_se_guardo_el_cambio() {
+        assert!(mensaje_error_cambio("", 403).contains("no te deja modificar"));
+        assert!(mensaje_error_cambio("", 404).contains("no encuentra la tarea"));
+        assert!(mensaje_error_cambio("", 409).contains("mientras tanto"));
+        assert_eq!(mensaje_error_cambio(r#"{"message":"Padre no es válido."}"#, 422), "Padre no es válido.");
+        assert_eq!(mensaje_error_cambio("<html>", 422), "ProyectosTIC no ha aceptado el cambio (error 422).");
+    }
+
+    #[test]
+    fn el_arbol_que_se_duplica() {
+        let cerrados = HashSet::from([12]);
+        assert_eq!(nodo_plan(&tarea_de_ejemplo(), &cerrados).unwrap(),
+                   json!({"id": 7, "nombre": "Hija", "padre_id": 5, "tipo": {"id": 3, "nombre": "Fase"},
+                          "cerrada": true, "estimado": 1.5}));
+        let n = nodo_plan(&json!({"id": 5, "subject": "Madre"}), &cerrados).unwrap();
+        assert_eq!((n["padre_id"].clone(), n["cerrada"].clone(), n["estimado"].clone()), (Value::Null, json!(false), Value::Null));
+        assert_eq!(filtro_hijas(&[5, 7]), r#"[{"parent":{"operator":"=","values":["5","7"]}}]"#);
+    }
+
+    #[test]
+    fn la_copia_de_una_tarea() {
+        let w = tarea_de_ejemplo();
+        // descripcion, prioridad y tiempo estimado; ni asignado ni estado
+        assert_eq!(cuerpo_copia(&w, 50, "Hija (copia)", Some(3), Some(900), true),
+                   json!({"subject": "Hija (copia)", "estimatedTime": "PT1H30M",
+                          "description": {"format": "markdown", "raw": "Lo que hay que hacer."},
+                          "_links": {"project": {"href": "/api/v3/projects/50"}, "type": {"href": "/api/v3/types/3"},
+                                     "parent": {"href": "/api/v3/work_packages/900"},
+                                     "priority": {"href": "/api/v3/priorities/8"}}}));
+        // la que tendra tareas colgando: sin tiempo estimado; y directamente en el proyecto
+        let c = cuerpo_copia(&w, 50, "Hija", None, None, false);
+        assert_eq!((c.get("estimatedTime"), c["_links"].get("parent"), c["_links"].get("type")), (None, None, None));
     }
 
     #[test]

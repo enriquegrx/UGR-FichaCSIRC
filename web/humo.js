@@ -377,10 +377,15 @@
       const todo = p.querySelectorAll(".pend-dia").length;
       ok(p.querySelector(".pend-ficha.anual.activa") && todo === Number($("b-pend").querySelector(".n-pend").textContent),
          "la ficha del año no muestra todos los días");
-      const mesPend = [...p.querySelectorAll("button.pend-ficha.pendiente:not(.anual)")].pop();
+      const mesesPend = [...p.querySelectorAll("button.pend-ficha.pendiente:not(.anual)")];
+      const mesPend = mesesPend.pop();
       mesPend.click();
       ok(mesPend.isConnected === false && p.querySelector(".pend-ficha.activa:not(.anual)"), "la ficha del mes no queda elegida");
-      ok(p.querySelectorAll(".pend-mes").length === 1 && p.querySelectorAll(".pend-dia").length < todo, "la ficha del mes no filtra la lista");
+      // la demo deja por completar los 21 dias anteriores: del 22 en adelante caen todos
+      // en el mismo mes y no hay nada que quitar de la lista
+      const delMes = p.querySelectorAll(".pend-dia").length;
+      ok(p.querySelectorAll(".pend-mes").length === 1 && (mesesPend.length ? delMes < todo : delMes === todo),
+         "la ficha del mes no filtra la lista");
       ok(!p.querySelector("div.pend-ficha.futuro, div.pend-ficha.completo")?.onclick, "un mes completo o futuro se puede abrir");
       const antes = p.querySelectorAll(".pend-dia").length;
       const acciones = [...p.querySelectorAll(".pend-barra button")];
@@ -836,6 +841,157 @@
       dlgBuscar();
       ok(await hasta(() => dlg()), "no abre Buscar tarea");
       ok([...document.querySelectorAll(".dlg-pie button")].some((b) => b.textContent.includes("Nueva tarea") && !b.hidden), "Buscar tarea no ofrece crearla");
+      cerrarTodo();
+    });
+    await prueba("nueva tarea: plantillas y tiempo estimado", async () => {
+      dlgNuevaTarea();
+      ok(await hasta(() => document.querySelector(".nt-plantilla .usar")), "no salen las plantillas de tarea");
+      ok(!/null|undefined/.test(dlg().textContent), `escribe null/undefined: ${dlg().textContent}`);
+      document.querySelector(".nt-plantilla .usar").click();
+      const tit = document.querySelector(".nt-titulo"), est = document.querySelector(".nt-est");
+      ok(await hasta(() => document.querySelector(".nt-padre input").value.startsWith("15003")), "la plantilla no pone de cuál cuelga");
+      ok(tit.value === "Incidencia de Iris con ticket: *" && document.querySelector(".nt-dos select").value === "3" && est.value === "1",
+         `la plantilla no rellena: ${tit.value} / ${est.value}`);
+      ok(document.querySelector(".nt-vista").textContent.includes("1 h estimada"), "la vista previa no dice el tiempo estimado");
+      ok(tit.selectionStart === tit.value.indexOf("*") && tit.selectionEnd === tit.selectionStart + 1, "no deja marcado el * para escribir encima");
+      // con el * sin cambiar, avisa antes de crear
+      botonDlg("Crear tarea");
+      ok(await hasta(() => !$("modal").hidden && $("modal-texto").textContent.includes("*")), "crea con el * de la plantilla sin avisar");
+      $("modal-no").click();
+      await espera(50);
+      ok(dlg(), "«Cambiar el título» cierra el diálogo");
+      tit.value = "Incidencia de Iris con ticket: 4711"; tit.dispatchEvent(new Event("input"));
+      // un tiempo estimado que no es un numero no pasa
+      est.value = "un rato"; est.dispatchEvent(new Event("input"));
+      botonDlg("Crear tarea");
+      ok(await hasta(() => document.querySelector(".nt-error").textContent.includes("estimado")), "acepta un tiempo estimado que no es un número");
+      est.value = "1,5"; est.dispatchEvent(new Event("input"));
+      ok(document.querySelector(".nt-error").hidden, "el aviso del tiempo estimado no se quita al corregirlo");
+      // lo que hay, guardado como plantilla nueva
+      botonDlg("Guardar como plantilla…");
+      ok(await hasta(() => pila.length === 2), "no pide el nombre de la plantilla");
+      const arriba = () => [...document.querySelectorAll(".dlg")].pop();
+      arriba().querySelector("input").value = "Iris de hora y media";
+      [...arriba().querySelectorAll(".dlg-pie button")].find((b) => b.textContent === "Guardar").click();
+      ok(await hasta(() => document.querySelectorAll(".nt-plantilla").length === 2), "no guarda la plantilla");
+      ok(document.querySelector(".nt-plantilla.puesta .usar").textContent === "Iris de hora y media", "no deja puesta la plantilla guardada");
+      const guardada = st.crear.plantillas[1];
+      ok(guardada.estimado === 1.5 && guardada.titulo.endsWith("4711") && guardada.padre.id === 15003 && guardada.proyecto === 3,
+         `guardada: ${JSON.stringify(guardada)}`);
+      // borrarla pregunta antes
+      document.querySelector(".nt-plantilla.puesta .borrar").click();
+      ok(await hasta(() => !$("modal").hidden), "borra la plantilla sin preguntar");
+      $("modal-si").click();
+      ok(await hasta(() => document.querySelectorAll(".nt-plantilla").length === 1), "no borra la plantilla");
+      botonDlg("Crear tarea");
+      ok(await hasta(() => !dlg()), "no se cierra al crear");
+      ok(await hasta(() => $("tarea").value.endsWith("ticket: 4711")), `formulario: ${$("tarea").value}`);
+      ocultarAviso();
+    });
+    await prueba("modificar tarea: solo lo que cambia, y lo que no deja ProyectosTIC", async () => {
+      // desde la flecha de «＋ Nueva», con la tarea que hay en el formulario
+      ok(!$("b-nueva-mas").hidden, "no ofrece modificar ni duplicar a quien puede crear");
+      $("b-nueva-mas").click();
+      const opcion = [...document.querySelectorAll("#menu button")].find((b) => b.textContent.startsWith("Modificar"));
+      ok(opcion, "el menú de «＋ Nueva» no ofrece modificar");
+      opcion.click();
+      ok(await hasta(() => document.querySelector(".mt-ficha")?.textContent.includes(`#${tareaDelFormulario().id}`)), "no abre con la tarea del formulario");
+      cerrarTodo();
+      dlgModificarTarea({ tarea: { id: 15004, nombre: "Revisión de megafonía del Aulario" } });
+      const guardar = () => document.querySelector(".dlg-pie button.primario");
+      ok(await hasta(() => document.querySelector(".mt-ficha").textContent.includes("#15004")), "no lee la tarea");
+      ok(!/null|undefined/.test(dlg().textContent), `escribe null/undefined: ${dlg().textContent}`);
+      const tit = document.querySelector(".nt-titulo"), padre = document.querySelector(".nt-padre input");
+      ok(tit.value === "Revisión de megafonía del Aulario" && padre.value.startsWith("15002"), "no trae lo que hay en ProyectosTIC");
+      ok(guardar().disabled && document.querySelector(".mt-cambios").textContent.includes("Sin cambios"), "deja guardar sin cambios");
+      // de cuales puede colgar: ni de ella misma ni de las suyas; con la actual puesta se ve la lista entera
+      padre.dispatchEvent(new Event("focus"));
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      ok(await hasta(() => caja()?.textContent.includes("15003")), `no lista de cuáles puede colgar: ${caja()?.textContent}`);
+      ok(!caja().textContent.includes("15004"), "se ofrece a sí misma de madre");
+      [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes("15003"))
+        .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      ok(document.querySelector(".mt-cambios").textContent.includes("Atención a usuarios") && !guardar().disabled, "no enseña el cambio de madre");
+      tit.value = "Revisión de megafonía"; tit.dispatchEvent(new Event("input"));
+      const est = document.querySelector(".nt-est");
+      est.value = "2"; est.dispatchEvent(new Event("input"));
+      ok(document.querySelectorAll(".mt-cambio").length === 3, `cambios: ${document.querySelector(".mt-cambios").textContent}`);
+      // cerrar con cambios pregunta antes
+      teclado("Escape");
+      ok(await hasta(() => !$("modal").hidden), "cierra con cambios sin preguntar");
+      $("modal-no").click();
+      await espera(50);
+      ok(dlg(), "«Seguir aquí» cierra el diálogo");
+      guardar().click();
+      ok(await hasta(() => !dlg()), "no se cierra al guardar");
+      ok(await hasta(() => /15004 modificada/.test($("aviso-deshacer").textContent)), "no dice que se ha modificado");
+      const ya = await api().tarea_datos(15004);
+      ok(ya.titulo === "Revisión de megafonía" && ya.padre.id === 15003 && ya.estimado === 2, `quedó: ${JSON.stringify(ya)}`);
+      ocultarAviso();
+      // la que ProyectosTIC no deja tocar: se dice, y no se puede guardar
+      dlgModificarTarea({ tarea: { id: 15010, nombre: "[AUL] Renovación de proyectores" } });
+      ok(await hasta(() => !document.querySelector(".nt-aviso").hidden), "no dice que no se puede modificar");
+      ok(document.querySelector(".nt-titulo").disabled && guardar().disabled, "deja tocar una tarea que no se puede modificar");
+      cerrarTodo();
+      // o solo un campo (en la demo, el tiempo estimado de la 15001)
+      dlgModificarTarea({ tarea: { id: 15001, nombre: "[2026_AUL] Servicio" } });
+      ok(await hasta(() => document.querySelector(".nt-aviso").textContent.includes("tiempo estimado")), "no dice qué campo no deja cambiar");
+      ok(document.querySelector(".nt-est").disabled && !document.querySelector(".nt-titulo").disabled, "no bloquea solo ese campo");
+      cerrarTodo();
+    });
+    await prueba("duplicar tarea: el árbol entero, en otro proyecto y con otro nombre", async () => {
+      dlgDuplicarTarea({ tarea: { id: 15001, nombre: "[2026_AUL] Servicio" } });
+      const ir = () => document.querySelector(".dlg-pie button.primario");
+      const filas = () => [...document.querySelectorAll(".dt-fila")].map((f) =>
+        `${f.getAttribute("aria-level")}:${f.querySelector(".dt-titulo").textContent}`);
+      const proy = () => document.querySelector(".nt-dos select");
+      const elegirProyecto = (id) => { proy().value = id; proy().dispatchEvent(new Event("change")); };
+      ok(await hasta(() => filas().length === 6 && !ir().disabled), `árbol: ${filas().join(" | ")}`);
+      ok(!/null|undefined/.test(dlg().textContent), `escribe null/undefined: ${dlg().textContent}`);
+      ok(ir().textContent === "Duplicar las 6 tareas", ir().textContent);
+      // sin las cerradas; y sin las que cuelgan, ella sola
+      const [conHijas, conCerradas] = document.querySelectorAll(".nt-opciones input");
+      conCerradas.click();
+      ok(filas().length === 5 && !filas().some((f) => f.includes("Inventario")), "sigue copiando la cerrada");
+      conHijas.click();
+      ok(filas().length === 1 && ir().textContent === "Duplicar la tarea", "sin las que cuelgan no se queda ella sola");
+      conHijas.click(); conCerradas.click();
+      // cambiar un texto en todos los titulos: tambien en el de arriba
+      const [busca, pon] = document.querySelectorAll(".dt-cambiar input");
+      const cambiar = (de, a) => { busca.value = de; busca.dispatchEvent(new Event("input")); pon.value = a; pon.dispatchEvent(new Event("input")); };
+      cambiar("2026", "2027");
+      ok(document.querySelector(".nt-titulo").value === "[2027_AUL] Servicio", "no cambia el nombre de la copia");
+      ok(filas().includes("2:[2027_AUL] Mantenimientos") && filas().includes("3:Inventario de aulas de 2025"), filas().join(" | "));
+      // en otro proyecto
+      elegirProyecto("1");
+      ok(await hasta(() => !ir().disabled && document.querySelector(".dt-vista .nt-vista-rot").textContent.includes("Sistemas de Gestión")),
+         "no cambia el destino");
+      // una falla (la demo rechaza a la primera las de "a la segunda"): se para ahi, lo creado se queda y se sigue
+      cambiar("megafonía", "megafonía a la segunda");
+      ir().click();
+      ok(await hasta(() => !$("modal").hidden && /6 tareas nuevas en «Sistemas de Gestión»/.test($("modal-texto").textContent)),
+         "no pregunta antes de crear");
+      $("modal-si").click();
+      ok(await hasta(() => !document.querySelector(".nt-error").hidden && /^Seguir/.test(ir().textContent), 8000), "no se para en la que falla");
+      ok(document.querySelector(".dt-fila.fallo") && document.querySelectorAll(".dt-fila.hecha").length === 5, "no marca las creadas y la que falló");
+      ok(/Se han creado 5 de 6/.test(document.querySelector(".nt-error").textContent), document.querySelector(".nt-error").textContent);
+      ok(!/null|undefined/.test(dlg().textContent), `escribe null/undefined: ${dlg().textContent}`);
+      ok(document.querySelector(".dt-campos").inert, "deja cambiar el destino con el árbol a medias");
+      ir().click();
+      ok(await hasta(() => !dlg(), 8000), "no termina al seguir");
+      ok(await hasta(() => /6 tareas creadas en «Sistemas de Gestión»/.test($("aviso-deshacer").textContent)), $("aviso-deshacer").textContent);
+      ocultarAviso();
+      // un tipo para el que ProyectosTIC pide un campo propio: no deja empezar
+      dlgDuplicarTarea({ tarea: { id: 15010, nombre: "[AUL] Renovación de proyectores" } });
+      ok(await hasta(() => filas().length === 2), `árbol: ${filas().join(" | ")}`);
+      elegirProyecto("3");
+      ok(await hasta(() => !document.querySelector(".nt-aviso").hidden && document.querySelector(".nt-aviso").textContent.includes("Servicio afectado")
+                           && ir().disabled), "deja duplicar lo que ProyectosTIC no va a aceptar");
+      // y uno que el destino no tiene: se crea con el de por defecto, y se dice
+      elegirProyecto("1");
+      ok(await hasta(() => document.querySelector(".nt-aviso").textContent.includes("no hay tipo «Incidencia»") && !ir().disabled),
+         `no avisa del tipo que falta: ${document.querySelector(".nt-aviso").textContent}`);
+      ok(document.querySelector(".dt-fila .chip-permiso")?.textContent === "era Incidencia", "no marca la tarea que cambia de tipo");
       cerrarTodo();
     });
     await prueba("sin errores de JS por el camino", async () => {

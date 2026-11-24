@@ -27,6 +27,7 @@ mod pin;
 mod reglas;
 mod resumen;
 mod sistema;
+mod tarea;
 
 fn main() {
     // config.json sin URL/API key (o roto) y una copia buena: se recupera sola

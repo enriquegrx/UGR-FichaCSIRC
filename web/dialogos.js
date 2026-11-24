@@ -1512,7 +1512,7 @@ function tareasEnArbol(tareas, encaja = null) {
   return out;
 }
 
-function buscadorTarea(input, { alElegir, fuente = null }) {
+function buscadorTarea(input, { alElegir, fuente = null, crear = true }) {
   input.removeAttribute("list");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("role", "combobox");
@@ -1532,7 +1532,9 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
       const f = fuente();
       sobran = 0;
       if (f.tareas === null) return [[f.titulo, null]];
-      const todas = f.arbol ? tareasEnArbol(f.tareas, q ? encaja : null) : f.tareas.filter(encaja);
+      // con la elegida puesta ("123 - nombre") no se filtra: se ve la lista entera para cambiarla
+      const filtra = q && !/^\d+ - /.test(q);
+      const todas = f.arbol ? tareasEnArbol(f.tareas, filtra ? encaja : null) : f.tareas.filter((t) => !filtra || encaja(t));
       sobran = Math.max(0, todas.length - MAX_FUENTE);
       return [[f.titulo, todas.slice(0, MAX_FUENTE)]];
     }
@@ -1628,7 +1630,7 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
         ? "Sin resultados." : "Escribe un nombre o un número de tarea: se busca en todo ProyectosTIC." }));
     }
     // lo escrito no es (o puede que no sea) ninguna: crearla ahi mismo
-    if (!fuente && q && !/^\d+$/.test(q) && puedeCrearTareas()) {
+    if (!fuente && crear && q && !/^\d+$/.test(q) && puedeCrearTareas()) {
       const i = items.length, titulo = input.value.trim().replace(/^#/, "");
       items.push({ crear: true, titulo });
       const fila = el("div", { class: `bt-item bt-crear${i === activo ? " activo" : ""}`, role: "option" },
@@ -1801,6 +1803,33 @@ function dlgBuscar({ alElegir = null } = {}) {
 
 const puedeCrearTareas = () => !!st.crear?.proyectos?.length;
 
+// "1", "1,5" -> horas; lo que no sea un numero de horas, null.
+function horasDeTexto(texto) {
+  const n = Number(String(texto ?? "").trim().replace(",", "."));
+  return String(texto ?? "").trim() && Number.isFinite(n) && n > 0 ? n : null;
+}
+const textoEstimado = (h) => `${fmtHoras(h)} h ${h === 1 ? "estimada" : "estimadas"}`;
+
+// La tarea que hay puesta en el formulario de Añadir apunte (o ninguna).
+function tareaDelFormulario() {
+  const texto = $("tarea").value.trim();
+  const id = st.tareas.get(texto);
+  return id ? { id, nombre: texto.split(" - ").slice(1).join(" - ") || texto } : null;
+}
+
+// Las tareas de un proyecto de las que PUEDE colgar la tarea 'id': todas menos
+// ella y las que cuelgan de ella.
+function sinSuRama(tareas, id) {
+  const fuera = new Set([Number(id)]);
+  for (let crece = true; crece;) {
+    crece = false;
+    for (const t of tareas) {
+      if (!fuera.has(Number(t.id)) && fuera.has(Number(t.padre_id))) { fuera.add(Number(t.id)); crece = true; }
+    }
+  }
+  return tareas.filter((t) => !fuera.has(Number(t.id)));
+}
+
 // La tarea, al formulario de Añadir apunte: solo faltan las horas.
 async function usarTareaEnFormulario(t) {
   $("tarea").value = textoDeTarea(t.id) || `${t.id} - ${t.nombre}`;
@@ -1818,9 +1847,12 @@ async function usarTareaEnFormulario(t) {
    va al formulario de Añadir apunte. */
 function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   const d = dialogo({ titulo: "Nueva tarea", ancho: 600, botones: [
+    { texto: "Guardar como plantilla…", izquierda: true, id: "plantilla", accion: guardarPlantilla },
     { texto: "Cancelar", id: "no", accion: (dd) => dd.cerrar() },
     { texto: "Crear tarea", clase: "primario", id: "crear", accion: crear }] });
   d.botones.crear.disabled = true;
+  d.botones.plantilla.hidden = true;
+  d.botones.plantilla.title = "Guarda lo que hay en el diálogo para rellenarlo otra vez con un clic";
   const cargando = el("p", { class: "nt-cargando tenue", text: "Mirando en qué proyectos puedes crear tareas…" });
   d.cuerpo.append(cargando);
 
@@ -1835,6 +1867,10 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
                                 "aria-label": "Que no cuelgue de ninguna", text: "×", hidden: true });
   const desc = el("textarea", { class: "nt-desc", rows: "3", "aria-label": "Descripción",
                                 placeholder: "Lo que haya que saber de la tarea." });
+  const est = entrada("", { class: "nt-est", inputmode: "decimal", placeholder: "ej. 1,5",
+                            "aria-label": "Tiempo estimado, en horas" });
+  const plantillas = el("div", { class: "nt-plantillas", hidden: true });
+  const notaPlantilla = el("div", { class: "nt-plantilla-nota tenue", hidden: true });
   const asignar = el("input", { type: "checkbox" });
   const notaAsignar = el("span", { class: "tenue" });
   const fav = el("input", { type: "checkbox" });
@@ -1847,6 +1883,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   let padreSel = null;       // {id, nombre} de la tarea de la que cuelga
   let tareasProy = null;     // tareas del proyecto (null: cargando)
   let quiereAsignar = true, pendiente = false, creando = false, errorCrear = "", seq = 0;
+  let plantilla = null;      // la plantilla puesta (si queda su * en el titulo, se avisa antes de crear)
 
   const proyectoSel = () => st.crear.proyectos.find((p) => String(p.id) === proy.value);
   const tipoActual = () => ops?.tipos?.find((t) => t.id === tipoSel) || null;
@@ -1867,6 +1904,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
                  : el("span", { class: "tenue", text: " · directamente en el proyecto" })),
       el("div", { class: "nt-marcas" },
         el("span", { class: "chip chip-tele", text: asignar.checked ? "👤 Asignada a ti" : "Sin asignar" }),
+        horasDeTexto(est.value) ? el("span", { class: "chip chip-guardia", text: `⏱ ${textoEstimado(horasDeTexto(est.value))}` }) : null,
         fav.checked ? el("span", { class: "chip chip-permiso", text: "★ En tus favoritas" }) : null));
     cuenta.textContent = tit.value.length > 200 ? `${tit.value.length} / 255` : "";
     d.botones.crear.disabled = creando || pendiente || !ops || !!ops.error || !!ops.faltan?.length;
@@ -1889,8 +1927,9 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   function pintarAvisos() {
     const msg = ops?.error || errorCrear;
     error.hidden = !msg;
-    error.replaceChildren(el("span", { text: msg }),
-      ops?.error ? el("button", { type: "button", class: "enlace", text: "Reintentar", onclick: cargarProyecto }) : null);
+    // replaceChildren escribe "null" si le llega un null: solo lo que haya
+    error.replaceChildren(...[el("span", { text: msg }),
+      ops?.error ? el("button", { type: "button", class: "enlace", text: "Reintentar", onclick: cargarProyecto }) : null].filter(Boolean));
     const faltan = ops?.faltan || [];
     aviso.hidden = !faltan.length;
     if (faltan.length) {
@@ -1907,6 +1946,77 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     asignar.disabled = !puede;
     asignar.checked = puede && quiereAsignar;
     notaAsignar.textContent = puede ? "" : " (en este proyecto no se te pueden asignar)";
+    // el tiempo estimado: salvo que el proyecto no lo deje poner
+    est.disabled = !!ops && !ops.error && ops.estimable === false;
+    est.title = est.disabled ? "En este proyecto no se puede poner el tiempo estimado" : "";
+  }
+
+  // ---- plantillas: lo que se repite, con un clic ----
+  function pintarPlantillas() {
+    const ps = st.crear.plantillas || [];
+    plantillas.hidden = !ps.length;
+    plantillas.replaceChildren(el("span", { class: "nt-plantillas-rot", text: "Plantillas" }), ...ps.map((p) => {
+      const puesta = !!plantilla && plantilla.nombre === p.nombre;
+      return el("span", { class: `nt-plantilla${puesta ? " puesta" : ""}` },
+        el("button", { type: "button", class: "usar", "aria-pressed": String(puesta), text: p.nombre,
+                       title: p.titulo ? `Rellena la tarea: «${p.titulo}»` : "Rellena la tarea con esta plantilla",
+                       onclick: () => aplicarPlantilla(p) }),
+        el("button", { type: "button", class: "borrar", text: "×", title: `Borrar la plantilla «${p.nombre}»`,
+                       "aria-label": `Borrar la plantilla «${p.nombre}»`, onclick: () => borrarPlantilla(p) }));
+    }));
+  }
+
+  async function aplicarPlantilla(p) {
+    plantilla = p; errorCrear = "";
+    if (p.titulo) tit.value = p.titulo;
+    est.value = p.estimado ? fmtHoras(p.estimado) : "";
+    desc.value = p.descripcion || "";
+    quiereAsignar = !!p.asignar;
+    fav.checked = !!p.favorita;
+    pintarPlantillas();
+    const suyo = p.proyecto != null && st.crear.proyectos.some((x) => x.id === p.proyecto);
+    notaPlantilla.hidden = p.proyecto == null || suyo;
+    notaPlantilla.textContent = "El proyecto de esta plantilla ya no está entre los tuyos: se queda el que tenías puesto.";
+    if (suyo && (proy.value !== String(p.proyecto) || !ops)) { proy.value = String(p.proyecto); await cargarProyecto(); }
+    if (plantilla !== p) return;                          // se eligio otra mientras tanto
+    if ((suyo || p.proyecto == null) && p.tipo != null && ops?.tipos?.some((t) => t.id === p.tipo)) await elegirTipo(p.tipo);
+    if (plantilla !== p) return;
+    if (suyo) ponerPadre(p.padre || null);
+    pintar();
+    // el * del titulo es lo que cambia cada vez: se deja marcado para escribir encima
+    tit.focus();
+    const i = tit.value.indexOf("*");
+    if (i >= 0) tit.setSelectionRange(i, i + 1);
+  }
+
+  async function guardarPlantilla() {
+    const propuesto = plantilla?.nombre || tituloLimpio().replace(/[\s:,(#-]*\*.*$/, "");
+    const nombre = await pedirTexto({ titulo: "Guardar como plantilla", valor: propuesto,
+      texto: "Guarda lo que hay ahora en el diálogo: título, proyecto, tipo, de cuál cuelga, tiempo estimado, "
+        + "descripción y las dos casillas. En el título, pon un * donde vaya lo que cambia cada vez "
+        + "(el número de ticket, por ejemplo)." });
+    if (!nombre) return;
+    const ya = (st.crear.plantillas || []).find((p) => p.nombre.toLowerCase() === nombre.toLowerCase());
+    if (ya && !(await preguntar("Guardar como plantilla", `Ya tienes una plantilla «${ya.nombre}». ¿La sustituyes por esta?`,
+                                { si: "Sustituir", no: "Cancelar" }))) return;
+    const r = await llamar("plantilla_tarea_guardar", { nombre, titulo: tituloLimpio(), proyecto: Number(proy.value),
+      tipo: tipoSel, padre: padreSel, estimado: est.value.trim(), descripcion: desc.value,
+      asignar: asignar.checked, favorita: fav.checked });
+    if (r.error) { errorCrear = r.error; pintarAvisos(); return; }
+    st.crear.plantillas = r.plantillas;
+    plantilla = r.plantillas.find((p) => p.nombre.toLowerCase() === nombre.toLowerCase()) || null;
+    notaPlantilla.hidden = true;
+    pintarPlantillas();
+    estado(`Plantilla de tarea «${nombre}» guardada.`);
+  }
+
+  async function borrarPlantilla(p) {
+    if (!(await preguntar("Borrar plantilla", `¿Borrar la plantilla de tarea «${p.nombre}»?\n\nLas tareas ya creadas con ella no cambian.`,
+                          { si: "Borrar", no: "Cancelar" }))) return;
+    const r = await llamar("plantilla_tarea_borrar", p.nombre);
+    st.crear.plantillas = r.plantillas || [];
+    if (plantilla && plantilla.nombre === p.nombre) plantilla = null;
+    pintarPlantillas();
   }
 
   function pintar() { pintarTipos(); pintarAvisos(); pintarVista(); }
@@ -2000,13 +2110,29 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
       tit.focus();
       return;
     }
+    if (est.value.trim() && !horasDeTexto(est.value)) {
+      errorCrear = "El tiempo estimado no vale: escribe las horas (ej. 1 o 1,5).";
+      pintarAvisos();
+      est.focus();
+      return;
+    }
+    // el * de la plantilla sin cambiar: casi seguro que se ha olvidado
+    if (plantilla?.titulo?.includes("*") && tituloLimpio().includes("*")
+        && !(await preguntar("Nueva tarea", "El título todavía tiene el * de la plantilla, que es donde va lo que cambia cada vez.\n\n¿La creas así?",
+                             { si: "Crearla así", no: "Cambiar el título" }))) {
+      tit.focus();
+      const i = tit.value.indexOf("*");
+      if (i >= 0) tit.setSelectionRange(i, i + 1);
+      return;
+    }
     creando = true; errorCrear = "";
     d.botones.crear.textContent = "Creando…";
     pintarAvisos();
     let r;
     try {
       r = await llamar("nueva_tarea_crear", { proyecto: proy.value, titulo: tituloLimpio(), tipo: tipoSel,
-        padre: padreSel ? padreSel.id : null, descripcion: desc.value, asignar: asignar.checked, favorita: fav.checked });
+        padre: padreSel ? padreSel.id : null, descripcion: desc.value, estimado: est.value.trim(),
+        asignar: asignar.checked, favorita: fav.checked });
     } finally {
       creando = false;
       d.botones.crear.textContent = "Crear tarea";
@@ -2025,7 +2151,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   let preguntando = false;
   d.cerrar = async () => {
     if (preguntando) return;
-    if (desc.value.trim()) {
+    if (desc.value.trim() && desc.value.trim() !== (plantilla?.descripcion || "")) {
       preguntando = true;
       const si = await preguntar("Descartar la tarea", "Has escrito una descripción y la tarea aún no se ha creado.",
                                  { si: "Descartar", no: "Seguir escribiendo" });
@@ -2043,18 +2169,25 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   proy.onchange = cargarProyecto;
   asignar.onchange = () => { quiereAsignar = asignar.checked; pintarVista(); };
   fav.onchange = pintarVista;
+  est.addEventListener("input", () => { errorCrear = ""; pintarAvisos(); pintarVista(); });
+  est.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); d.botones.crear.click(); } });
 
   function montar() {
     const opcional = () => el("span", { class: "opc", text: "opcional" });
     const campo = (rotulo, control, extra = null) => el("div", { class: "nt-campo" },
       el("div", { class: "nt-rot" }, el("span", { text: rotulo }), extra), control);
     cargando.remove();
+    d.botones.plantilla.hidden = false;
+    pintarPlantillas();
     d.cuerpo.append(el("div", { class: "nt" },
       el("p", { class: "nt-intro", text: "Se da de alta en ProyectosTIC y queda lista para fichar en ella." }),
+      plantillas, notaPlantilla,
       campo("Título", tit, cuenta),
       el("div", { class: "nt-dos" }, campo("Proyecto", proy), campo("Tipo", tipos)),
       aviso,
-      campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar), opcional()),
+      el("div", { class: "nt-cuelga" },
+        campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar), opcional()),
+        campo("Estimado", el("div", { class: "nt-est-caja" }, est, el("span", { class: "tenue", text: "h" })), opcional())),
       campo("Descripción", desc, opcional()),
       el("div", { class: "nt-opciones" },
         el("label", { class: "check" }, asignar, " Asignármela", notaAsignar),
@@ -2077,7 +2210,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   (async () => {
     try { st.crear = await llamar("nueva_tarea_proyectos"); }
     catch (_e) { cerrarDeVerdad(); return; }
-    $("b-nueva").hidden = !puedeCrearTareas();
+    pintarPermisoCrear();
     if (!pila.includes(d)) return;                    // se cerro mientras tanto
     if (!puedeCrearTareas()) { sinPermiso(); return; }
     const ps = st.crear.proyectos;
@@ -2089,6 +2222,533 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     tit.focus();
     cargarProyecto();
   })();
+}
+
+// ================================================================ modificar tarea
+
+/* Modificar una tarea que ya existe en ProyectosTIC: el titulo, de cual cuelga
+   (lo que mas se olvida al crearla), el tiempo estimado y la descripcion. Solo
+   se manda lo que cambia, y abajo se ve antes de guardarlo. Que campos deja
+   tocar lo dice ProyectosTIC (el permiso va por proyecto y rol).
+   tarea: {id, nombre} con la que se abre; sin ella, se elige arriba. */
+function dlgModificarTarea({ tarea = null } = {}) {
+  const d = dialogo({ titulo: "Modificar tarea", ancho: 600, botones: [
+    { texto: "Abrir en ProyectosTIC ↗", izquierda: true, id: "abrir", accion: () => t0 && llamar("abrir_tarea", t0.id).catch(() => {}) },
+    { texto: "Cancelar", id: "no", accion: (dd) => dd.cerrar() },
+    { texto: "Guardar cambios", clase: "primario", id: "guardar", accion: guardar }] });
+  const cual = entrada("", { placeholder: "Busca la tarea por nombre o por número", "aria-label": "Tarea que se modifica" });
+  const ficha = el("div", { class: "mt-ficha tenue" });
+  const tit = entrada("", { class: "nt-titulo", maxlength: "255", "aria-label": "Título de la tarea" });
+  const padre = entrada("", { placeholder: "Busca una tarea del proyecto, por nombre o número",
+                              "aria-label": "Tarea de la que cuelga" });
+  const quitar = el("button", { type: "button", class: "nt-quitar", title: "Que no cuelgue de ninguna",
+                                "aria-label": "Que no cuelgue de ninguna", text: "×", hidden: true });
+  const est = entrada("", { class: "nt-est", inputmode: "decimal", placeholder: "ej. 1,5",
+                            "aria-label": "Tiempo estimado, en horas" });
+  const desc = el("textarea", { class: "nt-desc", rows: "4", "aria-label": "Descripción" });
+  const cambios = el("div", { class: "nt-vista mt-cambios" });
+  const aviso = el("div", { class: "nt-aviso", role: "status", hidden: true });
+  const error = el("div", { class: "nt-error", role: "alert", hidden: true });
+  const campos = el("div", { class: "mt-campos", hidden: true });
+
+  let t0 = null;             // la tarea como esta en ProyectosTIC (null: sin elegir, o cargando)
+  let padreSel = null;       // {id, nombre} de la que colgara
+  let tareasProy = null;     // de cuales puede colgar (null: cargando)
+  let est0 = "", cargandoTarea = false, guardando = false, msg = "", seq = 0;
+
+  const limpio = (s) => String(s || "").trim().replace(/\s+/g, " ");
+
+  // Lo que cambia respecto a lo que hay en ProyectosTIC: solo eso se manda.
+  function cambiosDe() {
+    const c = {};
+    if (!t0) return c;
+    if (limpio(tit.value) !== limpio(t0.titulo)) c.titulo = limpio(tit.value);
+    if ((padreSel ? padreSel.id : null) !== (t0.padre ? t0.padre.id : null)) c.padre = padreSel ? padreSel.id : null;
+    if (est.value.trim() !== est0) c.estimado = est.value.trim();
+    if (desc.value.trim() !== (t0.descripcion || "").trim()) c.descripcion = desc.value;
+    return c;
+  }
+
+  function pintar() {
+    const c = cambiosDe(), n = Object.keys(c).length;
+    const puede = t0?.puede || {};
+    const bloqueada = !t0 || !t0.editable || guardando;
+    tit.disabled = bloqueada || puede.titulo === false;
+    padre.disabled = bloqueada || puede.padre === false;
+    quitar.disabled = padre.disabled;
+    est.disabled = bloqueada || puede.estimado === false;
+    desc.disabled = bloqueada || puede.descripcion === false;
+    campos.hidden = !t0;
+    ficha.replaceChildren(...(cargandoTarea ? [el("span", { text: "Leyendo la tarea en ProyectosTIC…" })]
+      : !t0 ? [el("span", { text: "Elige la tarea que quieres modificar." })]
+      : [el("b", { text: `#${t0.id}` }), ...[t0.tipo, t0.estado, t0.proyecto?.nombre].filter(Boolean).map((x) => el("span", { text: x }))]));
+    // por que no se puede (toda, o algun campo)
+    const no = t0 && t0.editable ? [["titulo", "el título"], ["padre", "de cuál cuelga"], ["estimado", "el tiempo estimado"],
+                                    ["descripcion", "la descripción"]].filter(([k]) => puede[k] === false).map(([, x]) => x) : [];
+    aviso.hidden = !t0 || (t0.editable && !no.length);
+    aviso.textContent = !t0 ? "" : !t0.editable
+      ? `ProyectosTIC no te deja modificar esta tarea. Lo concede quien administra el proyecto${t0.proyecto?.nombre ? ` «${t0.proyecto.nombre}»` : ""}.`
+      : `ProyectosTIC no te deja cambiarle ${no.join(", ")}.`;
+    error.hidden = !msg;
+    error.textContent = msg;
+    // lo que va a cambiar, antes de guardarlo
+    const de = (x) => x || "ninguna";
+    const horas = (txt) => (horasDeTexto(txt) ? `${fmtHoras(horasDeTexto(txt))} h` : txt.trim() ? `«${txt.trim()}»` : "sin estimar");
+    const lineas = [];
+    if ("titulo" in c) lineas.push(["Título", `«${limpio(t0.titulo)}»`, `«${c.titulo || "sin título"}»`]);
+    if ("padre" in c) lineas.push(["Cuelga de", de(t0.padre?.nombre), de(padreSel?.nombre)]);
+    if ("estimado" in c) lineas.push(["Estimado", horas(est0), horas(est.value)]);
+    if ("descripcion" in c) lineas.push(["Descripción", "la que tenía", desc.value.trim() ? "la que has escrito" : "sin descripción"]);
+    cambios.hidden = !t0 || !t0.editable;
+    cambios.replaceChildren(
+      el("div", { class: "nt-vista-rot", text: n ? "Lo que va a cambiar en ProyectosTIC" : "Sin cambios todavía" }),
+      ...lineas.map(([rot, antes, ahora]) => el("div", { class: "mt-cambio" },
+        el("b", { text: rot }), el("s", { text: antes }), el("span", { class: "mt-flecha", "aria-hidden": "true", text: "→" }),
+        el("span", { text: ahora }))));
+    d.botones.guardar.disabled = !n || bloqueada;
+    d.botones.abrir.hidden = !t0;
+  }
+
+  function ponerPadre(t) {
+    padreSel = t ? { id: t.id, nombre: t.nombre } : null;
+    padre.value = t ? `${t.id} - ${t.nombre}` : "";
+    quitar.hidden = !t;
+    pintar();
+  }
+  const listaPadre = buscadorTarea(padre, { alElegir: ponerPadre, fuente: () => ({
+    titulo: "Tareas abiertas del proyecto", tareas: tareasProy, arbol: true,
+    vacio: (q) => (q ? "Ninguna tarea abierta del proyecto con eso." : "No hay otras tareas abiertas en el proyecto.") }) });
+  // lo escrito sin elegir no vale: o la elegida, o ninguna
+  padre.addEventListener("blur", () => setTimeout(() => {
+    if (!padre.value.trim()) ponerPadre(null);
+    else padre.value = padreSel ? `${padreSel.id} - ${padreSel.nombre}` : "";
+  }, 160));
+  quitar.onclick = () => { ponerPadre(null); padre.focus(); };
+
+  async function cargar(id) {
+    const mio = ++seq;
+    t0 = null; msg = ""; tareasProy = null; cargandoTarea = true;
+    pintar();
+    let r;
+    try { r = await api().tarea_datos(id); }
+    catch (e) { r = { error: `No se pudo leer la tarea (${(e && e.message) || "sin conexión"}).` }; }
+    if (mio !== seq) return;
+    cargandoTarea = false;
+    if (r.error) { msg = r.error; pintar(); return; }
+    t0 = r;
+    tit.value = r.titulo || "";
+    est0 = r.estimado ? fmtHoras(r.estimado) : "";
+    est.value = est0;
+    desc.value = r.descripcion || "";
+    ponerPadre(r.padre);
+    if (r.editable && r.proyecto?.id != null) {
+      // de cuales puede colgar: las abiertas de su proyecto, menos ella y las suyas
+      api().tareas_de_proyecto(String(r.proyecto.id)).then((x) => x.tareas || [], () => []).then((ts) => {
+        if (mio !== seq) return;
+        tareasProy = sinSuRama(ts, r.id);
+        listaPadre.repintar();
+      });
+    } else {
+      tareasProy = [];
+    }
+    if (r.editable && r.puede?.titulo !== false) tit.focus();
+  }
+
+  async function guardar() {
+    const c = cambiosDe();
+    if (!t0 || !Object.keys(c).length) return;
+    if ("titulo" in c && !c.titulo) { msg = "Escribe el título de la tarea."; pintar(); tit.focus(); return; }
+    if ("estimado" in c && c.estimado && !horasDeTexto(c.estimado)) {
+      msg = "El tiempo estimado no vale: escribe las horas (ej. 1 o 1,5).";
+      pintar(); est.focus(); return;
+    }
+    guardando = true; msg = "";
+    d.botones.guardar.textContent = "Guardando…";
+    pintar();
+    let r;
+    try { r = await llamar("tarea_modificar", { id: t0.id, version: t0.version, ...c }); }
+    finally {
+      guardando = false;
+      d.botones.guardar.textContent = "Guardar cambios";
+    }
+    if (r.error) { msg = r.error; pintar(); return; }
+    // si es la que hay en el formulario, que se vea con su nombre nuevo
+    const enFormulario = tareaDelFormulario()?.id === t0.id;
+    ponerTareas(r.tareas);
+    if (enFormulario) $("tarea").value = textoDeTarea(t0.id) || `${r.tarea.id} - ${r.tarea.nombre}`;
+    cerrarDeVerdad();
+    avisoTarea(`Tarea ${r.tarea.id} modificada en ProyectosTIC: «${r.tarea.nombre}».`, r.tarea.id);
+  }
+
+  // Con cambios sin guardar, cerrar pregunta antes (Esc, la X o Cancelar).
+  const cerrarDeVerdad = d.cerrar;
+  let preguntando = false;
+  d.cerrar = async () => {
+    if (preguntando || guardando) return;
+    if (Object.keys(cambiosDe()).length) {
+      preguntando = true;
+      const si = await preguntar("Modificar tarea", "Has cambiado la tarea y aún no lo has guardado.",
+                                 { si: "Descartar los cambios", no: "Seguir aquí" });
+      preguntando = false;
+      if (!si) return;
+    }
+    cerrarDeVerdad();
+  };
+
+  buscadorTarea(cual, { alElegir: (t) => cargar(t.id), crear: false });
+  for (const c of [tit, est, desc]) c.addEventListener("input", () => { msg = ""; pintar(); });
+  for (const c of [tit, est]) c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); d.botones.guardar.click(); } });
+  desc.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); d.botones.guardar.click(); }
+  });
+
+  const campo = (rotulo, control, extra = null) => el("div", { class: "nt-campo" },
+    el("div", { class: "nt-rot" }, el("span", { text: rotulo }), extra), control);
+  campos.append(
+    campo("Título", tit),
+    el("div", { class: "nt-cuelga" },
+      campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar)),
+      campo("Estimado", el("div", { class: "nt-est-caja" }, est, el("span", { class: "tenue", text: "h" })))),
+    campo("Descripción", desc),
+    cambios);
+  d.cuerpo.append(el("div", { class: "nt" },
+    el("p", { class: "nt-intro", text: "Cambia una tarea que ya existe en ProyectosTIC: su título, de cuál cuelga, el tiempo estimado o la descripción." }),
+    campo("Tarea", cual), ficha, aviso, campos, error));
+  pintar();
+  if (tarea) {
+    cual.value = `${tarea.id} - ${tarea.nombre}`;
+    cargar(tarea.id);
+  } else {
+    cual.focus();
+  }
+}
+
+// ================================================================ duplicar tarea
+
+/* Duplicar una tarea con todas las que cuelgan de ella, en el mismo proyecto o
+   en otro: el arbol de un año para el siguiente, el de un proyecto tipo... Con
+   nombre nuevo y sin horas imputadas. ProyectosTIC no tiene una operacion para
+   esto en su API: la app lee el arbol y crea las copias una a una, de arriba
+   abajo, y lo va enseñando. Si una falla se para ahi (lo ya creado se queda) y
+   se puede seguir desde esa. Antes de empezar se ve el arbol tal como quedara.
+   tarea: {id, nombre} con la que se abre; sin ella, se elige arriba. */
+function dlgDuplicarTarea({ tarea = null } = {}) {
+  if (!puedeCrearTareas()) { dlgNuevaTarea(); return; }      // alli se explica por que no
+  const d = dialogo({ titulo: "Duplicar tarea", ancho: 680, botones: [
+    { texto: "Cancelar", id: "no", accion: (dd) => (marcha?.activo ? (marcha.parar = true, pintar()) : dd.cerrar()) },
+    { texto: "Duplicar", clase: "primario", id: "ir", accion: duplicar }] });
+  const cual = entrada("", { placeholder: "Busca la tarea por nombre o por número", "aria-label": "Tarea que se duplica" });
+  const proy = el("select", { "aria-label": "Proyecto de destino" });
+  const padre = entrada("", { placeholder: "Directamente en el proyecto", "aria-label": "Tarea de la que colgará la copia" });
+  const quitar = el("button", { type: "button", class: "nt-quitar", title: "Que no cuelgue de ninguna",
+                                "aria-label": "Que no cuelgue de ninguna", text: "×", hidden: true });
+  const nombre = entrada("", { class: "nt-titulo", maxlength: "255", "aria-label": "Nombre de la copia" });
+  const busca = entrada("", { placeholder: "ej. 2026", "aria-label": "Texto que se cambia en los títulos" });
+  const pon = entrada("", { placeholder: "ej. 2027", "aria-label": "Texto que se pone en su lugar" });
+  const conHijas = el("input", { type: "checkbox" });
+  const conCerradas = el("input", { type: "checkbox" });
+  conHijas.checked = true; conCerradas.checked = true;
+  const rotHijas = el("span"), rotCerradas = el("span"), etiCerradas = el("label", { class: "check" }, conCerradas, " ", rotCerradas);
+  const estadoPlan = el("div", { class: "mt-ficha tenue" });
+  const arbol = el("div", { class: "dt-arbol", role: "tree", "aria-label": "Las tareas que se van a crear" });
+  const cabArbol = el("div", { class: "nt-vista-rot" });
+  const progreso = el("div", { class: "dt-progreso", hidden: true }, el("i"));
+  const aviso = el("div", { class: "nt-aviso", role: "status", hidden: true });
+  const error = el("div", { class: "nt-error", role: "alert", hidden: true });
+  const campos = el("div", { class: "dt-campos", hidden: true });
+
+  let plan = null;           // {raiz, tareas, proyecto}: el arbol de la tarea elegida (null: sin elegir, o cargando)
+  let ops = null;            // tipos del proyecto de destino (null: preguntando)
+  let faltan = new Map();    // tipo -> lo que ProyectosTIC pide de mas para ese tipo en el destino
+  let comprobando = false;   // preguntando por los tipos del arbol
+  let padreSel = null, tareasProy = null, nombreTocado = false, cargandoPlan = false;
+  let marcha = null;         // al crear: {filas, hechas: Map(origen -> copia), ahora, fallo, parar, activo}
+  let msg = "", seqPlan = 0, seqOps = 0;
+
+  const proyectoSel = () => st.crear.proyectos.find((p) => String(p.id) === proy.value);
+  const raiz = () => plan?.tareas.find((t) => t.id === plan.raiz) || null;
+  const cambiar = (s) => (busca.value ? String(s).split(busca.value).join(pon.value) : String(s));
+  const limpio = (s) => String(s || "").trim().replace(/\s+/g, " ");
+
+  // El tipo que tendra en el destino: el suyo si alli existe; si no, el de por defecto.
+  function tipoEnDestino(t) {
+    if (!ops?.tipos?.length) return null;
+    const suyo = ops.tipos.find((x) => x.id === t.tipo?.id);
+    if (suyo) return suyo;
+    return { ...(ops.tipos.find((x) => x.id === ops.tipo) || ops.tipos[0]), era: t.tipo?.nombre || "otro tipo" };
+  }
+
+  // Las que se van a crear, de arriba abajo: cada una con su nivel, su titulo y su tipo alli.
+  function filas() {
+    const r = raiz();
+    if (!r) return [];
+    const hijas = new Map();
+    for (const t of plan.tareas) {
+      if (t.id !== plan.raiz) hijas.set(t.padre_id, [...(hijas.get(t.padre_id) || []), t]);
+    }
+    const out = [];
+    const bajar = (t, nivel) => {
+      const fila = { t, nivel, titulo: nivel ? limpio(cambiar(t.nombre)) : limpio(nombre.value), tipo: tipoEnDestino(t), hoja: true };
+      out.push(fila);
+      if (!conHijas.checked || nivel > 20) return;
+      for (const h of hijas.get(t.id) || []) {
+        if (h.cerrada && !conCerradas.checked) continue;
+        fila.hoja = false;
+        bajar(h, nivel + 1);
+      }
+    };
+    bajar(r, 0);
+    return out;
+  }
+
+  function pintarArbol(fs) {
+    arbol.replaceChildren(...fs.map((f) => {
+      const hecha = marcha?.hechas.get(f.t.id);
+      const fallo = marcha?.fallo?.id === f.t.id;
+      const fila = el("div", { class: `dt-fila${hecha ? " hecha" : ""}${fallo ? " fallo" : ""}${marcha?.ahora === f.t.id ? " ahora" : ""}`,
+                               role: "treeitem", "aria-level": String(f.nivel + 1) },
+        f.nivel ? el("span", { class: "bt-codo", "aria-hidden": "true", text: "└" }) : null,
+        f.tipo ? el("span", { class: `nt-sello${f.tipo.hito ? " hito" : ""}` }, el("i"), f.tipo.nombre) : null,
+        el("span", { class: `dt-titulo${f.titulo ? "" : " vacio"}`, text: f.titulo || "Sin nombre" }),
+        f.tipo?.era ? el("span", { class: "chip chip-permiso", text: `era ${f.tipo.era}`,
+                                   title: `En el proyecto de destino no hay tipo «${f.tipo.era}»` }) : null,
+        f.t.cerrada ? el("span", { class: "chip dt-cerrada", text: "cerrada en el origen", title: "La copia nace abierta" }) : null,
+        hecha ? el("span", { class: "dt-marca", text: `✓ ${hecha.id}` })
+          : fallo ? el("span", { class: "dt-marca", text: "✕ no creada" })
+          : marcha?.ahora === f.t.id ? el("span", { class: "dt-marca", text: "creando…" }) : null);
+      fila.style.setProperty("--nivel", String(Math.min(f.nivel, 8)));
+      if (f.tipo?.color) fila.style.setProperty("--tipo", f.tipo.color);
+      return fila;
+    }));
+    arbol.querySelector(".ahora, .fallo")?.scrollIntoView({ block: "nearest" });
+  }
+
+  function pintar() {
+    const fs = marcha ? marcha.filas : filas();
+    const r = raiz(), p = proyectoSel();
+    const todas = plan ? plan.tareas.length - 1 : 0;
+    const cerradas = plan ? plan.tareas.filter((t) => t.cerrada && t.id !== plan.raiz).length : 0;
+    campos.hidden = !plan;
+    campos.inert = !!marcha;
+    campos.classList.toggle("en-marcha", !!marcha);
+    cual.disabled = !!marcha;
+    estadoPlan.hidden = !!plan;
+    estadoPlan.textContent = cargandoPlan ? "Leyendo la tarea y las que cuelgan de ella…" : "Elige la tarea que quieres duplicar.";
+    conHijas.disabled = !todas;
+    rotHijas.textContent = !todas ? "No tiene tareas colgando: se copia ella sola"
+      : `Con ${todas === 1 ? "la tarea que cuelga" : `las ${todas} tareas que cuelgan`} de ella`;
+    etiCerradas.hidden = !cerradas || !conHijas.checked;
+    rotCerradas.textContent = cerradas === 1 ? "También la que está cerrada" : `También las ${cerradas} que están cerradas`;
+    cabArbol.textContent = `Así quedará en ${p ? `«${p.nombre}»` : "el proyecto"}${padreSel ? ` › ${padreSel.nombre}` : ""}`;
+    pintarArbol(fs);
+
+    // lo que impide duplicar o conviene saber antes
+    const tiposQueFaltan = [...new Set(fs.filter((f) => f.tipo?.era).map((f) => f.tipo.era))];
+    const pide = [...new Set(fs.map((f) => f.tipo?.id).filter((id) => faltan.get(id)?.length))];
+    const avisos = [];
+    if (tiposQueFaltan.length && ops?.tipos?.length) {
+      const defecto = ops.tipos.find((x) => x.id === ops.tipo) || ops.tipos[0];
+      avisos.push(el("div", { text: `En «${p?.nombre}» no hay tipo ${tiposQueFaltan.map((x) => `«${x}»`).join(", ")}: `
+        + `esas tareas se crearán como «${defecto.nombre}».` }));
+    }
+    for (const id of pide) {
+      const t = ops.tipos.find((x) => x.id === id);
+      avisos.push(el("div", {}, el("b", { text: `ProyectosTIC pide algo más para las tareas de tipo «${t?.nombre}», y FichaCSIRC no lo rellena:` }),
+        el("ul", {}, ...faltan.get(id).map((m) => el("li", { text: m }))),
+        el("span", { text: "Así no se pueden duplicar aquí: hazlo en la web de ProyectosTIC." })));
+    }
+    aviso.hidden = !avisos.length || !!marcha;
+    aviso.replaceChildren(...avisos);
+
+    const texto = ops?.error || msg || (marcha?.fallo
+      ? `Se han creado ${marcha.hechas.size} de ${marcha.filas.length}. «${marcha.fallo.titulo}» no se ha podido crear: ${marcha.fallo.error}`
+      : "");
+    error.hidden = !texto;
+    error.replaceChildren(...[el("span", { text: texto }),
+      ops?.error && !marcha ? el("button", { type: "button", class: "enlace", text: "Reintentar", onclick: cargarDestino }) : null].filter(Boolean));
+
+    const n = fs.length, hechas = marcha ? marcha.hechas.size : 0;
+    progreso.hidden = !marcha;
+    progreso.firstChild.style.width = `${n ? Math.round((hechas / n) * 100) : 0}%`;
+    const sinNombre = fs.some((f) => !f.titulo || f.titulo.length > 255);
+    d.botones.ir.textContent = marcha?.activo ? `Creando ${Math.min(hechas + 1, n)} de ${n}…`
+      : marcha ? `Seguir (${n - hechas} por crear)`
+      : n > 1 ? `Duplicar las ${n} tareas` : "Duplicar la tarea";
+    d.botones.ir.disabled = !!marcha?.activo || !plan || !ops || !!ops.error || comprobando || !!pide.length || sinNombre || !n;
+    d.botones.no.textContent = marcha?.activo ? (marcha.parar ? "Parando…" : "Parar") : marcha ? "Cerrar" : "Cancelar";
+    d.botones.no.disabled = !!marcha?.activo && marcha.parar;
+  }
+
+  function ponerPadre(t) {
+    padreSel = t ? { id: t.id, nombre: t.nombre } : null;
+    padre.value = t ? `${t.id} - ${t.nombre}` : "";
+    quitar.hidden = !t;
+    pintar();
+  }
+  const listaPadre = buscadorTarea(padre, { alElegir: ponerPadre, fuente: () => ({
+    titulo: "Tareas abiertas del proyecto de destino", tareas: tareasProy, arbol: true,
+    vacio: (q) => (q ? "Ninguna tarea abierta del proyecto con eso." : "Este proyecto no tiene tareas abiertas.") }) });
+  padre.addEventListener("blur", () => setTimeout(() => {
+    if (!padre.value.trim()) ponerPadre(null);
+    else padre.value = padreSel ? `${padreSel.id} - ${padreSel.nombre}` : "";
+  }, 160));
+  quitar.onclick = () => { ponerPadre(null); padre.focus(); };
+
+  // Los tipos del proyecto de destino y, para cada tipo del arbol, si ProyectosTIC
+  // pide algo que la app no rellena (un campo propio obligatorio): asi no se empieza
+  // un arbol que se quedaria a medias.
+  async function cargarDestino() {
+    const mio = ++seqOps, pid = proy.value;
+    ops = null; faltan = new Map(); tareasProy = null; comprobando = true; msg = "";
+    ponerPadre(null);
+    api().tareas_de_proyecto(pid).then((x) => x.tareas || [], () => []).then((ts) => {
+      if (mio !== seqOps) return;
+      tareasProy = ts;
+      listaPadre.repintar();
+    });
+    const pedir = async (tipo) => {
+      try { return await api().nueva_tarea_opciones(pid, tipo); }
+      catch (e) { return { error: `No se pudo preguntar a ProyectosTIC (${(e && e.message) || "sin conexión"}).` }; }
+    };
+    const r = await pedir(null);
+    if (mio !== seqOps) return;
+    ops = r.error ? { error: r.error, tipos: [] } : r;
+    if (!r.error) faltan.set(r.tipo, r.faltan || []);
+    pintar();
+    await comprobarTipos(mio, pedir);
+  }
+
+  async function comprobarTipos(mio = seqOps, pedir = null) {
+    if (!plan || !ops || ops.error) { comprobando = !ops; pintar(); return; }
+    const pid = proy.value;
+    pedir = pedir || (async (tipo) => {
+      try { return await api().nueva_tarea_opciones(pid, tipo); }
+      catch (e) { return { error: `No se pudo preguntar a ProyectosTIC (${(e && e.message) || "sin conexión"}).` }; }
+    });
+    comprobando = true;
+    pintar();
+    const usados = [...new Set(plan.tareas.map((t) => tipoEnDestino(t)?.id).filter((id) => id != null && !faltan.has(id)))];
+    for (const id of usados) {
+      const r = await pedir(id);
+      if (mio !== seqOps) return;
+      if (r.error) { msg = r.error; break; }
+      faltan.set(id, r.faltan || []);
+    }
+    comprobando = false;
+    pintar();
+  }
+
+  async function cargarPlan(id) {
+    const mio = ++seqPlan;
+    plan = null; msg = ""; cargandoPlan = true; nombreTocado = false;
+    pintar();
+    let r;
+    try { r = await api().duplicar_plan(id); }
+    catch (e) { r = { error: `No se pudo leer la tarea (${(e && e.message) || "sin conexión"}).` }; }
+    if (mio !== seqPlan) return;
+    cargandoPlan = false;
+    if (r.error) { msg = r.error; pintar(); return; }
+    plan = r;
+    nombre.value = cambiar(raiz()?.nombre || "");
+    pintar();
+    nombre.focus();
+    nombre.select();
+    comprobarTipos();
+  }
+
+  async function duplicar() {
+    if (!marcha) {
+      const fs = filas(), n = fs.length, p = proyectoSel();
+      if (!(await preguntar("Duplicar tarea",
+          `Se ${n === 1 ? "va a crear 1 tarea nueva" : `van a crear ${n} tareas nuevas`} en «${p?.nombre}»${padreSel ? `, colgando de «${padreSel.nombre}»` : ""}.\n\n`
+          + "Crearlas no se deshace desde FichaCSIRC: si te equivocas, hay que borrarlas en ProyectosTIC.",
+          { si: n === 1 ? "Crear la tarea" : `Crear las ${n} tareas`, no: "Cancelar" }))) return;
+      marcha = { filas: fs, hechas: new Map(), ahora: null, fallo: null, parar: false, activo: true,
+                 proyecto: Number(proy.value), padre: padreSel ? padreSel.id : null, destino: p?.nombre || "" };
+    } else {
+      marcha.fallo = null; marcha.parar = false; marcha.activo = true;      // se sigue desde la que fallo
+    }
+    msg = "";
+    for (const f of marcha.filas) {
+      if (marcha.hechas.has(f.t.id)) continue;
+      if (marcha.parar) break;
+      marcha.ahora = f.t.id;
+      pintar();
+      let r;
+      try {
+        r = await api().duplicar_una({ origen: f.t.id, proyecto: marcha.proyecto, titulo: f.titulo,
+          padre: f.nivel ? marcha.hechas.get(f.t.padre_id)?.id ?? null : marcha.padre,
+          tipo: f.tipo ? f.tipo.id : null, estimado: f.hoja && !!f.t.estimado });
+      } catch (e) {
+        r = { error: `no se pudo hablar con ProyectosTIC (${(e && e.message) || "sin conexión"}). Mira allí si llegó a crearse.` };
+      }
+      if (r.error) { marcha.fallo = { id: f.t.id, titulo: f.titulo, error: r.error }; break; }
+      marcha.hechas.set(f.t.id, r.tarea);
+    }
+    marcha.ahora = null; marcha.activo = false;
+    if (marcha.hechas.size === marcha.filas.length) {
+      const copia = marcha.hechas.get(plan.raiz), n = marcha.filas.length;
+      cerrarDeVerdad();
+      avisoTarea(n === 1 ? `Tarea ${copia.id} creada en «${marcha.destino}»: «${copia.nombre}».`
+                         : `${n} tareas creadas en «${marcha.destino}», desde la ${copia.id} «${copia.nombre}».`, copia.id);
+      return;
+    }
+    pintar();
+  }
+
+  // Mientras se crean no se cierra (para eso esta Parar); a medias, se dice lo que queda hecho.
+  const cerrarDeVerdad = d.cerrar;
+  d.cerrar = () => {
+    if (marcha?.activo) return;
+    cerrarDeVerdad();
+    const copia = marcha?.hechas.get(plan?.raiz);
+    if (copia) {
+      avisoTarea(`Se han creado ${marcha.hechas.size} de ${marcha.filas.length} tareas en «${marcha.destino}», desde la ${copia.id}.`, copia.id);
+    }
+  };
+
+  buscadorTarea(cual, { alElegir: (t) => cargarPlan(t.id), crear: false });
+  proy.onchange = cargarDestino;
+  nombre.addEventListener("input", () => { nombreTocado = true; pintar(); });
+  // lo que se cambia en todos los titulos tambien vale para el de arriba, mientras no se haya escrito otro
+  for (const c of [busca, pon]) c.addEventListener("input", () => {
+    if (!nombreTocado && raiz()) nombre.value = cambiar(raiz().nombre);
+    pintar();
+  });
+  conHijas.onchange = pintar;
+  conCerradas.onchange = pintar;
+
+  const campo = (rotulo, control, extra = null) => el("div", { class: "nt-campo" },
+    el("div", { class: "nt-rot" }, el("span", { text: rotulo }), extra), control);
+  const opcional = () => el("span", { class: "opc", text: "opcional" });
+  campos.append(
+    campo("Nombre de la copia", nombre),
+    el("div", { class: "nt-dos" },
+      campo("Proyecto de destino", proy),
+      campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar), opcional())),
+    campo("Cambiar en todos los títulos", el("div", { class: "dt-cambiar" }, busca,
+      el("span", { class: "mt-flecha", "aria-hidden": "true", text: "→" }), pon), opcional()),
+    el("div", { class: "nt-opciones" }, el("label", { class: "check" }, conHijas, " ", rotHijas), etiCerradas),
+    aviso,
+    el("div", { class: "nt-vista dt-vista" }, cabArbol, arbol, progreso),
+    el("p", { class: "dt-nota tenue", text: "Se copian el título, el tipo, la descripción, la prioridad y el tiempo estimado. "
+      + "No se copian las horas imputadas, a quién está asignada, las fechas, los adjuntos ni las relaciones; "
+      + "las copias nacen abiertas y sin avisos por correo." }));
+  d.cuerpo.append(el("div", { class: "nt" },
+    el("p", { class: "nt-intro", text: "Crea una copia de una tarea, con todas las que cuelgan de ella, en el mismo proyecto o en otro." }),
+    campo("Tarea que se duplica", cual), estadoPlan, campos, error));
+
+  const ps = st.crear.proyectos;
+  proy.replaceChildren(...ps.map((p) => el("option", { value: String(p.id), text: p.nombre })));
+  if (ps.some((p) => p.id === st.crear.ultimo)) proy.value = String(st.crear.ultimo);
+  pintar();
+  cargarDestino();
+  if (tarea) {
+    cual.value = `${tarea.id} - ${tarea.nombre}`;
+    cargarPlan(tarea.id);
+  } else {
+    cual.focus();
+  }
 }
 
 // ================================================================ copiar
@@ -2786,7 +3446,7 @@ function dlgAtajos() {
   const filas = [["Enter", "Añadir el apunte (desde Horas o Comentario)"],
     ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…); otra vez, lo anterior (hasta 20)"],
     ["Ctrl+F", "Buscar en tus apuntes del año (comentario, tarea, actividad o fecha)"],
-    ["Ctrl+N", "Crear una tarea nueva en ProyectosTIC (si tienes permiso en algún proyecto)"],
+    ["Ctrl+N", "Crear una tarea nueva en ProyectosTIC (si tienes permiso en algún proyecto); con la flecha de «＋ Nueva», modificar o duplicar una"],
     ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],

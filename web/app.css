@@ -959,6 +959,10 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
 /* ---------- nueva tarea (se crea en ProyectosTIC) ---------- */
 .campo-tarea button { flex: none; white-space: nowrap; }
 .b-nueva span { color: var(--primario); font-weight: 700; }
+/* la flecha pegada a «＋ Nueva»: modificar o duplicar una tarea */
+.campo-tarea .b-nueva { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.campo-tarea .b-nueva-mas { margin-left: -9px; padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0;
+                            color: var(--tenue); font-size: 11px; }
 .nt { display: flex; flex-direction: column; gap: 14px; padding: 2px 0 6px; }
 .nt-intro { margin: 0; color: var(--tenue); font-size: 13px; }
 .nt-cargando { margin: 18px 0; }
@@ -986,6 +990,57 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
            border: 1px solid var(--borde); border-radius: 6px; padding: 7px 9px; background: var(--panel); }
 .nt-desc:focus { outline: 2px solid var(--primario); outline-offset: 1px; }
 .nt-opciones { display: flex; flex-wrap: wrap; gap: 6px 24px; }
+/* de cual cuelga y, al lado, el tiempo estimado */
+.nt-cuelga { display: grid; grid-template-columns: minmax(0, 1fr) 124px; gap: 14px; align-items: start; }
+.nt-est-caja { display: flex; align-items: center; gap: 6px; }
+.nt-est { width: 100%; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+/* plantillas de tarea: una fila de pastillas; el aspa borra */
+.nt-plantillas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: -4px; }
+.nt-plantillas-rot { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--tenue); margin-right: 2px; }
+.nt-plantilla { display: inline-flex; align-items: stretch; border: 1px solid var(--borde); border-radius: 999px;
+                background: var(--panel); overflow: hidden; }
+.nt-plantilla button { border: 0; border-radius: 0; background: none; font-size: 13px; }
+.nt-plantilla .usar { padding: 4px 4px 4px 12px; max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-plantilla .borrar { padding: 0 9px 1px 5px; color: var(--tenue); font-size: 15px; line-height: 1; }
+.nt-plantilla:hover { border-color: var(--primario); }
+.nt-plantilla .borrar:hover:not(:disabled) { color: var(--peligro); background: none; }
+.nt-plantilla .usar:hover:not(:disabled) { background: none; color: var(--primario); }
+.nt-plantilla.puesta { background: var(--seleccion); border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); }
+.nt-plantilla.puesta .usar { font-weight: 600; }
+.nt-plantilla-nota { font-size: 12px; margin-top: -8px; }
+/* modificar: la ficha de la tarea y lo que va a cambiar */
+.mt-ficha { display: flex; flex-wrap: wrap; gap: 4px 0; font-size: 13px; margin-top: -8px; }
+.mt-ficha > * + *::before { content: "·"; margin: 0 7px; color: var(--tenue); }
+.mt-ficha b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.mt-campos, .dt-campos { display: flex; flex-direction: column; gap: 14px; }
+.mt-cambios { border-left-color: var(--aviso); }
+.mt-cambio { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; font-size: 13px; overflow-wrap: anywhere; }
+.mt-cambio b { min-width: 86px; font-weight: 600; }
+.mt-cambio s { color: var(--tenue); }
+.mt-flecha { color: var(--tenue); flex: none; }
+/* duplicar: el arbol que se va a crear */
+.dt-cambiar { display: flex; align-items: center; gap: 8px; }
+.dt-cambiar input { flex: 1; min-width: 0; }
+.dt-vista { gap: 8px; border-left-color: var(--primario); }
+.dt-arbol { display: flex; flex-direction: column; max-height: 232px; overflow: auto; margin: 0 -6px; }
+.dt-fila { display: flex; align-items: baseline; gap: 6px 8px; padding: 4px 6px 4px calc(6px + var(--nivel, 0) * 18px);
+           border-radius: 5px; font-size: 13px; }
+.dt-fila .bt-codo { margin-left: 0; }
+.dt-fila .nt-sello { flex: none; }
+.dt-titulo { min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.dt-fila[aria-level]:not([aria-level="1"]) .dt-titulo { font-weight: 400; }
+.dt-titulo.vacio { color: var(--peligro); font-style: italic; font-weight: 400; }
+.dt-cerrada { background: var(--panel-alt); color: var(--tenue); }
+.dt-marca { margin-left: auto; flex: none; font-size: 12px; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.dt-fila.hecha .dt-marca { color: var(--exito); font-weight: 600; }
+.dt-fila.fallo { background: var(--peligro-bg); }
+.dt-fila.fallo .dt-marca { color: var(--peligro); font-weight: 600; }
+.dt-fila.ahora { background: var(--seleccion); }
+.dt-progreso { height: 4px; border-radius: 2px; background: var(--panel-alt); overflow: hidden; }
+.dt-progreso i { display: block; height: 100%; width: 0; background: var(--primario); transition: width .2s; }
+.dt-campos.en-marcha > :not(.dt-vista) { opacity: .55; }
+.dt-nota { margin: -4px 0 0; font-size: 12px; }
+.nt-aviso > div + div { margin-top: 8px; }
 /* como va a quedar: una ficha con el color del tipo en el canto */
 .nt-vista { display: flex; flex-direction: column; gap: 5px; padding: 11px 14px 12px;
             border: 1px solid var(--borde); border-left: 4px solid var(--tipo, var(--primario)); border-radius: 8px;
@@ -1009,4 +1064,4 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
 .nt-sin-ico { font-size: 34px; line-height: 1; margin-bottom: 4px; }
 .nt-sin b { font-size: 15px; }
 .nt-sin p { margin: 0; max-width: 46ch; font-size: 13px; }
-@media (max-width: 560px) { .nt-dos { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .nt-dos, .nt-cuelga { grid-template-columns: minmax(0, 1fr); } }
