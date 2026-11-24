@@ -759,6 +759,14 @@
     });
     await prueba("nueva tarea: se crea en ProyectosTIC y queda en el formulario", async () => {
       ok(await hasta(() => !$("b-nueva").hidden), "no ofrece «＋ Nueva» a quien puede crear");
+      // la insignia de la cabecera y su galleta: los dos niveles, con el tuyo marcado
+      const modo = $("modo");
+      ok(!modo.hidden && modo.classList.contains("dios") && modo.firstChild.nextSibling.textContent === "Nivel dios",
+         `la cabecera no dice el nivel: ${modo.textContent}`);
+      ok(modo.querySelectorAll(".modo-nivel").length === 2 && modo.querySelector(".modo-nivel.mio").textContent.includes("2 proyectos"),
+         `la galleta no explica los niveles: ${modo.querySelector(".modo-galleta").textContent}`);
+      ok(getComputedStyle(modo.querySelector(".modo-galleta")).display === "none", "la galleta sale sin pasar el ratón");
+      ok(!/null|undefined/.test(modo.textContent), "la insignia escribe null/undefined");
       $("b-nueva").click();
       ok(await hasta(() => document.querySelector(".nt-tipo")), "no pinta los tipos del proyecto");
       ok(!/\bnull\b|undefined/.test(dlg().textContent), "escribe null/undefined");

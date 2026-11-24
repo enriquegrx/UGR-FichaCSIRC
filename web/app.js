@@ -275,9 +275,25 @@ async function cargarPermisoCrear() {
   pintarPermisoCrear();
 }
 function pintarPermisoCrear() {
-  const no = !st.crear?.proyectos?.length;
+  const n = st.crear?.proyectos?.length || 0, no = !n;
   $("b-nueva").hidden = no;
   $("b-nueva-mas").hidden = no;
+  // la insignia de la cabecera (una broma): solo cuando ProyectosTIC ha contestado
+  const m = $("modo");
+  m.hidden = !st.crear;
+  m.classList.toggle("dios", !no);
+  // al pasar el raton (o con el foco), una galleta explica los dos niveles y marca el tuyo
+  const nivel = (icono, nombre, texto, mio) => el("div", { class: `modo-nivel${mio ? " mio" : ""}` },
+    el("span", { class: "ico", "aria-hidden": "true", text: icono }),
+    el("div", {}, el("b", { text: nombre }), mio ? el("i", { text: "tu nivel" }) : null, el("p", { text: texto })));
+  m.replaceChildren(el("span", { class: "ico", "aria-hidden": "true", text: no ? "🎮" : "⚔️" }), no ? "Nivel loser" : "Nivel dios",
+    el("div", { class: "modo-galleta", role: "tooltip" },
+      nivel("⚔️", "Nivel dios", no ? "ProyectosTIC te deja crear tareas en algún proyecto: puedes crearlas, modificarlas, "
+        + "duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el menú Archivo."
+        : `ProyectosTIC te deja crear tareas en ${n === 1 ? "1 proyecto" : `${n} proyectos`}: puedes crearlas, modificarlas, `
+        + "duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el menú Archivo.", !no),
+      nivel("🎮", "Nivel loser", "A fichar en las tareas que ya existen. Para subir de nivel, quien administra un proyecto "
+        + "tiene que darte permiso para crear tareas en él.", no)));
 }
 // Lo que se hace con las tareas de ProyectosTIC ademas de crearlas. Modificar
 // y duplicar parten de la tarea que haya puesta en el formulario.

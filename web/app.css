@@ -91,6 +91,39 @@ button, input, select { font: inherit; color: inherit; }
   background: var(--permiso-bg); color: var(--permiso-fg);
 }
 .usuario { margin-left: auto; font-weight: 600; }
+/* la insignia en broma, centrada en el hueco: "nivel dios" (puede crear tareas) o "nivel loser".
+   Como el marcador de un videojuego antiguo: letra de maquina, caja cuadrada y sombra sin difuminar. */
+.modo { display: inline-flex; align-items: center; gap: 7px; margin: 0 auto; flex: none; cursor: default;
+        font: 700 12px/1 ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+        text-transform: uppercase; letter-spacing: 1.2px; white-space: nowrap;
+        padding: 5px 11px 5px 9px; border: 2px solid currentColor; border-radius: 3px;
+        box-shadow: 3px 3px 0 currentColor;
+        background: var(--tele-bg); color: var(--tele-fg); }
+.modo .ico { font-size: 14px; letter-spacing: 0; }
+.modo.dios { background: var(--permiso-bg); color: var(--permiso-fg); }
+.modo { position: relative; }
+.modo:focus-visible { outline: 2px solid var(--primario); outline-offset: 4px; }
+/* la galleta: los dos niveles explicados, con el tuyo resaltado */
+.modo-galleta { display: none; position: absolute; top: calc(100% + 12px); left: 50%; transform: translateX(-50%); z-index: 45;
+                width: 340px; padding: 10px; border-radius: 8px; background: var(--tooltip-bg); color: var(--tooltip-fg);
+                font: 400 13px/1.4 "Segoe UI", system-ui, sans-serif; text-transform: none; letter-spacing: 0; white-space: normal;
+                text-align: left; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); cursor: default; }
+.modo-galleta::before { content: ""; position: absolute; top: -6px; left: 50%; width: 12px; height: 12px;
+                        transform: translateX(-50%) rotate(45deg); background: var(--tooltip-bg); }
+/* un puente invisible: el raton puede bajar de la insignia a la galleta sin que se cierre */
+.modo-galleta::after { content: ""; position: absolute; left: 0; right: 0; top: -14px; height: 14px; }
+.modo:hover .modo-galleta, .modo:focus .modo-galleta { display: block; }
+.modo-nivel { display: flex; gap: 10px; padding: 8px 10px; border-radius: 6px; opacity: .72; }
+.modo-nivel + .modo-nivel { margin-top: 2px; }
+.modo-nivel.mio { opacity: 1; background: color-mix(in srgb, var(--tooltip-fg) 12%, transparent); }
+.modo-nivel .ico { font-size: 20px; line-height: 1.2; }
+.modo-nivel b { font: 700 12px/1 ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+                text-transform: uppercase; letter-spacing: 1px; }
+.modo-nivel i { font-style: normal; font-size: 11px; margin-left: 8px; padding: 1px 7px; border-radius: 999px;
+                background: var(--tooltip-fg); color: var(--tooltip-bg); }
+.modo-nivel p { margin: 4px 0 0; }
+.modo:not([hidden]) ~ .usuario { margin-left: 0; }
+@media (max-width: 900px) { .modo { display: none; } }
 /* Bloquear y Salir, a la vista junto al nombre; Salir, en rojo al pasar el
    raton (cierra el programa) */
 .cab-botones { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-left: 14px; }
