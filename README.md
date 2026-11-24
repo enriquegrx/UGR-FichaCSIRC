@@ -31,6 +31,19 @@ La guía corta para instalar y empezar está en [INSTRUCCIONES.md](INSTRUCCIONES
 - ➕ Añadir apuntes de horas a uno o varios días a la vez.
 - 🔎 Usar tareas favoritas, buscar tareas por proyecto o buscar en todos los
   proyectos accesibles.
+- 🛠️ **Crear, modificar y duplicar tareas** de ProyectosTIC, solo en los
+  proyectos donde el usuario tiene el permiso (los que traen el enlace
+  `createWorkPackage`; se mira al arrancar, `Api.nueva_tarea_proyectos`):
+  crear con tipo, tarea madre (árbol de abiertas del proyecto), descripción y
+  tiempo estimado (`Api.nueva_tarea_crear`; los tipos y lo que falta los da el
+  formulario de OpenProject, que no crea nada); **plantillas de tarea**
+  (`plantillas_tarea`); modificar título, madre, estimado y descripción
+  mandando solo lo que cambia (`Api.tarea_modificar`, con `lockVersion`); y
+  duplicar una tarea con todas las que cuelgan de ella, en otro proyecto si se
+  quiere (`Api.duplicar_plan` lee el árbol y `Api.duplicar_una` crea cada
+  copia, de arriba abajo y sin avisos: la API no tiene una operación para
+  esto). En Rust, `tauri/src/tarea.rs`. La cabecera lo dice en broma: «Nivel
+  dios» o «Nivel loser».
 - 💬 Recordar la actividad y el comentario habitual de cada tarea.
 - ✏️ Editar apuntes con doble clic y borrar varios apuntes seleccionados con
   posibilidad de deshacer.
@@ -367,6 +380,10 @@ Los detalles de mantenimiento y scripts auxiliares están en
 ## ⚠️ Limitaciones
 
 - Solo se muestran tareas y proyectos a los que el usuario tiene acceso.
+- Crear y duplicar tareas no se deshace desde la app. Al duplicar no se copian
+  horas, asignación, fechas, adjuntos ni relaciones, y los campos propios
+  obligatorios de un tipo no se rellenan: en ese caso la app lo avisa y no
+  deja empezar.
 - Windows y macOS pueden mostrar avisos de seguridad porque los binarios no
   están firmados con certificados comerciales.
 - La lista de festivos conocidos debe revisarse cada año.

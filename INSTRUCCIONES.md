@@ -275,6 +275,38 @@ La app recuerda la vista que dejaste.
 - 📣 Al abrir, si la **semana pasada** quedó con huecos, un aviso te dice qué días
   y te lleva allí.
 
+### 🛠️ Crear, modificar y duplicar tareas (solo con permiso)
+
+Si en ProyectosTIC tienes permiso para **crear tareas** en algún proyecto, la
+cabecera dice **Nivel dios** y junto a *Buscar…* aparece el botón **＋ Nueva**.
+Si no lo tienes, dice **Nivel loser** y no verás nada de este apartado: el
+permiso lo da quien administra cada proyecto.
+
+- ➕ **Crear una tarea**: **＋ Nueva** (o Ctrl+N). Escribe el título, elige el
+  proyecto y el tipo y, si quieres, la tarea de la que cuelga, el tiempo
+  estimado y la descripción. Abajo ves cómo va a quedar. Al crearla, queda en
+  el formulario para fichar en ella.
+- 🌳 **De cuál cuelga**: al pulsar en ese campo sale el árbol de tareas
+  abiertas del proyecto. Si lo dejas vacío, la tarea cuelga del proyecto.
+- 🔎 **Desde el buscador**: escribe el nombre de la tarea y, si no existe, la
+  última fila de la lista es **«Crear la tarea…»**.
+- 🧩 **Plantillas de tarea**: con el diálogo relleno, **Guardar como
+  plantilla…**. La próxima vez, un clic en su nombre lo rellena todo. Pon un
+  asterisco en el título donde vaya lo que cambia cada vez (el número de
+  ticket, por ejemplo): al elegir la plantilla queda marcado para escribir
+  encima.
+- ✏️ **Modificar una tarea**: la flecha **▾** de «＋ Nueva» → *Modificar una
+  tarea…*. Cambia el título, de cuál cuelga, el tiempo estimado o la
+  descripción. Abajo sale lo que va a cambiar antes de guardar.
+- 📑 **Duplicar una tarea con las que cuelgan de ella**: la flecha **▾** →
+  *Duplicar una tarea…*. Elige el proyecto de destino, el nombre de la copia
+  y, si quieres, un texto que cambiar en todos los títulos (2026 por 2027).
+  Se copian el título, el tipo, la descripción, la prioridad y el tiempo
+  estimado; **no** las horas, a quién está asignada, las fechas, los adjuntos
+  ni las relaciones. Si una tarea falla, se para ahí y puedes seguir.
+- ⚠️ Crear y duplicar **no se deshacen desde FichaCSIRC**: si te equivocas, la
+  tarea se borra o se corrige en la web de ProyectosTIC.
+
 ---
 
 ## 5. 🕐 Permisos por horas

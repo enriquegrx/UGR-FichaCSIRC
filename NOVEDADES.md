@@ -72,6 +72,33 @@ instalada aparece en el pie de la ventana.
   ventanita aunque hoy no te falte nada (el aviso de verdad solo sale si
   faltan horas). Desde la prueba no se ficha.
 
+**Crear, modificar y duplicar tareas de ProyectosTIC**
+- Solo si ProyectosTIC te da permiso para crear tareas en algún proyecto. Si
+  no lo tienes, no aparece nada de esto y la ventana sigue como siempre.
+- **«＋ Nueva»**, junto a *Buscar…* (también Ctrl+N y *Archivo*): crea una
+  tarea sin salir de FichaCSIRC, con su título, proyecto, tipo, descripción y
+  tiempo estimado. Antes de crearla ves cómo va a quedar y, al crearla, queda
+  en el formulario lista para fichar.
+- **De cuál cuelga**: eliges la tarea madre en el árbol de tareas abiertas del
+  proyecto. Si no eliges ninguna, cuelga directamente del proyecto.
+- Desde el **buscador de tareas**: si lo que escribes no existe, la última
+  fila ofrece crearla con ese nombre.
+- **Plantillas de tarea**: guarda lo que repites (proyecto, tipo, de cuál
+  cuelga, tiempo estimado, descripción) y rellena la tarea con un clic. Un
+  asterisco en el título marca lo que cambia cada vez, como el número de
+  ticket: queda seleccionado para escribir encima.
+- **Modificar una tarea** (la flecha de «＋ Nueva», o *Archivo*): título, de
+  cuál cuelga, tiempo estimado y descripción. Sirve para ponerle la tarea madre
+  que se te olvidó. Solo se cambia lo que tocas y lo ves antes de guardar.
+- **Duplicar una tarea con todas las que cuelgan de ella**, en el mismo
+  proyecto o en otro: con otro nombre, cambiando un texto en todos los títulos
+  (2026 por 2027) y sin horas imputadas. Ves el árbol antes de crear nada; si
+  una tarea falla, se para ahí y puedes seguir desde esa.
+- Si ProyectosTIC pide un dato que FichaCSIRC no rellena (un campo propio
+  obligatorio), te lo dice antes y te lleva a la web.
+- En la cabecera, en broma: **Nivel dios** si puedes crear tareas y **Nivel
+  loser** si no. Al pasar el ratón explica cada nivel.
+
 **Icono junto al reloj**
 - **«Completar hoy con…»** tu tarea habitual, desde el menú del icono y sin
   abrir la ventana. El icono dice también cuántos días tienes por completar.
