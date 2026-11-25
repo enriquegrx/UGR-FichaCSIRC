@@ -728,7 +728,8 @@ class TestDialogos(Base):
         self.assertEqual((r["n"], r["dias"]), (3, 2))
         self.assertEqual(r["lineas"], ["Lunes 26/10 → Viernes 30/10: 2 apunte(s), 7h",
                                        "Martes 27/10 → Martes 03/11: 1 apunte(s), 7h"])
-        self.assertEqual(rangos, [(M2.isoformat(), M2.isoformat())])   # el viernes ya estaba cargado
+        # los destinos se releen siempre, tambien el viernes ya cargado
+        self.assertEqual(rangos, [(V.isoformat(), M2.isoformat())])
         creados = []
         ids = iter(range(100, 200))
 
@@ -740,6 +741,16 @@ class TestDialogos(Base):
         # la 10 ya estaba el martes siguiente: saltada
         self.assertEqual(creados, [(V.isoformat(), "10"), (V.isoformat(), "20")])
         self.assertEqual((r["creados"], r["saltados"], r["errores"], r["quedan"]), (2, 1, 0, 1))
+        # pegar otra vez no duplica: lo recordado de los destinos no vale (el
+        # pegado anterior no lo apunto), se vuelve a leer lo que tienen ahora
+        ya = [dict(apunte(100, 4, wp="10"), fecha=V.isoformat()), dict(apunte(101, 3, wp="20"), fecha=V.isoformat()),
+              dict(apunte(9, 1, wp="10"), fecha=M2.isoformat())]
+        with mock.patch.object(core, "entradas_dia", lambda iso: datos.get(iso, [])),              mock.patch.object(core, "entradas_rango", lambda a, b: ya):
+            self.api.preparar_copia_dias([M.isoformat(), L.isoformat()], [V.isoformat()])
+        with mock.patch.object(core, "crear_entrada") as m_crear:
+            r2 = self.api.ejecutar_copia()
+        m_crear.assert_not_called()
+        self.assertEqual((r2["creados"], r2["saltados"]), (0, 3))
         with mock.patch.object(core, "eliminar_entrada") as m_del:
             self.api.deshacer()
         self.assertEqual(sorted(c.args[0] for c in m_del.call_args_list), [100, 101])
@@ -748,7 +759,7 @@ class TestDialogos(Base):
         J, V = L + dt.timedelta(days=3), L + dt.timedelta(days=4)
         datos = {L.isoformat(): [apunte(1, 4, wp="10")], M.isoformat(): [apunte(3, 7, wp="20")]}
         self._semana(datos)
-        with mock.patch.object(core, "entradas_dia", lambda iso: datos.get(iso, [])):
+        with mock.patch.object(core, "entradas_dia", lambda iso: datos.get(iso, [])),              mock.patch.object(core, "entradas_rango", lambda a, b: []):       # los destinos se releen siempre
             pega = lambda dias: self.api.preparar_copia_dias([L.isoformat(), M.isoformat()], dias)   # noqa: E731
             # tres marcados y dos copiados: se repite el patron
             r = pega([V.isoformat(), X.isoformat(), J.isoformat()])

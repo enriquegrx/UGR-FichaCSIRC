@@ -2251,9 +2251,13 @@ class Api:
                        and not (con_inari and core.es_teletrabajo(d.isoformat()))))
         if not pares:
             return {"error": "Elige otros días: no se puede pegar un día sobre sí mismo."}
-        # un destino que no esta cargado (la semana siguiente) se lee ahora:
-        # sin saber lo que ya tiene se duplicaria
-        faltan = sorted({d for _, d in pares if d not in self._cache})
+        # los destinos se leen SIEMPRE ahora, tambien los ya cargados: pueden
+        # no estar a la vista (la semana siguiente) y lo recordado de ellos
+        # quedarse viejo (un pegado anterior no lo apunta); sin saber lo que
+        # ya tienen se duplicaria. Solo se respeta lo cargado de un dia de
+        # teletrabajo con INARI (sus slots).
+        faltan = sorted({d for _, d in pares
+                         if not (d in self._cache and con_inari and core.es_teletrabajo(d))})
         if faltan:
             try:
                 leidos = {}

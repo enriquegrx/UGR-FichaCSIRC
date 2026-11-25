@@ -518,11 +518,17 @@ pub async fn preparar_copia_dias(e: &Estado, cfg: &Cfg, origenes: &[String], des
     if pares.is_empty() {
         return Ok(json!({"error": "Elige otros días: no se puede pegar un día sobre sí mismo."}));
     }
-    // un destino que no esta cargado (la semana siguiente) se lee ahora: sin
-    // saber lo que ya tiene se duplicaria
+    // los destinos se leen SIEMPRE ahora, tambien los ya cargados: pueden no estar
+    // a la vista (la semana siguiente) y lo recordado de ellos quedarse viejo (un
+    // pegado anterior no lo apunta); sin saber lo que ya tienen se duplicaria.
+    // Solo se respeta lo cargado de un dia de teletrabajo con INARI (sus slots).
     let faltan: Vec<String> = {
         let cache = candado(&e.cache);
-        pares.iter().map(|(_, d)| d.clone()).filter(|d| !cache.contains_key(d)).collect()
+        let mut ds: Vec<String> = pares.iter().map(|(_, d)| d.clone())
+            .filter(|d| !(cache.contains_key(d) && con_inari && reglas.es_teletrabajo(d))).collect();
+        ds.sort();
+        ds.dedup();
+        ds
     };
     if !faltan.is_empty() {
         let (d0, d1) = (faltan.iter().min().unwrap(), faltan.iter().max().unwrap());
