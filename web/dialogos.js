@@ -1728,6 +1728,10 @@ function dlgFavoritas() {
   };
   function pintar() {
     const favs = st.favLista;
+    // un repintado que llega solo (al volver la escritura del orden, una estrella):
+    // el foco que hubiera en la lista se queda en su fila y su boton
+    const en = document.activeElement;
+    if (!foco && lista.contains(en)) foco = { id: en.closest(".fav-item")?.dataset.id, accion: en.dataset.accion };
     lista.replaceChildren(...favs.map((t, i) => {
       const boton = (accion, texto, titulo, fn, apagado = false) => el("button", { type: "button",
         class: `fav-b fav-${accion}`, "data-accion": accion, text: texto, title: titulo,

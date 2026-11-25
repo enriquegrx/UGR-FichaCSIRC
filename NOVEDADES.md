@@ -91,8 +91,7 @@ instalada aparece en el pie de la ventana.
   Antes de escribir nada te enseña qué día va a cuál y cuántos apuntes son, y
   todo se quita con un solo **Deshacer**. Lo copiado sigue ahí al cambiar de
   semana (copias esta, **Ctrl+→**, marcas y pegas), y en la vista de mes se
-  marca origen y destino sin moverse. Copiar un solo día funciona como siempre
-  (Python y Rust).
+  marca origen y destino sin moverse. Copiar un solo día funciona como siempre.
 - **Añadir apunte** ya no vacía Horas y Comentario si al final no se crea
   nada (ProyectosTIC lo rechaza, se cae la conexión o dices que no a repetir
   la tarea): lo escrito se queda para volver a intentarlo.

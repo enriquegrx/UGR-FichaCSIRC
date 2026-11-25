@@ -632,11 +632,16 @@ function cambioDeDia({ recargar = true } = {}) {
 }
 
 // Recarga la vista actual (semana o mes) desde ProyectosTic.
+let cargaSeq = 0;
 async function cargarSemana({ marcarHoy = false, marcar = null } = {}) {
   estado(st.vista === "mes" ? "Cargando mes…" : "Cargando semana…");
   $("conn").className = "conn";
+  const mia = ++cargaSeq;
   const datos = st.vista === "mes" ? await llamar("mes", st.mesSel.anio, st.mesSel.mes)
                                    : await llamar("semana", st.lunes);
+  // se ha pedido otra despues (dos flechas seguidas, «Hoy» tras cambiar de dia):
+  // esta ya no es la que se quiere ver
+  if (mia !== cargaSeq) return;
   pintarVista(datos, marcarHoy, marcar);
   // Navegar (marcarHoy/marcar) no cambia los datos; recargar tras añadir,
   // borrar, editar, copiar o F5 si: entonces se rehace la franja.
@@ -816,7 +821,9 @@ async function anadirFavorita(t) {
   if (!marcados.length) { await avisar("Marca un día", "Marca primero el día (o los días) al que quieres añadirla."); return; }
   const hab = habitualDe(t.id);
   const f = { wp_id: t.id, tarea: t.nombre, actividad: hab?.actividad || "" };
-  const horasDe = (d) => (hab ? horasPropuestas(d, hab) : Math.max(0, d.falta || 0));
+  // lo que le falta al dia, sin pasar de lo habitual; a un dia completo, nada
+  // (horasPropuestas le pondria lo tipico: eso es para el «+» del dia, que se elige a proposito)
+  const horasDe = (d) => { const falta = Math.max(0, d.falta || 0); return hab ? Math.min(hab.tipico, falta) : falta; };
   const dias = marcados.filter((d) => d.estado !== "error" && horasDe(d) > 0.001);
   if (!dias.length) {
     await avisar("Nada que añadir", marcados.length === 1 ? "A ese día no le faltan horas."
@@ -2295,6 +2302,9 @@ document.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.key === "ArrowRight") { e.preventDefault(); navegar(1); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); deshacer(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+    // con texto seleccionado manda la copia de siempre; y en Estadisticas o Por
+    // completar no se copian dias que no se ven
+    if (String(getSelection()) || st.estad) return;
     const marcados = diasMarcados();
     if (marcados.length > 1) { e.preventDefault(); copiarDias(marcados); return; }
     const d = diaConFoco() || (st.marcados.size === 1 ? marcados[0] : null);

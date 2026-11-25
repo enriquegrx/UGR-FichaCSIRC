@@ -2041,6 +2041,13 @@
         ok(await hasta(() => !modal().hidden) && /Nada que añadir/.test($("modal-titulo").textContent), "a un día completo no avisa");
         aceptar();
         ok(anadidos === 1, "añade a un día al que no le falta nada");
+        // tampoco la que ademas es habitual: a un dia completo no le pone sus horas de siempre
+        marcar(dA(0));
+        fila(habitual.id).querySelector(".fav-mas").click();
+        ok(await hasta(() => !modal().hidden) && /Nada que añadir/.test($("modal-titulo").textContent),
+           `la favorita habitual añade a un día completo: ${$("modal-titulo").textContent}`);
+        aceptar();
+        ok(anadidos === 1, "la favorita habitual añade a un día al que no le falta nada");
         // la habitual: como mucho sus horas de siempre, con su actividad
         marcar(dA(3));
         fila(habitual.id).querySelector(".fav-mas").click();
