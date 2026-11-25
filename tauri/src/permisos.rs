@@ -34,6 +34,12 @@ fn por_caducar(t: &TipoPermiso, h: NaiveDate) -> Vec<&Concesion> {
     t.concesiones.iter().filter(|c| c.limite().is_some_and(|l| h <= l && l <= h + Duration::days(DIAS_AVISO_CADUCIDAD))).collect()
 }
 
+/// Si de ese permiso hay lectura de lo imputado en ProyectosTIC (o no le hace
+/// falta, por no ir enlazado a una actividad).
+fn pt_leidas(e: &Estado, t: &TipoPermiso) -> bool {
+    t.actividad.is_empty() || candado(&e.usadas_pt).as_ref().is_some_and(|m| m.contains_key(&t.id))
+}
+
 /// Horas de permiso imputadas en ProyectosTIC (ultima lectura; 0 si no aplica).
 fn pt_de(e: &Estado, t: &TipoPermiso) -> f64 {
     if t.actividad.is_empty() {
@@ -101,7 +107,7 @@ pub async fn permisos(e: &Estado, cfg: &Cfg) -> Value {
         let prox = por_caducar(t, h);
         json!({"id": t.id, "nombre": t.nombre, "actividad": t.actividad,
                "concedidas": fmt_hhmm(t.cupo()), "usadas": fmt_hhmm(usadas),
-               "usadas_local": fmt_hhmm(local), "usadas_pt": fmt_hhmm(pt),
+               "usadas_local": fmt_hhmm(local), "usadas_pt": fmt_hhmm(pt), "pt_leidas": pt_leidas(e, t),
                "disponibles": fmt_hhmm(disp), "negativo": disp < 0.0,
                "concesiones": t.concesiones.iter().map(|c| json!({
                    "horas": fmt_hhmm(c.horas), "fecha_limite": c.fecha_limite,
@@ -112,11 +118,13 @@ pub async fn permisos(e: &Estado, cfg: &Cfg) -> Value {
            "hay_actividades": reglas.tipos.iter().any(|t| !t.actividad.is_empty()), "actividades": actividades})
 }
 
-pub async fn actualizar_usadas_pt(e: &Estado, cfg: &Cfg) -> Value {
-    *candado(&e.usadas_pt) = None;
+/// Vuelve a leer las horas imputadas y da el cuadro. Si no se pueden leer,
+/// error (la web dice «se muestra la última lectura») y la lectura buena que
+/// hubiera se queda: no se vacia antes de tener la nueva.
+pub async fn actualizar_usadas_pt(e: &Estado, cfg: &Cfg) -> Result<Value, String> {
     let reglas = Reglas::desde(cfg);
-    let _ = resumen::usadas_pt(e, cfg, &reglas).await;
-    permisos(e, cfg).await
+    resumen::leer_usadas_pt(e, cfg, &reglas).await.map_err(|x| x.to_string())?;
+    Ok(permisos(e, cfg).await)
 }
 
 pub async fn anadir_concesion(e: &Estado, tipo: &str, horas: &Value, fecha: &str) -> Result<Value, String> {
@@ -492,6 +500,34 @@ mod tests {
         assert!(!inicializar_anuales(&c, NaiveDate::from_ymd_opt(2027, 1, 4).unwrap()));
         // el 4 de enero de 2027 toca ofrecer los permisos del año nuevo
         assert!(toca_permisos_anio(&c) || hoy().year() <= 2026);
+    }
+
+    /// Sin conexion, actualizar da error y no tira la ultima lectura buena
+    /// (antes la vaciaba primero y Permisos enseñaba «0:00 imputadas»).
+    #[test]
+    fn sin_conexion_se_conserva_la_ultima_lectura_de_imputadas() {
+        // sin base_url ni api_key: falla antes de salir a la red
+        let c = cfg(json!({"permisos_tipos": [
+            {"id": "asuntos_particulares", "nombre": "Asuntos particulares", "actividad": "Asuntos propios",
+             "concesiones": [{"horas": 28, "fecha_limite": ""}]}]}));
+        let e = Estado::default();
+        // nunca se leyo: se dice, en vez de dar un 0:00 por bueno
+        let p = tauri::async_runtime::block_on(permisos(&e, &c));
+        assert_eq!(p["filas"][0]["pt_leidas"], json!(false));
+        assert!(tauri::async_runtime::block_on(actualizar_usadas_pt(&e, &c)).is_err());
+        assert!(candado(&e.usadas_pt).is_none());
+        // con una lectura buena en memoria: el fallo no la toca
+        *candado(&e.usadas_pt) = Some([("asuntos_particulares".to_string(), 4.5)].into_iter().collect());
+        assert!(tauri::async_runtime::block_on(actualizar_usadas_pt(&e, &c)).is_err());
+        let p = tauri::async_runtime::block_on(permisos(&e, &c));
+        assert_eq!(p["filas"][0]["usadas_pt"], json!("4:30"));
+        assert_eq!(p["filas"][0]["disponibles"], json!("23:30"));
+        assert_eq!(p["filas"][0]["pt_leidas"], json!(true));
+        // un permiso sin actividad no tiene nada que leer
+        let c2 = cfg(json!({"permisos_tipos": [{"id": "x", "nombre": "X", "concesiones": []}]}));
+        let p = tauri::async_runtime::block_on(permisos(&e, &c2));
+        assert_eq!(p["filas"][0]["pt_leidas"], json!(true));
+        assert!(tauri::async_runtime::block_on(actualizar_usadas_pt(&e, &c2)).is_ok());
     }
 
     #[test]

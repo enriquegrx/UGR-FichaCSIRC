@@ -2886,6 +2886,9 @@ class Api:
                 "usadas": core.fmt_horas_hhmm(f["usadas"]),
                 "usadas_local": core.fmt_horas_hhmm(f["usadas_local"]),
                 "usadas_pt": core.fmt_horas_hhmm(f["usadas_pt"]),
+                # enlazado a una actividad y sin lectura todavia: la web lo
+                # dice, en vez de dar "0:00 imputadas" por bueno
+                "pt_leidas": not f["actividad"] or f["id"] in core._USADAS_PT,
                 "disponibles": core.fmt_horas_hhmm(f["disponibles"]),
                 "negativo": f["disponibles"] < 0,
                 "concesiones": [
@@ -2899,6 +2902,8 @@ class Api:
                 "actividades": sorted({a for a in conocidas if a}, key=str.lower)}
 
     def actualizar_usadas_pt(self):
+        # sin conexion sube el error (la web dice "se muestra la ultima
+        # lectura") y la lectura buena que hubiera se queda como estaba
         core.actualizar_usadas_proyectostic()
         return self.permisos()
 

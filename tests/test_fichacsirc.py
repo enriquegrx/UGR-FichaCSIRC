@@ -892,6 +892,26 @@ class TestPermisosPorActividad(unittest.TestCase):
         # un tipo sin actividad no consulta ni suma nada de ProyectosTic
         self.assertEqual(core.permiso_usadas_proyectostic("conc"), 0.0)
 
+    def test_sin_conexion_se_conserva_la_ultima_lectura(self):
+        """Si ProyectosTic no contesta, sube el error y lo leido antes sigue
+        valiendo (no «0:00 imputadas»); sin lectura ninguna, la web lo sabe."""
+        import registrar_web as web
+        api = web.Api()
+        with mock.patch.object(core, "_actividades_disponibles", return_value={}):
+            fila = {f["id"]: f for f in api.permisos()["filas"]}
+            self.assertFalse(fila["ap"]["pt_leidas"])       # nunca se leyo
+            self.assertTrue(fila["conc"]["pt_leidas"])      # sin actividad: nada que leer
+            with mock.patch.object(core, "entradas_rango",
+                                   return_value=[{"horas": 4.5, "actividad": "Asuntos propios"}]):
+                api.actualizar_usadas_pt()
+            with mock.patch.object(core, "entradas_rango", side_effect=OSError("sin red")):
+                with self.assertRaises(OSError):
+                    api.actualizar_usadas_pt()
+            fila = {f["id"]: f for f in api.permisos()["filas"]}["ap"]
+        self.assertEqual(core.permiso_usadas_proyectostic("ap"), 4.5)
+        self.assertEqual((fila["usadas_pt"], fila["disponibles"], fila["pt_leidas"]),
+                         ("4:30", "63:30", True))
+
     def test_sin_actividades_enlazadas_no_hay_red(self):
         sin = [dict(t, actividad="") for t in self.TIPOS]
         with mock.patch.object(core, "permisos_tipos", lambda: sin), \

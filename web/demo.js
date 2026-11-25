@@ -260,7 +260,7 @@
       const cupo = p.concesiones.reduce((s, c) => s + c.horas, 0);
       const usadas = p.local + (p.actividad ? p.pt : 0);
       return { id: p.id, nombre: p.nombre, actividad: p.actividad, concedidas: hhmm(cupo),
-        usadas: hhmm(usadas), usadas_local: hhmm(p.local), usadas_pt: hhmm(p.pt),
+        usadas: hhmm(usadas), usadas_local: hhmm(p.local), usadas_pt: hhmm(p.pt), pt_leidas: true,
         disponibles: hhmm(cupo - usadas), negativo: cupo < usadas,
         concesiones: p.concesiones.map((c) => ({ horas: hhmm(c.horas), fecha_limite: c.fecha_limite,
           estado: c.fecha_limite === "2026-11-10" ? "por_caducar" : "" })) };

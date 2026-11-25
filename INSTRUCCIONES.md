@@ -151,7 +151,9 @@ Abre **FichaCSIRC**:
 
 - 🔎 **El campo Tarea**: al entrar salen tus tareas habituales, las de la
   semana y tus favoritas. Escribe parte del nombre o el número y busca en
-  todos tus proyectos.
+  todos tus proyectos. Con **Intro** eliges lo que ves: si solo queda una
+  tarea, esa; si quedan varias, se marca la primera (cambia con las flechas) y
+  otro Intro la elige.
 - 🌳 **«Tus proyectos»**, al final de esa misma lista: pulsa un proyecto y se
   despliegan sus tareas en árbol, cada una debajo de la que cuelga.
 - 🗂️ **Buscar tarea…**: lo mismo, en grande. Se abre con tus proyectos; cada

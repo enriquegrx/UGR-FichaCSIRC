@@ -47,6 +47,11 @@ instalada aparece en el pie de la ventana.
 - El campo **Tarea** (en *Añadir apunte* y en *Editar día*) enseña, debajo de
   tus habituales y favoritas, **«Tus proyectos»**: pulsas uno y eliges la tarea
   en su árbol, sin abrir nada más.
+- En el campo **Tarea**, **Intro elige lo que estás viendo**: escribes parte
+  del nombre o el número y, si solo queda una tarea, Intro la pone; si quedan
+  varias, marca la primera y otro Intro la elige. Ya no salta «Falta tarea»
+  por pulsar Intro con el nombre a medias. Con la tarea ya puesta, Intro sigue
+  añadiendo el apunte.
 - El árbol **se acuerda de los proyectos que dejaste desplegados**: la próxima
   vez (y al volver a abrir la app) salen así, en el campo Tarea y en *Buscar
   tarea*.
@@ -62,6 +67,14 @@ instalada aparece en el pie de la ventana.
   en ProyectosTIC no cambia nada.
 - **Botón derecho sobre un día**: *Copiar día anterior*, *Copiar este día* y
   *Pegar aquí* van juntos, arriba del todo.
+- **Añadir apunte** ya no vacía Horas y Comentario si al final no se crea
+  nada (ProyectosTIC lo rechaza, se cae la conexión o dices que no a repetir
+  la tarea): lo escrito se queda para volver a intentarlo.
+- En **Editar día** y **Editar apunte**, pulsar Intro dos veces mientras se
+  guarda ya no lo envía dos veces (se duplicaban los apuntes nuevos).
+- **Permisos sin conexión**: si no se pueden leer las horas imputadas en
+  ProyectosTIC, se queda la última lectura buena y lo dice, en vez de enseñar
+  «0:00 imputadas» y un saldo de más.
 
 **Estadísticas**
 - Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o
@@ -79,6 +92,9 @@ instalada aparece en el pie de la ventana.
   día. Antes de hacerlo te enseña un resumen, y todo se deshace de una vez.
 - Desde la misma lista se marca un día como **vacaciones, festivo, baja o
   permiso**.
+- El número del botón (y el del icono junto al reloj) **se pone al día al
+  marcar** un festivo, unas vacaciones, una baja o un permiso, sin esperar al
+  siguiente apunte.
 - **«Te pasas»**: los días con horas de más y los apuntes repetidos, con el
   botón para quitar ahí mismo el que sobra.
 - Los avisos de la semana y de cierre de mes traen **«Completar ahora»**.
@@ -137,6 +153,9 @@ instalada aparece en el pie de la ventana.
 **Icono junto al reloj**
 - **«Completar hoy con…»** tu tarea habitual, desde el menú del icono y sin
   abrir la ventana. El icono dice también cuántos días tienes por completar.
+- **Abierta de un día para otro**: al volver a la ventana, *Hoy* y **«Fichar
+  hoy»** llevan al día de hoy (antes, a la semana en que se arrancó), la marca
+  de «hoy» se mueve y vuelven a salir los avisos de la semana y del mes.
 - **Una sola FichaCSIRC abierta**: si estaba escondida junto al reloj, el
   acceso del escritorio la muestra en vez de abrir otra que no se veía.
 

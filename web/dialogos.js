@@ -90,12 +90,16 @@ async function dlgEditar(dia, a) {
   const act = el("select", {}, el("option", { text: a.actividad || "…" }));
   const com = entrada(a.comentario, { class: "ancho" });
   const d = dialogo({ titulo: "Editar apunte", botones: [cancelarBoton,
-    { texto: "Guardar", clase: "primario", accion: guardar }] });
+    { texto: "Guardar", clase: "primario", accion: guardar, id: "guardar" }] });
   d.cuerpo.append(
     el("p", { class: "dlg-sub", text: a.tarea }),
     nota(`${dia.nombre} ${dia.fecha}`),
     rejilla(["Horas", horas], ["Actividad", act], ["Comentario", com]));
-  for (const i of [horas, com]) i.addEventListener("keydown", (e) => { if (e.key === "Enter") guardar(d); });
+  // Intro pasa por el boton: mientras se guarda esta apagado y un segundo
+  // Intro (o la tecla mantenida) no vuelve a enviar lo mismo
+  for (const i of [horas, com]) {
+    i.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.repeat) d.botones.guardar.click(); });
+  }
   horas.focus();
   horas.select();
   llamar("actividades", a.wp_id).then((r) => {
@@ -127,7 +131,7 @@ function dlgEditarDia(dia, { nueva = false, tarea = null, horas = null } = {}) {
   const d = dialogo({ titulo: "Editar día", ancho: 680, botones: [
     { texto: "+ Añadir tarea", izquierda: true, accion: () => nuevaFila() },
     cancelarBoton,
-    { texto: "Guardar", clase: "primario", accion: guardar }] });
+    { texto: "Guardar", clase: "primario", accion: guardar, id: "guardar" }] });
   d.cuerpo.append(
     el("div", { class: "ed-cabeza" }, el("p", { class: "dlg-sub", text: `${dia.nombre} ${dia.fecha}` }), total),
     lista,
@@ -177,7 +181,9 @@ function dlgEditarDia(dia, { nueva = false, tarea = null, horas = null } = {}) {
   function campoHoras(valor) {
     const h = entrada(valor, { class: "horas", inputmode: "decimal", "aria-label": "Horas" });
     h.addEventListener("input", recalcular);
-    h.addEventListener("keydown", (e) => { if (e.key === "Enter") guardar(d); });
+    // Intro pasa por el boton Guardar, que se apaga mientras se guarda: un
+    // segundo Intro con el dia a medio enviar duplicaba los apuntes nuevos
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.repeat) d.botones.guardar.click(); });
     return h;
   }
 
@@ -1691,6 +1697,8 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
   let sobran = 0;                     // tareas de la fuente que no caben en la lista
   let alEntrar = "";                  // lo que habia en el campo al entrar (la tarea ya elegida)
   let reciente = null;                // el proyecto que se acaba de ocultar aqui (para deshacerlo)
+  let tecleado = null;                // lo ultimo escrito a mano y aun sin elegir (null: nada pendiente)
+  let introPendiente = false;         // se pulso Intro con la busqueda en camino: se atiende al llegar
   const MAX_FUENTE = 300;
   const normal = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   // con la tarea elegida puesta ("123 - nombre") y sin tocar no se busca ese texto
@@ -1911,7 +1919,29 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
       if (mio !== seq) return;
       remoto = { q, tareas: r.error ? [] : r.tareas, error: r.error || "" };
       if (!caja.hidden) pintar();
+      const toca = introPendiente && !caja.hidden && document.activeElement === input;
+      introPendiente = false;
+      if (toca) introSinFila();
     }, 350);
+  }
+
+  // Intro tras escribir, sin haber bajado con las flechas: se elige lo que se
+  // esta viendo. Una sola tarea (o la del numero escrito), esa; varias, se
+  // marca la primera y otro Intro la elige. Con la busqueda aun en camino se
+  // espera a que llegue. (Antes el Intro se iba al formulario con el texto a
+  // medias y saltaba «Falta tarea».)
+  function introSinFila() {
+    const q = consulta();
+    const tareas = items.filter((t) => !t.esProyecto && !t.contexto);
+    const porNumero = /^\d+$/.test(q) ? tareas.find((t) => String(t.id) === q) : null;
+    if (porNumero) { elegir(porNumero); return; }
+    const buscando = fuente ? fuente().tareas === null : (remoto.q !== q || remoto.tareas === null);
+    if (buscando) { introPendiente = true; return; }
+    if (tareas.length === 1) { elegir(tareas[0]); return; }
+    if (!tareas.length) return;         // la lista ya dice que no hay nada con eso
+    activo = items.indexOf(tareas[0]);
+    pintar();
+    caja.querySelector(".bt-item.activo")?.scrollIntoView({ block: "nearest" });
   }
 
   function cerrar() {
@@ -1924,6 +1954,8 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
     if (t.esProyecto) { alternarProyecto(t.pid); return; }
     input.value = `${t.id} - ${t.nombre}`;
     alEntrar = input.value;
+    tecleado = null;
+    introPendiente = false;
     cerrar();
     alElegir(t);
   }
@@ -1936,7 +1968,10 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
     if (!fuente) pedirMisProyectos(repintar);
     pintar();
   });
-  input.addEventListener("input", () => { activo = -1; buscarFuera(); pintar(); });
+  input.addEventListener("input", () => {
+    activo = -1; tecleado = input.value; introPendiente = false;
+    buscarFuera(); pintar();
+  });
   input.addEventListener("blur", () => { cierre = setTimeout(cerrar, 120); });
   input.addEventListener("keydown", (e) => {
     if (caja.hidden) {
@@ -1953,6 +1988,12 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
       e.preventDefault();
       e.stopPropagation();
       elegir(items[activo]);
+    } else if (e.key === "Enter" && tecleado !== null && input.value === tecleado && consulta()) {
+      // hay algo escrito a mano y sin elegir: no es el Intro de «Añadir apunte»
+      // ni el del boton del dialogo (con la tarea ya puesta y sin tocar, si)
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) introSinFila();
     } else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && items[activo]?.esProyecto) {
       // sobre un proyecto: derecha lo despliega, izquierda lo recoge
       e.preventDefault();
@@ -3730,8 +3771,12 @@ function dlgPermisos() {
         el("span", { class: "tenue", text: `Usadas ${f.usadas}` }),
         el("span", { class: f.negativo ? "rojo" : "verde", text: `Te quedan ${f.disponibles}` })));
       if (f.actividad) {
-        caja.append(nota(`${f.usadas_local} marcadas en el día · ${f.usadas_pt} imputadas en `
-                         + `ProyectosTic como «${f.actividad}»`));
+        // sin ninguna lectura (sin conexion desde que se abrio la app) no se da un 0:00 por bueno
+        caja.append(f.pt_leidas === false
+          ? nota(`${f.usadas_local} marcadas en el día · lo imputado en ProyectosTic como «${f.actividad}» `
+                 + "aún no se ha podido leer: no está descontado de lo que te queda", "ambar")
+          : nota(`${f.usadas_local} marcadas en el día · ${f.usadas_pt} imputadas en `
+                 + `ProyectosTic como «${f.actividad}»`));
       }
       f.concesiones.forEach((c, i) => {
         const txt = c.estado === "caducada" ? `⚠ caducada el ${c.fecha_limite}`

@@ -222,32 +222,53 @@ fn nombre_corto(id: &str, nombre: &str) -> String {
     }
 }
 
-/// Horas de cada permiso imputadas en ProyectosTIC con su actividad (desde
-/// permisos_desde hasta fin del año siguiente). Una consulta; se recuerda.
-pub(crate) async fn usadas_pt(e: &Estado, cfg: &Cfg, reglas: &Reglas) -> HashMap<String, f64> {
-    let mapa: Vec<(String, String)> = reglas.tipos.iter().filter(|t| !t.actividad.is_empty())
-        .map(|t| (t.id.clone(), t.actividad.to_lowercase())).collect();
-    if mapa.is_empty() {
-        return HashMap::new();
-    }
-    if let Some(m) = candado(&e.usadas_pt).clone() {
-        return m;
-    }
-    let h = hoy();
-    let hasta = NaiveDate::from_ymd_opt(h.year() + 1, 12, 31).unwrap();
-    let Ok(aps) = rango(e, cfg, reglas.permisos_desde(h), hasta).await else { return HashMap::new() };
+/// Los permisos que se imputan en ProyectosTIC: (tipo, actividad en minusculas).
+fn permisos_con_actividad(reglas: &Reglas) -> Vec<(String, String)> {
+    reglas.tipos.iter().filter(|t| !t.actividad.is_empty())
+        .map(|t| (t.id.clone(), t.actividad.to_lowercase())).collect()
+}
+
+/// Horas de cada permiso segun la actividad de los apuntes leidos.
+fn sumar_usadas_pt(mapa: &[(String, String)], aps: &[Apunte]) -> HashMap<String, f64> {
     let mut res: HashMap<String, f64> = mapa.iter().map(|(id, _)| (id.clone(), 0.0)).collect();
-    for a in &aps {
+    for a in aps {
         let act = a.actividad.trim().to_lowercase();
-        for (id, buscada) in &mapa {
+        for (id, buscada) in mapa {
             if act == *buscada {
                 *res.get_mut(id).unwrap() += a.horas;
             }
         }
     }
-    let res: HashMap<String, f64> = res.into_iter().map(|(k, v)| (k, redondear(v, 2))).collect();
+    res.into_iter().map(|(k, v)| (k, redondear(v, 2))).collect()
+}
+
+/// Lee de ProyectosTIC las horas de cada permiso imputadas con su actividad
+/// (desde permisos_desde hasta fin del año siguiente) y las recuerda. Si no se
+/// pudo leer da el error y NO toca la ultima lectura buena (sin conexion salia
+/// «0:00 imputadas» y el saldo inflado, como si no se hubiera imputado nada).
+pub(crate) async fn leer_usadas_pt(e: &Estado, cfg: &Cfg, reglas: &Reglas) -> Result<HashMap<String, f64>, ErrorOp> {
+    let mapa = permisos_con_actividad(reglas);
+    if mapa.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let h = hoy();
+    let hasta = NaiveDate::from_ymd_opt(h.year() + 1, 12, 31).unwrap();
+    let aps = rango(e, cfg, reglas.permisos_desde(h), hasta).await?;
+    let res = sumar_usadas_pt(&mapa, &aps);
     *candado(&e.usadas_pt) = Some(res.clone());
-    res
+    Ok(res)
+}
+
+/// La ultima lectura de esas horas; si aun no hay ninguna, se leen (una
+/// consulta; se recuerda). Sin lectura y sin conexion, vacio.
+pub(crate) async fn usadas_pt(e: &Estado, cfg: &Cfg, reglas: &Reglas) -> HashMap<String, f64> {
+    if permisos_con_actividad(reglas).is_empty() {
+        return HashMap::new();
+    }
+    if let Some(m) = candado(&e.usadas_pt).clone() {
+        return m;
+    }
+    leer_usadas_pt(e, cfg, reglas).await.unwrap_or_default()
 }
 
 fn mes_anterior(h: NaiveDate) -> (NaiveDate, NaiveDate) {

@@ -16,6 +16,7 @@ const st = {
   ini: null,            // respuesta de api.inicio()
   lunes: null,          // "AAAA-MM-DD"
   hoyLunes: null,
+  hoyDia: null,              // el dia en que se miro por ultima vez si habia cambiado (cambioDeDia)
   semana: null,         // ultima respuesta de api.semana() o api.mes()
   dias: [],             // dias visibles (5 en la semana; semanas enteras en el mes)
   vista: "semana",      // "semana" | "mes" (se recuerda entre sesiones)
@@ -81,7 +82,7 @@ async function bloquearAhora() {
   const r = await llamar("pin_bloquear").catch(() => ({}));
   if (!r.bloqueada) return;
   cerrarMenu();
-  if (await desbloquear()) { await cargarSemana(); vigilarInactividad(); }
+  if (await desbloquear()) { cambioDeDia({ recargar: false }); await cargarSemana(); vigilarInactividad(); }
   else location.href = "configurar.html";
 }
 
@@ -480,6 +481,7 @@ async function arrancar() {
   if (ini.zoom && ini.zoom !== 1) aplicarZoom(ini.zoom, false);
   vigilarInactividad();
   st.lunes = st.hoyLunes = ini.lunes;
+  st.hoyDia = hoyIso();
   st.mesSel = mesDe(hoyIso());
   st.vista = ini.vista === "mes" ? "mes" : "semana";
   pintarSelectorVista();
@@ -599,7 +601,27 @@ const mesDe = (iso) => ({ anio: Number(iso.slice(0, 4)), mes: Number(iso.slice(5
 function lunesReferencia() {
   if (st.vista === "semana") return st.lunes;
   const marcados = [...st.marcados].sort();
-  return marcados.length ? lunesDe(marcados[0]) : st.hoyLunes;
+  return marcados.length ? lunesDe(marcados[0]) : lunesDe(hoyIso());
+}
+
+// La app vive en la bandeja y puede pasar dias abierta: al volver a la ventana
+// (o al pulsar «Hoy») se mira si ha cambiado el dia. Si cambio, «Hoy» apunta a
+// la semana nueva, se recarga lo que se ve (la pastilla "hoy" la pone el motor
+// al cargar) y se vuelven a pedir los avisos y el numero de «Por completar».
+function cambioDeDia({ recargar = true } = {}) {
+  const hoy = hoyIso();
+  if (!st.ini || !st.hoyDia || hoy === st.hoyDia) return false;
+  // con el PIN pedido el motor no da nada: se mira al desbloquear
+  if (document.querySelector(".bloqueo")) return false;
+  st.hoyDia = hoy;
+  st.hoyLunes = lunesDe(hoy);
+  // con un dialogo abierto o algo a medias no se repinta por debajo
+  const libre = !st.ocupado && !(typeof pila !== "undefined" && pila.length) && $("modal").hidden;
+  if (recargar && libre) Promise.resolve(st.estad ? st.estad.cargar() : cargarSemana()).catch(() => {});
+  avisarSemanaAnterior();
+  avisarCierreMes();
+  refrescarPendientes(0);
+  return true;
 }
 
 // Recarga la vista actual (semana o mes) desde ProyectosTic.
@@ -620,6 +642,9 @@ async function repintarLocal() {
                                    : await llamar("repintar", st.lunes);
   pintarVista(datos, false);
   refrescarFranja();
+  // un festivo, unas vacaciones o un permiso cambian lo que queda por completar
+  // (en segundo plano y con su respiro: varias marcas seguidas, una consulta)
+  refrescarPendientes();
 }
 
 // ---------------------------------------------------------------- franja de resumen
@@ -1773,8 +1798,9 @@ async function anadir(e) {
   const dias = [...st.marcados].sort();
   const wp = resolverTarea();
   if (wp == null) {
-    await avisar("Falta tarea", "Elige una tarea de tus favoritas (puedes escribir para "
-                 + "filtrar) o búscala con «Buscar tarea…».");
+    await avisar("Falta tarea", "Elige la tarea en la lista del campo Tarea: escribe parte del nombre "
+                 + "o su número y pulsa sobre ella (o flechas e Intro). También con «Buscar tarea…».");
+    $("tarea").focus();                  // con su lista abierta, para elegirla
     return;
   }
   const horas = $("horas").value.trim();
@@ -1795,8 +1821,12 @@ async function anadir(e) {
   estado("Registrando…");
   try {
     const r = await llamar("anadir", dias, wp, horas, comentario, actividad, permitirRepetir);
-    $("horas").value = st.horasAuto = "";
-    $("comentario").value = st.comAuto = "";
+    // solo si se creo algo: si ProyectosTIC lo rechaza, se cae la conexion o
+    // se contesta «No» a repetir, lo escrito se queda para reintentar
+    if (r.creados > 0) {
+      $("horas").value = st.horasAuto = "";
+      $("comentario").value = st.comAuto = "";
+    }
     if (r.creados && comentario && comentario !== st.ini.comentario_guardia) {
       st.comHabitual = comentario;
       recordarComentario(wp, comentario);
@@ -1876,6 +1906,9 @@ function navegar(delta) {
   // En Estadisticas, las flechas mueven su periodo; "Hoy" vuelve a la semana
   // de hoy con su ficha marcada (es lo que se espera de "Hoy" en cualquier sitio).
   if (st.estad && delta !== 0) { st.estad.mover(delta); return; }
+  // «Hoy» y «Fichar hoy» de la bandeja con la app abierta desde ayer: antes
+  // de leer st.hoyLunes se pone al dia (la vista la carga este mismo navegar)
+  if (delta === 0) cambioDeDia({ recargar: false });
   if (st.estad) {
     salirEstadisticas();
     if (st.vista !== "semana") { st.vista = "semana"; llamar("guardar_vista", "semana").catch(() => {}); }
@@ -1924,7 +1957,11 @@ $("b-bloquear").onclick = () => { bloquearOActivar(); };
 listaCom = sugerenciasComentario($("comentario"));
 // al volver a la ventana (p. ej. tras cambiar la hora desde el propio aviso)
 for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
-  quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
+  quien.addEventListener(ev, () => {
+    if (!st.ini || document.hidden) return;
+    if (Date.now() - campanaT > 20000) pintarCampana();
+    cambioDeDia();                     // abierta desde ayer: «hoy» ya es otro dia
+  });
 }
 $("b-buscar").onclick = () => dlgBuscar();
 $("b-tareas").onclick = (e) => { e.stopPropagation(); menuBajo($("b-tareas"), menuTareas()); };

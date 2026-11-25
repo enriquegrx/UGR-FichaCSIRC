@@ -1539,6 +1539,273 @@
       ok(document.querySelector(".dt-fila .chip-permiso")?.textContent === "era Incidencia", "no marca la tarea que cambia de tipo");
       cerrarTodo();
     });
+    // ---- seis fallos: doble Intro, Intro en el campo Tarea, cambio de dia, formulario
+    // que se vaciaba, contador de Por completar y permisos sin conexion
+    const intro = (campo, extra = {}) => campo.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...extra }));
+    const listaTarea = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+    const aLaSemanaDeHoy = async () => {
+      cerrarTodo();
+      if (st.estad) { salirEstadisticas(); pintarSelectorVista(); }
+      if (st.vista !== "semana") { cambiarVista("semana"); await espera(400); }
+      navegar(0);
+      ok(await hasta(() => st.lunes === lunesDe(hoyIso()) && dias().length === 5 && st.dias[0]?.iso === st.lunes),
+         "no vuelve a la semana de hoy");
+      await espera(300);
+    };
+    await prueba("editar día y editar apunte: un segundo Intro mientras se guarda no lo envía dos veces", async () => {
+      await aLaSemanaDeHoy();
+      const a = api(), guardarDia = a.guardar_dia, editar = a.editar;
+      let dia = 0, uno = 0;
+      a.guardar_dia = (...x) => { dia++; return guardarDia(...x); };
+      a.editar = (...x) => { uno++; return editar(...x); };
+      const deProxmox = () => st.dias[0].apuntes.filter((x) => String(x.wp_id) === "12065").length;
+      const antes = deProxmox();
+      try {
+        menuDe(0); pulsarMenu("Editar día");
+        ok(await hasta(() => dlg()), "no abre Editar día");
+        [...document.querySelectorAll(".dlg-pie button")].find((b) => b.textContent.includes("Añadir tarea")).click();
+        const inp = [...document.querySelectorAll(".ed-tarea-input")].pop();
+        inp.dispatchEvent(new Event("focus"));
+        inp.value = "Proxmox"; inp.dispatchEvent(new Event("input"));
+        // Intro con la busqueda en camino: no guarda el dia; al llegar, elige la unica que hay
+        ok(intro(inp) === false, "Intro en la tarea de la fila nueva no se queda en el buscador");
+        ok(await hasta(() => inp.value.startsWith("12065 - ")), `Intro no elige la única tarea que se ve: ${inp.value}`);
+        ok(dia === 0 && dlg(), "Intro en el buscador guardó el día");
+        const h = [...document.querySelectorAll(".ed-fila.nueva .horas")].pop();
+        ok(await hasta(() => !document.querySelector(".ed-fila.nueva .ed-act").disabled), "no carga las actividades");
+        h.value = "1"; h.dispatchEvent(new Event("input"));
+        intro(h); intro(h); intro(h, { repeat: true });
+        ok(await hasta(() => !dlg() && deProxmox() === antes + 1), `no guardó una sola vez: ${deProxmox() - antes} apuntes nuevos`);
+        await espera(400);
+        ok(dia === 1, `el día se envió ${dia} veces`);
+        ok(deProxmox() === antes + 1, `quedaron ${deProxmox() - antes} apuntes nuevos`);
+        teclado("z", { ctrlKey: true });
+        ok(await hasta(() => deProxmox() === antes), "Ctrl+Z no quitó el apunte de la prueba");
+        // un apunte suelto: igual (el segundo Intro repetia el cambio y apilaba otro Deshacer)
+        const d = st.dias[0];
+        dlgEditar(d, d.apuntes[0]);
+        ok(await hasta(() => dlg()), "no abre Editar apunte");
+        const horas = dlg().querySelector("input.horas");
+        intro(horas); intro(horas);
+        ok(await hasta(() => !dlg()), "Intro no guarda el apunte");
+        await espera(400);
+        ok(uno === 1, `el apunte se envió ${uno} veces`);
+      } finally {
+        a.guardar_dia = guardarDia; a.editar = editar;
+        cerrarTodo();
+        await espera(300);
+      }
+    });
+    await prueba("campo Tarea: Intro elige lo que se ve (una, varias o por número) y con la tarea ya puesta sigue añadiendo", async () => {
+      await aLaSemanaDeHoy();
+      const inp = $("tarea"), antes = inp.value, a = api(), comprobar = a.comprobar;
+      let altas = 0;
+      a.comprobar = (...x) => { altas++; return comprobar(...x); };
+      const escribir = (t) => { inp.value = t; inp.dispatchEvent(new Event("input")); };
+      try {
+        ok(/^\d+ - /.test(antes), `sin tarea en el formulario: ${antes}`);
+        // con la tarea puesta y sin tocar, Intro es el de «Añadir apunte» (lista abierta o no)
+        inp.dispatchEvent(new Event("focus"));
+        ok(await hasta(() => listaTarea()), "no se abre la lista");
+        ok(intro(inp) === true, "con la tarea puesta, Intro ya no llega al formulario");
+        // una sola tarea con eso: Intro la elige, aunque la busqueda aun este en camino
+        escribir("Proxmox");
+        ok(intro(inp) === false, "Intro con texto a medias se va al formulario");
+        ok(inp.value === "Proxmox" && $("modal").hidden, "no espera a la búsqueda");
+        ok(await hasta(() => inp.value.startsWith("12065 - ")), `no elige la única tarea: ${inp.value}`);
+        ok(await hasta(() => !listaTarea()), "la lista no se cierra al elegir");
+        ok(intro(inp) === true, "ya elegida, Intro no llega al formulario");
+        // varias: marca la primera y no elige; el segundo Intro, si
+        inp.dispatchEvent(new Event("focus"));
+        escribir("Mantenimientos");
+        ok(intro(inp) === false, "Intro con varias tareas se va al formulario");
+        ok(await hasta(() => listaTarea()?.querySelector(".bt-item.activo")), "con varias no marca la primera");
+        ok(listaTarea().querySelectorAll(".bt-item").length > 1 && inp.value === "Mantenimientos", "con varias eligió sin preguntar");
+        const primera = listaTarea().querySelector(".bt-item").dataset.id;
+        ok(listaTarea().querySelector(".bt-item.activo").dataset.id === primera, "la marcada no es la primera");
+        ok(intro(inp) === false && inp.value.startsWith(`${primera} - `), `el segundo Intro no elige la marcada: ${inp.value}`);
+        // por numero: la de ese numero, sin esperar a nadie
+        const [, id0] = [...st.tareas].find(([, id]) => String(id) !== primera);
+        inp.dispatchEvent(new Event("focus"));
+        escribir(String(id0));
+        ok(intro(inp) === false && inp.value.startsWith(`${id0} - `), `por número no elige: ${inp.value}`);
+        // nada con eso: ni elige ni salta «Falta tarea»
+        inp.dispatchEvent(new Event("focus"));
+        escribir("zzzz no existe");
+        ok(intro(inp) === false, "sin resultados, Intro se va al formulario");
+        await espera(800);
+        ok(inp.value === "zzzz no existe" && $("modal").hidden, "sin resultados hizo algo");
+        ok(altas === 0, "algún Intro intentó añadir el apunte");
+        // y si aun asi se pulsa «Añadir apunte»: el aviso dice que hacer y deja el cursor en el campo
+        inp.dispatchEvent(new Event("blur"));
+        await espera(200);
+        const p = anadir();
+        ok(await hasta(() => !$("modal").hidden), "no avisa de que falta la tarea");
+        ok(/lista del campo Tarea/.test($("modal-texto").textContent) && !/tus favoritas/.test($("modal-texto").textContent),
+           `aviso antiguo: ${$("modal-texto").textContent}`);
+        $("modal-si").click();
+        await p;
+        ok(document.activeElement === inp, "tras el aviso el cursor no queda en el campo Tarea");
+      } finally {
+        a.comprobar = comprobar;
+        if (!$("modal").hidden) $("modal-si").click();
+        inp.dispatchEvent(new Event("blur"));
+        inp.blur();
+        await espera(200);
+        inp.value = antes;
+        await elegirTarea();
+      }
+    });
+    await prueba("app abierta de un día para otro: «Hoy» va a la semana nueva y se vuelven a pedir los avisos", async () => {
+      await aLaSemanaDeHoy();
+      const a = api(), real = window.hoyIso, lunesReal = st.lunes;
+      const semana = a.semana, sem = a.semana_anterior_pendiente, mes = a.mes_pendiente, pend = a.por_completar;
+      const n = { semana: 0, sem: 0, mes: 0, pend: 0 };
+      a.semana = (...x) => { n.semana++; return semana(...x); };
+      a.semana_anterior_pendiente = (...x) => { n.sem++; return sem(...x); };
+      a.mes_pendiente = (...x) => { n.mes++; return mes(...x); };
+      a.por_completar = (...x) => { n.pend++; return pend(...x); };
+      try {
+        ok(st.hoyLunes === lunesReal && st.hoyDia === real(), "el día de arranque no está apuntado");
+        // sin cambio de dia, volver a la ventana no recarga nada
+        window.dispatchEvent(new Event("focus"));
+        await espera(300);
+        ok(n.semana === 0 && n.sem === 0 && n.mes === 0, "recarga al volver a la ventana sin haber cambiado el día");
+        // pasa una semana con la app en la bandeja; se vuelve a la ventana
+        window.hoyIso = () => sumarDias(real(), 7);
+        // con el PIN pedido no se pide nada (el motor no contesta): se deja para al desbloquear
+        const tapa = el("div", { class: "bloqueo" });
+        tapa.hidden = true;
+        document.body.append(tapa);
+        window.dispatchEvent(new Event("focus"));
+        tapa.remove();
+        await espera(300);
+        ok(n.semana === 0 && n.sem === 0 && st.hoyDia === real(), "con el PIN pedido intenta recargar");
+        // «Copiar semana anterior» en vista Mes sin dias marcados: la semana de hoy, sin esperar a nadie
+        const vista = st.vista, marcados = st.marcados;
+        st.vista = "mes"; st.marcados = new Set();
+        const ref = lunesReferencia();
+        st.vista = vista; st.marcados = marcados;
+        ok(ref === sumarDias(lunesReal, 7), `la semana de referencia es ${ref}`);
+        window.dispatchEvent(new Event("focus"));
+        ok(st.hoyLunes === sumarDias(lunesReal, 7), `«hoy» sigue en la semana vieja: ${st.hoyLunes}`);
+        ok(await hasta(() => n.semana === 1 && n.sem === 1 && n.mes === 1), `no recarga ni vuelve a pedir los avisos: ${JSON.stringify(n)}`);
+        ok(await hasta(() => n.pend >= 1), "no vuelve a contar lo que queda por completar");
+        ok(st.lunes === lunesReal, "cambia de semana sin que nadie lo pida");
+        $("b-hoy").click();
+        ok(st.lunes === sumarDias(lunesReal, 7), `«Hoy» lleva a ${st.lunes}`);
+        ok(await hasta(() => st.dias[0]?.iso === sumarDias(lunesReal, 7)), "no pinta la semana nueva");
+        // «Fichar hoy» de la bandeja llama a navegar(0) sin pasar por la ventana
+        const antes = { ...n };
+        window.hoyIso = () => sumarDias(real(), 14);
+        navegar(0);
+        ok(st.lunes === sumarDias(lunesReal, 14), `«Fichar hoy» lleva a ${st.lunes}`);
+        ok(await hasta(() => n.sem === antes.sem + 1 && n.mes === antes.mes + 1), "«Fichar hoy» no vuelve a pedir los avisos");
+        ok(await hasta(() => st.dias[0]?.iso === sumarDias(lunesReal, 14)), "no pinta la semana de «Fichar hoy»");
+        await espera(300);
+        ok(n.semana === antes.semana + 1, `«Fichar hoy» cargó la semana ${n.semana - antes.semana} veces`);
+      } finally {
+        window.hoyIso = real;
+        a.semana = semana; a.semana_anterior_pendiente = sem; a.mes_pendiente = mes; a.por_completar = pend;
+        await espera(300);
+        navegar(0);
+        ok(await hasta(() => st.lunes === lunesReal && st.hoyDia === real() && st.dias[0]?.iso === lunesReal), "no vuelve a la semana de verdad");
+        await espera(1800);                  // el recuento de Por completar que queda en camino
+      }
+    });
+    await prueba("añadir apunte: si no se crea nada, Horas y Comentario se quedan como estaban", async () => {
+      await aLaSemanaDeHoy();
+      const a = api(), anadirApi = a.anadir, comprobar = a.comprobar;
+      const horas = $("horas"), com = $("comentario");
+      const antes = { horas: horas.value, horasAuto: st.horasAuto, com: com.value, comAuto: st.comAuto, habitual: st.comHabitual,
+                      marcados: new Set(st.marcados) };
+      const wp = resolverTarea();
+      const usados = comTareas.mapa?.[String(wp)]?.slice();
+      let resultado = null, altas = 0;
+      a.comprobar = () => Promise.resolve({ avisos: [] });
+      a.anadir = () => { altas++; return Promise.resolve(resultado); };
+      try {
+        ok(wp != null, "sin tarea en el formulario");
+        if (!st.marcados.size) { st.marcados = new Set([st.dias[0].iso]); pintarMarcados(); }
+        const poner = () => { horas.value = "1,5"; com.value = "Lo que escribí a mano"; };
+        // ProyectosTIC lo rechaza o se cae la conexion: el motor no da error, da creados 0
+        poner();
+        resultado = { creados: 0, saltados: 0, errores: 1, ultimo: "Sin conexión" };
+        let p = anadir();
+        ok(await hasta(() => !$("modal").hidden && /No se creó ningún apunte/.test($("modal-titulo")?.textContent || $("modal").textContent)),
+           "no avisa de que no se creó nada");
+        $("modal-si").click();
+        await p;
+        ok(horas.value === "1,5" && com.value === "Lo que escribí a mano", `se vació el formulario: «${horas.value}» «${com.value}»`);
+        // «No» a repetir con un solo dia: tampoco se crea nada
+        resultado = { creados: 0, saltados: 1, errores: 0, ultimo: "" };
+        await anadir();
+        ok(horas.value === "1,5" && com.value === "Lo que escribí a mano", `con todo saltado se vació: «${horas.value}» «${com.value}»`);
+        // creado: entonces si, el formulario queda listo para el siguiente
+        resultado = { creados: 1, saltados: 0, errores: 0, ultimo: "" };
+        await anadir();
+        ok(altas === 3, `se llamó a añadir ${altas} veces`);
+        ok(horas.value !== "1,5" && horas.value === st.horasAuto, `tras crear, Horas sigue con lo escrito: «${horas.value}»`);
+        ok(com.value === st.comAuto, "tras crear, el comentario no queda como sugerencia");
+      } finally {
+        a.anadir = anadirApi; a.comprobar = comprobar;
+        if (!$("modal").hidden) $("modal-si").click();
+        st.comHabitual = antes.habitual;
+        if (comTareas.mapa && wp != null) {
+          if (usados) comTareas.mapa[String(wp)] = usados; else delete comTareas.mapa[String(wp)];
+        }
+        st.marcados = antes.marcados; pintarMarcados();
+        horas.value = antes.horas; st.horasAuto = antes.horasAuto;
+        com.value = antes.com; st.comAuto = antes.comAuto;
+        ocultarAviso();
+        await espera(1800);
+      }
+    });
+    await prueba("por completar: el número se entera de una marca local (festivo, vacaciones, permiso)", async () => {
+      await aLaSemanaDeHoy();
+      const a = api(), pend = a.por_completar, bandeja = a.bandeja_pendientes;
+      let n = 0, enBandeja = 0;
+      a.por_completar = (...x) => { n++; return pend(...x); };
+      a.bandeja_pendientes = (...x) => { enBandeja++; return bandeja(...x); };
+      try {
+        await espera(1800);                  // nada en camino de antes
+        n = 0; enBandeja = 0;
+        // dos marcas seguidas (lo que hace el menu del dia tras marcar): una sola consulta
+        await repintarLocal();
+        await repintarLocal();
+        ok(n === 0, "no espera a que se acaben las marcas");
+        ok(await hasta(() => n === 1 && enBandeja === 1, 4000), `no vuelve a contar tras la marca: ${n} consultas, ${enBandeja} a la bandeja`);
+        await espera(1800);
+        ok(n === 1, `dos marcas seguidas hicieron ${n} consultas`);
+      } finally {
+        a.por_completar = pend; a.bandeja_pendientes = bandeja;
+      }
+    });
+    await prueba("Permisos sin conexión: no da «0:00 imputadas» por bueno y dice que enseña la última lectura", async () => {
+      const a = api(), permisos = a.permisos, leer = a.actualizar_usadas_pt;
+      a.actualizar_usadas_pt = () => Promise.reject(new Error("No se pudo conectar con ProyectosTIC"));
+      try {
+        // con una lectura buena de antes: se queda, y se dice que es la ultima
+        dlgPermisos();
+        ok(await hasta(() => /se muestra la última lectura/.test(dlg()?.textContent || "")), "no dice que enseña la última lectura");
+        ok(/4:30 imputadas/.test(dlg().textContent), "pierde la última lectura buena");
+        cerrarTodo();
+        // sin ninguna lectura todavia: lo dice en vez de enseñar 0:00
+        a.permisos = async () => {
+          const p = await permisos();
+          p.filas = p.filas.map((f) => (f.actividad ? { ...f, usadas_pt: "0:00", pt_leidas: false } : f));
+          return p;
+        };
+        dlgPermisos();
+        ok(await hasta(() => /aún no se ha podido leer/.test(dlg()?.textContent || "")), "sin lectura no lo dice");
+        ok(!/0:00 imputadas/.test(dlg().textContent), "enseña «0:00 imputadas» sin haber leído nada");
+      } finally {
+        a.permisos = permisos; a.actualizar_usadas_pt = leer;
+        cerrarTodo();
+        await espera(300);
+      }
+    });
     await prueba("sin errores de JS por el camino", async () => {
       ok(!lineas.some((l) => l.startsWith("FALLO error") || l.startsWith("FALLO promesa")), "hubo errores");
     });

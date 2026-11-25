@@ -358,7 +358,7 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
         }
         "actualizar_usadas_pt" => {
             e.exigir_desbloqueo(&cfg)?;
-            Ok(perm::actualizar_usadas_pt(e, &cfg).await)
+            perm::actualizar_usadas_pt(e, &cfg).await
         }
         "fijar_actividad_permiso" => {
             e.exigir_desbloqueo(&cfg)?;
