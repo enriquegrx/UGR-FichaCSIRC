@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FichaCSIRC",
-  "version": "4.0.0-rc.4",
+  "version": "4.0.0-rc.5",
   "identifier": "es.ugr.csirc.fichacsirc",
   "build": {
     "frontendDist": "../web"
