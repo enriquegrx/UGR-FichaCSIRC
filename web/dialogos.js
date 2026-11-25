@@ -1717,12 +1717,20 @@ function buscadorTarea(input, { alElegir, fuente = null, crear = true }) {
 // ================================================================ buscar tarea
 
 /* alElegir(tarea): quien lo abre se queda con la tarea elegida (Editar dia);
-   sin el, la tarea va al formulario de Añadir apunte, como siempre. */
+   sin el, la tarea va al formulario de Añadir apunte, como siempre.
+   Las tareas de un proyecto salen en arbol, como en «Cuelga de»: cada una
+   debajo de la que cuelga; al filtrar quedan las que encajan y, de contexto,
+   las de encima. Se marcan varias con Ctrl o Mayus. */
 function dlgBuscar({ alElegir = null } = {}) {
-  let tareas = [], filtradas = [], seq = 0;
+  let tareas = [], filas = [], seq = 0;
+  let deTodo = false;                  // la lista viene de «Buscar en todo»: sin arbol, con su proyecto
+  let cursor = -1, ancla = -1;         // la fila del teclado y desde donde marca Mayus
+  const marcadas = new Set();          // los numeros de las tareas marcadas
+  const normal = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const proy = el("select", {}, el("option", { value: "", text: "Cargando proyectos…" }));
   const filtro = entrada("", { placeholder: "Filtra la lista, o Enter para buscar en todos (vacío: todas)", class: "ancho" });
-  const lista = el("select", { multiple: true, size: "14", class: "lista" });
+  const lista = el("div", { class: "bq-lista", role: "listbox", tabindex: "0", "aria-multiselectable": "true",
+                            "aria-label": "Tareas" });
   const info = nota("Cargando proyectos…");
   const fav = el("input", { type: "checkbox" });
   const d = dialogo({ titulo: "Buscar tarea", ancho: 640, botones: [
@@ -1745,10 +1753,65 @@ function dlgBuscar({ alElegir = null } = {}) {
     el("label", { class: "check" }, fav, " Añadir también a favoritas (se guarda en la configuración)"));
 
   const pintar = () => {
-    const f = filtro.value.trim().toLowerCase();
-    filtradas = tareas.filter((t) => t.nombre.toLowerCase().includes(f) || String(t.id).includes(f));
-    lista.replaceChildren(...filtradas.map((t, i) => el("option", { value: String(i),
-      text: `${t.id} - ${t.nombre}${t.padre ? `   (› ${t.padre})` : ""}` })));
+    const f = normal(filtro.value.trim());
+    filas = tareasEnArbol(tareas, f ? (t) => normal(`${t.id} ${t.nombre}`).includes(f) : null);
+    cursor = Math.min(cursor, filas.length - 1);
+    lista.replaceChildren(...filas.map((t, i) => {
+      const si = marcadas.has(Number(t.id));
+      const ruta = (deTodo ? [t.proyecto, t.padre] : [t.suelta ? `Cuelga de ${t.padre}` : ""]).filter(Boolean).join(" › ");
+      const fila = el("div", { class: `bt-item bt-rama${t.contexto ? " bt-contexto" : ""}${si ? " marcada" : ""}`
+          + `${i === cursor ? " cursor" : ""}`, role: "option", "aria-selected": String(si),
+          "aria-level": String(t.nivel + 1), "data-i": String(i) },
+        t.nivel ? el("span", { class: "bt-codo", "aria-hidden": "true", text: "└" }) : null,
+        el("div", { class: "bt-texto" },
+          el("div", { class: "bt-nombre" }, el("span", { class: "bt-id", text: String(t.id) }), ` ${t.nombre}`),
+          ruta ? el("div", { class: "bt-ruta", text: ruta }) : null));
+      fila.style.setProperty("--nivel", String(Math.min(t.nivel, 8)));
+      return fila;
+    }));
+    if (!filas.length && tareas.length) lista.append(el("div", { class: "bt-nada", text: "Ninguna tarea de la lista con eso." }));
+  };
+  // Clic: solo esa. Ctrl+clic: la pone o la quita. Mayus+clic: todas desde la ultima marcada.
+  function marcar(i, e = {}) {
+    if (i < 0 || i >= filas.length) return;
+    const id = Number(filas[i].id);
+    if (e.shiftKey && ancla >= 0 && ancla < filas.length) {
+      if (!(e.ctrlKey || e.metaKey)) marcadas.clear();
+      for (let k = Math.min(ancla, i); k <= Math.max(ancla, i); k++) marcadas.add(Number(filas[k].id));
+    } else if (e.ctrlKey || e.metaKey) {
+      if (!marcadas.delete(id)) marcadas.add(id);
+      ancla = i;
+    } else {
+      marcadas.clear();
+      marcadas.add(id);
+      ancla = i;
+    }
+    cursor = i;
+    pintar();
+    lista.children[i]?.scrollIntoView({ block: "nearest" });
+  }
+  const filaDe = (e) => Number(e.target.closest?.(".bt-item")?.dataset.i ?? -1);
+  lista.addEventListener("click", (e) => marcar(filaDe(e), e));
+  lista.addEventListener("keydown", (e) => {
+    const paso = { ArrowDown: 1, ArrowUp: -1, PageDown: 10, PageUp: -10 }[e.key];
+    if (paso || e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      marcar(e.key === "Home" ? 0 : e.key === "End" ? filas.length - 1
+        : Math.max(0, Math.min(filas.length - 1, cursor + paso)), { shiftKey: e.shiftKey });
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      for (const t of filas) marcadas.add(Number(t.id));
+      pintar();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      elegir(d);
+    }
+  });
+  const otraLista = (ts, todo) => {
+    tareas = ts; deTodo = todo;
+    marcadas.clear(); cursor = -1; ancla = -1;
+    lista.scrollTop = 0;
+    pintar();
   };
   llamar("proyectos").then((ps) => {
     proy.replaceChildren(el("option", { value: "", text: "— elige un proyecto —" }),
@@ -1763,13 +1826,16 @@ function dlgBuscar({ alElegir = null } = {}) {
     const r = await llamar("tareas_de_proyecto", proy.value);
     if (mio !== seq) return;
     if (r.error) { info.textContent = r.error; return; }
-    tareas = r.tareas;
-    pintar();
+    otraLista(r.tareas, false);
     info.textContent = `${tareas.length} tareas. Filtra y elige (Ctrl o Mayús: varias).`;
   };
   filtro.addEventListener("input", pintar);
-  filtro.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); buscarTodo(); } });
-  lista.addEventListener("dblclick", () => elegir(d));
+  filtro.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); buscarTodo(); }
+    // flecha abajo: a la lista, con el teclado
+    if (e.key === "ArrowDown" && filas.length) { e.preventDefault(); lista.focus(); marcar(Math.max(0, cursor)); }
+  });
+  lista.addEventListener("dblclick", (e) => { if (filaDe(e) >= 0) elegir(d); });
   async function buscarTodo() {
     const texto = filtro.value.trim();
     const mio = ++seq;
@@ -1778,15 +1844,16 @@ function dlgBuscar({ alElegir = null } = {}) {
     const r = await llamar("buscar_tareas", texto);
     if (mio !== seq) return;
     if (r.error) { info.textContent = r.error; return; }
-    tareas = r.tareas;
     filtro.value = "";
-    pintar();
+    otraLista(r.tareas, true);
     info.textContent = tareas.length
       ? `${tareas.length} tareas ${texto ? "encontradas" : "abiertas"} en todos tus proyectos. Filtra y elige.`
       : texto ? `Nada con «${texto}» en tus proyectos.` : "No hay tareas abiertas en tus proyectos.";
   }
   async function elegir(dd) {
-    const elegidas = [...lista.selectedOptions].map((o) => filtradas[Number(o.value)]);
+    // las marcadas que se ven, en el orden de la lista y tal como las dio ProyectosTIC
+    const porId = new Map(tareas.map((t) => [Number(t.id), t]));
+    const elegidas = filas.filter((t) => marcadas.has(Number(t.id))).map((t) => porId.get(Number(t.id)));
     if (!elegidas.length) { info.textContent = "Elige al menos una tarea de la lista."; return; }
     ponerTareas(await llamar("elegir_tareas", elegidas, fav.checked));
     dd.cerrar();

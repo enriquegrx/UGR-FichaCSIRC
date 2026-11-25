@@ -656,6 +656,14 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .bt-item.bt-rama { padding-left: calc(12px + var(--nivel, 0) * 18px); gap: 5px; }
 .bt-codo { flex: none; color: var(--tenue); opacity: .7; margin-left: -14px; width: 9px; }
 .bt-item.bt-contexto .bt-nombre { color: var(--tenue); }
+/* la lista de Buscar tarea: las tareas del proyecto en arbol; se marcan varias */
+.bq-lista { height: 330px; overflow: auto; margin: 8px 0 4px; padding: 4px 0; font-size: 13px;
+            background: var(--panel); border: 1px solid var(--borde); border-radius: 8px; user-select: none; }
+.bq-lista:focus { outline: 2px solid var(--primario); outline-offset: 1px; }
+.bq-lista .bt-item.marcada { background: color-mix(in srgb, var(--primario) 16%, transparent);
+                             box-shadow: inset 3px 0 0 var(--primario); }
+.bq-lista .bt-item.marcada .bt-nombre { color: inherit; }
+.bq-lista:focus .bt-item.cursor { outline: 1px dotted var(--tenue); outline-offset: -2px; }
 /* "Crear la tarea «...»": al final de la lista, separada */
 .bt-crear { border-top: 1px solid var(--borde-suave); margin-top: 4px; padding-top: 7px; padding-bottom: 7px; align-items: center; }
 .bt-crear .bt-nombre b { font-weight: 600; }

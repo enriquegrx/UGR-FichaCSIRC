@@ -36,6 +36,9 @@ instalada aparece en el pie de la ventana.
   sin tener que cambiar el PIN.
 - **Comentario**: al entrar en el campo salen los últimos que usaste con esa
   tarea, para elegirlos sin volver a escribirlos.
+- **Buscar tarea** enseña las tareas del proyecto en árbol, cada una debajo de
+  la que cuelga. Al filtrar quedan las que encajan y las que tienen encima, y
+  ya no hace falta escribir las tildes.
 
 **Estadísticas**
 - Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o

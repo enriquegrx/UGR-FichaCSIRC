@@ -130,8 +130,52 @@
       dlgBuscar();
       ok(await hasta(() => dlg()), "no abre");
       [...dlg().querySelectorAll("button")].find((b) => b.textContent.includes("Buscar en todo")).click();
-      ok(await hasta(() => dlg().querySelectorAll("select.lista option").length >= 2), "no lista todas");
+      ok(await hasta(() => dlg().querySelectorAll(".bq-lista .bt-item").length >= 2), "no lista todas");
+      ok(dlg().querySelector(".bq-lista .bt-ruta").textContent.includes("›"), "en todo no dice el proyecto y de cuál cuelga");
       cerrarTodo();
+    });
+    await prueba("buscar tarea: las del proyecto en árbol, se filtra, se marcan varias y se eligen", async () => {
+      const antes = $("tarea").value;
+      dlgBuscar();
+      ok(await hasta(() => dlg()?.querySelectorAll("select option").length > 2), "no carga los proyectos");
+      const proy = dlg().querySelector("select");
+      proy.value = "3"; proy.dispatchEvent(new Event("change"));
+      const filas = () => [...dlg().querySelectorAll(".bq-lista .bt-item")];
+      const ramas = () => filas().map((x) => `${x.getAttribute("aria-level")}:${x.querySelector(".bt-id").textContent}`).join(" ");
+      ok(await hasta(() => filas().length), "no lista las tareas del proyecto");
+      ok(ramas() === "1:15001 2:15002 3:15004 3:15005 2:15003 1:15010 2:15011", `árbol: ${ramas()}`);
+      const fila = (n) => filas().find((x) => x.textContent.includes(n));
+      ok(parseFloat(getComputedStyle(fila("15004")).paddingLeft) > parseFloat(getComputedStyle(fila("15002")).paddingLeft),
+         "las hijas no van metidas bajo su madre");
+      ok(/Cuelga de \[2026_AUL\] Proyectos/.test(fila("15010").textContent), "no dice de cuál cuelga la que tiene la madre cerrada");
+      ok(!/null|undefined/.test(dlg().textContent), "escribe null/undefined");
+      // al filtrar (sin tildes) quedan las que encajan y las de encima, de contexto
+      const filtro = dlg().querySelector("input.ancho");
+      filtro.value = "megafonia"; filtro.dispatchEvent(new Event("input"));
+      ok(ramas() === "1:15001 2:15002 3:15004", `árbol filtrado: ${ramas()}`);
+      ok(fila("15002").classList.contains("bt-contexto") && !fila("15004").classList.contains("bt-contexto"), "no distingue las de contexto");
+      filtro.value = ""; filtro.dispatchEvent(new Event("input"));
+      // clic marca una; Ctrl+clic añade otra; Mayus+clic, el tramo
+      const clic = (n, extra = {}) => fila(n).dispatchEvent(new MouseEvent("click", { bubbles: true, ...extra }));
+      const marcadas = () => filas().filter((x) => x.classList.contains("marcada")).map((x) => x.querySelector(".bt-id").textContent).join(" ");
+      clic("15004");
+      clic("15011", { ctrlKey: true });
+      ok(marcadas() === "15004 15011", `Ctrl+clic: ${marcadas()}`);
+      clic("15002");
+      clic("15005", { shiftKey: true });
+      ok(marcadas() === "15002 15004 15005", `Mayús+clic: ${marcadas()}`);
+      ok(fila("15004").getAttribute("aria-selected") === "true" && fila("15003").getAttribute("aria-selected") === "false", "aria-selected no sigue a las marcadas");
+      // con el teclado: flecha abajo desde el filtro
+      clic("15001");
+      dlg().querySelector(".bq-lista").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      ok(marcadas() === "15002", `flecha abajo: ${marcadas()}`);
+      clic("15005", { ctrlKey: true });
+      botonDlg("Elegir");
+      ok(await hasta(() => !dlg()), "no se cierra al elegir");
+      ok(await hasta(() => $("tarea").value.startsWith("15002 - ")), `formulario: ${$("tarea").value}`);
+      ok(textoDeTarea(15005), "la segunda elegida no queda en el desplegable");
+      $("tarea").value = antes;
+      await elegirTarea();
     });
     await prueba("formulario: la tarea también se busca", async () => {
       const inp = document.getElementById("tarea");

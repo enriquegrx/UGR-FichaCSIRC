@@ -472,7 +472,8 @@
     },
     asociar: (wp, act) => { asoc[act] = Number(wp); return espera({ ...asoc }); },
     desasociar: (act) => { delete asoc[act]; return espera({ ...asoc }); },
-    proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" }]),
+    proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" },
+                              { id: 3, nombre: "Aulas y Teledocencia" }]),
     tareas_de_proyecto: (pid) => espera(pid === "2" ? { error: "No tienes permiso para ver las tareas de este proyecto." }
       : pid === "3" ? { tareas: tareasAulas.map((t) => ({ ...t })) }
       : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
