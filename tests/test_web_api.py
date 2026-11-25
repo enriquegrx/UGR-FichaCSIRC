@@ -678,6 +678,91 @@ class TestDialogos(Base):
         self.assertEqual((r["saltados"], r["errores"]), (1, 2))
         self.assertIn("error", self.api.ejecutar_copia())   # solo una vez
 
+    def test_emparejar_copia(self):
+        """Los mismos casos que emparejar_copia_de_varios_dias (Rust)."""
+        # noviembre de 2026: el 2 es lunes; el 13 (viernes) es festivo
+        lab = lambda d: d.weekday() < 5 and d.isoformat() != "2026-11-13"   # noqa: E731
+        n = lambda *dias: [f"2026-11-{d:02d}" for d in dias]                # noqa: E731
+        p = lambda *pares: [(f"2026-11-{a:02d}", f"2026-11-{b:02d}") for a, b in pares]   # noqa: E731
+        e = web.emparejar_copia
+        tres = n(4, 2, 3)
+        # por orden de fecha, se marque como se marque
+        self.assertEqual(e(tres, n(11, 9, 10), lab), p((2, 9), (3, 10), (4, 11)))
+        # mas marcados que copiados: se repite el patron (lo marcado no se salta aunque sea festivo)
+        self.assertEqual(e(n(2, 3), n(9, 10, 11, 12, 13), lab),
+                         p((2, 9), (3, 10), (2, 11), (3, 12), (2, 13)))
+        # menos marcados que copiados: solo los primeros
+        self.assertEqual(e(tres, n(10, 9), lab), p((2, 9), (3, 10)))
+        # un solo destino: a partir de el, saltando el festivo y el fin de semana
+        self.assertEqual(e(tres, n(12), lab), p((2, 12), (3, 16), (4, 17)))
+        # nunca sobre si mismo: ese par se salta y los demas siguen en su sitio
+        self.assertEqual(e(tres, n(2, 3, 5), lab), p((4, 5)))
+        self.assertEqual(e(tres, n(3), lab), p((2, 3), (3, 4), (4, 5)))
+        self.assertEqual(e(tres, n(2), lab), [])
+        # un solo dia copiado: a todos los marcados, como siempre
+        self.assertEqual(e(n(2), n(2, 3, 4), lab), p((2, 3), (2, 4)))
+        self.assertEqual(e(tres, [], lab), [])
+        # sin ningun laborable por delante no se queda dando vueltas
+        self.assertEqual(e(tres, n(12), lambda d: False), p((2, 12)))
+
+    def test_pegar_varios_dias_a_partir_de_uno(self):
+        """Lunes y martes copiados, pegados desde el viernes: el lunes siguiente
+        es festivo, asi que el martes va al martes siguiente (que no estaba
+        cargado: se lee, y lo que ya tiene se salta). Un solo Deshacer."""
+        V = L + dt.timedelta(days=4)
+        L2, M2 = L + dt.timedelta(days=7), L + dt.timedelta(days=8)
+        datos = {L.isoformat(): [apunte(1, 4, wp="10"), apunte(2, 3, wp="20")],
+                 M.isoformat(): [apunte(3, 7, wp="10")], X.isoformat(): []}
+        core.NO_LABORABLES[L2.isoformat()] = "festivo"
+        self._semana(datos)
+        rangos = []
+
+        def rango(a, b):
+            rangos.append((a, b))
+            return [dict(apunte(9, 1, wp="10"), fecha=M2.isoformat())]
+        with mock.patch.object(core, "entradas_dia", lambda iso: datos.get(iso, [])),              mock.patch.object(core, "entradas_rango", rango):
+            # el miercoles iba copiado pero ya no tiene apuntes: no cuenta
+            r = self.api.preparar_copia_dias([M.isoformat(), L.isoformat(), X.isoformat()], [V.isoformat()])
+        self.assertEqual(r["pares"], [{"origen": L.isoformat(), "destino": V.isoformat()},
+                                      {"origen": M.isoformat(), "destino": M2.isoformat()}])
+        self.assertEqual((r["n"], r["dias"]), (3, 2))
+        self.assertEqual(r["lineas"], ["Lunes 26/10 → Viernes 30/10: 2 apunte(s), 7h",
+                                       "Martes 27/10 → Martes 03/11: 1 apunte(s), 7h"])
+        self.assertEqual(rangos, [(M2.isoformat(), M2.isoformat())])   # el viernes ya estaba cargado
+        creados = []
+        ids = iter(range(100, 200))
+
+        def crear(iso, *a):
+            creados.append((iso, a[0]))
+            return next(ids)
+        with mock.patch.object(core, "crear_entrada", crear):
+            r = self.api.ejecutar_copia()
+        # la 10 ya estaba el martes siguiente: saltada
+        self.assertEqual(creados, [(V.isoformat(), "10"), (V.isoformat(), "20")])
+        self.assertEqual((r["creados"], r["saltados"], r["errores"], r["quedan"]), (2, 1, 0, 1))
+        with mock.patch.object(core, "eliminar_entrada") as m_del:
+            self.api.deshacer()
+        self.assertEqual(sorted(c.args[0] for c in m_del.call_args_list), [100, 101])
+
+    def test_pegar_varios_dias_en_los_marcados(self):
+        J, V = L + dt.timedelta(days=3), L + dt.timedelta(days=4)
+        datos = {L.isoformat(): [apunte(1, 4, wp="10")], M.isoformat(): [apunte(3, 7, wp="20")]}
+        self._semana(datos)
+        with mock.patch.object(core, "entradas_dia", lambda iso: datos.get(iso, [])):
+            pega = lambda dias: self.api.preparar_copia_dias([L.isoformat(), M.isoformat()], dias)   # noqa: E731
+            # tres marcados y dos copiados: se repite el patron
+            r = pega([V.isoformat(), X.isoformat(), J.isoformat()])
+            self.assertEqual([(x["origen"], x["destino"]) for x in r["pares"]],
+                             [(L.isoformat(), X.isoformat()), (M.isoformat(), J.isoformat()),
+                              (L.isoformat(), V.isoformat())])
+            # sobre si mismos: nada que pegar, y no queda preparada la de antes
+            self.assertIn("error", pega([L.isoformat(), M.isoformat()]))
+            self.assertIn("error", self.api.ejecutar_copia())
+            self.assertIn("error", pega([]))
+            self.assertIn("error", self.api.preparar_copia_dias([], [X.isoformat()]))
+        with mock.patch.object(core, "entradas_dia", lambda iso: []):
+            self.assertIn("vacio", self.api.preparar_copia_dias([L.isoformat(), M.isoformat()], [X.isoformat()]))
+
     def test_plantillas(self):
         self._semana({L.isoformat(): [apunte(1, 5, wp="10"), apunte(2, 2, wp="20")]})
         with mock.patch.object(core, "PLANTILLAS", []), \

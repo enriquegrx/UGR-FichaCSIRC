@@ -3435,6 +3435,23 @@ async function dlgCopiarDia(destino = null, origen = null) {
     hecho: (n) => `Copiados ${n} apuntes.`, nada: "No se copió nada: esas tareas ya estaban." });
 }
 
+// Varios dias copiados (Ctrl+C con varios marcados): el motor dice que dia va
+// a cual; aqui, UNA pregunta con todos los pares y un solo Deshacer.
+async function dlgPegarDias(origenes, destino) {
+  if (!destino.length) { await avisar("Falta día", "Marca al menos un día de destino."); return; }
+  estado("Preparando…");
+  const r = await llamar("preparar_copia_dias", origenes, destino);
+  if (r.error || r.vacio) { estado(""); await avisar("Pegar días", r.error || r.vacio); actualizarTotales(); return; }
+  if (!(await preguntar("Pegar días",
+      `¿Pegar ${r.n} apunte(s) en ${r.dias} día(s)?\n\n${r.lineas.map((l) => `  · ${l}`).join("\n")}`
+      + "\n\n(Se saltan las tareas que ya tengan apunte ese día.)"))) {
+    actualizarTotales(); return;
+  }
+  estado("Copiando…");
+  await informarLote(await llamar("ejecutar_copia"), {
+    hecho: (n) => `Copiados ${n} apuntes en ${r.dias} día(s).`, nada: "No se copió nada: esas tareas ya estaban." });
+}
+
 async function dlgCopiarSemana() {
   estado("Leyendo la semana anterior…");
   const r = await llamar("preparar_copia_semana", lunesReferencia());
@@ -4114,7 +4131,8 @@ function dlgAtajos() {
     ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…); otra vez, lo anterior (hasta 20)"],
     ["Ctrl+F", "Buscar en tus apuntes del año (comentario, tarea, actividad o fecha)"],
     ["Ctrl+N", "Crear una tarea nueva en ProyectosTIC (si tienes permiso en algún proyecto); modificar o duplicar una, en el botón «Tareas» de la barra"],
-    ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
+    ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados. Con varios días marcados se copian todos: "
+                        + "se pegan por orden en los que marques (si marcas más, se repiten) o, con uno solo marcado, a partir de él"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],
     ["Arrastrar", "Un apunte a otro día lo copia (con Mayús, lo mueve); una tarea habitual, la añade"],

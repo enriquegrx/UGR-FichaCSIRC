@@ -1806,6 +1806,146 @@
         await espera(300);
       }
     });
+    await prueba("copiar varios días y pegarlos: por orden, repitiendo el patrón, a partir de un día y en vista de mes", async () => {
+      const a = api(), ejecutar = a.ejecutar_copia;
+      const antes = { lunes: st.lunes, marcados: st.marcados, porta: st.portapapeles };
+      ok(st.vista === "semana" && !st.estad, "no está en la vista de semana");
+      // tres semanas vacias, lejos de lo que tocan las demas pruebas
+      const A = sumarDias(st.hoyLunes, 21), B = sumarDias(A, 7), C = sumarDias(A, 14);
+      const dA = (i) => sumarDias(A, i), dB = (i) => sumarDias(B, i);
+      const marcar = (...isos) => { st.marcados = new Set(isos); pintarMarcados(); };
+      const ir = async (l) => { st.lunes = l; st.marcados = new Set(); await cargarSemana(); ok(st.dias[0].iso === l, `no va a la semana del ${l}`); };
+      const tareasDe = (iso) => st.dias.find((d) => d.iso === iso).apuntes.map((x) => x.wp_id).sort().join("+");
+      const corta = (iso) => `${iso.slice(8)}/${iso.slice(5, 7)}`;
+      const modal = () => document.getElementById("modal");
+      const pegar = async () => {
+        teclado("v", { ctrlKey: true });
+        ok(await hasta(() => !modal().hidden), "al pegar no pregunta ni avisa");
+        return document.getElementById("modal-texto").textContent;
+      };
+      const aceptar = async (cond, msg) => {
+        document.getElementById("modal-si").click();
+        ok(await hasta(cond), msg);
+      };
+      let hechos = 0, copias = 0, ultimo = null;
+      a.ejecutar_copia = (...args) => { copias++; return ejecutar(...args); };
+      try {
+        await ir(A);
+        ok(st.dias.every((d) => !d.apuntes.length), "la semana de la prueba no está vacía");
+        // lunes: dos tareas; martes: una; miercoles: nada; jueves: una
+        for (const [iso, wp, h] of [[dA(0), 11765, "5"], [dA(0), 12065, "2"], [dA(1), 12063, "3"], [dA(3), 11765, "7"]]) {
+          await a.anadir([iso], wp, h, "", "Formación"); hechos++;
+        }
+        await cargarSemana();
+
+        // ---- copiar: solo los que tienen apuntes, por fecha
+        marcar(dA(2), dA(4));
+        teclado("c", { ctrlKey: true });
+        ok(st.portapapeles === antes.porta, "copia días sin apuntes");
+        ok(/Ninguno de los 2 días marcados tiene apuntes/.test($("estado").textContent), `no dice que no hay nada que copiar: ${$("estado").textContent}`);
+        marcar(dA(1), dA(2));
+        teclado("c", { ctrlKey: true });
+        ok(st.portapapeles?.iso === dA(1) && !st.portapapeles.isos, "con un solo día con apuntes no copia como siempre");
+        marcar(dA(3), dA(0), dA(2), dA(1));
+        const copiar = menuDe(0).map((x) => x.textContent);
+        ok(copiar[1] === "Copiar estos 4 días (Ctrl+C)", `el menú de un día marcado dice: ${copiar[1]}`);
+        cerrarMenu();
+        teclado("c", { ctrlKey: true });
+        ok(JSON.stringify(st.portapapeles.isos) === JSON.stringify([dA(0), dA(1), dA(3)]), `copiados: ${JSON.stringify(st.portapapeles)}`);
+        ok(new RegExp(`Copiados 3 días \\(lunes ${corta(dA(0))}, martes ${corta(dA(1))} y jueves ${corta(dA(3))}\\)`).test($("estado").textContent),
+           `la barra de estado dice: ${$("estado").textContent}`);
+        // el menu dice cuantos hay copiados, y si van a los marcados o desde ese dia
+        marcar();
+        ok(menuDe(2).some((x) => x.textContent === "Pegar desde aquí los 3 días copiados (Ctrl+V)"), "sin «Pegar desde aquí los 3 días»");
+        ok(menuDe(0).some((x) => x.textContent.startsWith("Copiar este día")), "sin marcar varios, no ofrece copiar este día");
+        marcar(dA(2), dA(4));
+        ok(menuDe(2).some((x) => x.textContent === "Pegar los 3 días copiados en los 2 marcados (Ctrl+V)"), "sin «Pegar… en los 2 marcados»");
+        cerrarMenu();
+        // sobre si mismos: se dice y no se escribe nada
+        marcar(dA(0), dA(1), dA(3));
+        ok(/sobre sí mismo/.test(await pegar()), "pegar los días sobre sí mismos no avisa");
+        await aceptar(() => modal().hidden, "el aviso no se cierra");
+        ok(copias === 0, "escribe al pegar sobre sí mismos");
+
+        // ---- lo copiado sobrevive al cambiar de semana; mas marcados que copiados: se repite
+        teclado("ArrowRight", { ctrlKey: true });
+        ok(await hasta(() => st.dias[0]?.iso === B), "Ctrl+→ no lleva a la semana siguiente");
+        ok(st.portapapeles?.isos?.length === 3, "al cambiar de semana se pierde lo copiado");
+        marcar(dB(4), dB(2), dB(0), dB(3), dB(1));
+        let texto = await pegar();
+        ok(/¿Pegar 7 apunte\(s\) en 5 día\(s\)\?/.test(texto), `la confirmación dice: ${texto}`);
+        ok(texto.split("→").length === 6, "la confirmación no trae un par por línea");
+        ok(texto.includes(`Lunes ${corta(dA(0))} → Lunes ${corta(dB(0))}: 2 apunte(s), 7h`)
+           && texto.includes(`Jueves ${corta(dA(3))} → Miércoles ${corta(dB(2))}: 1 apunte(s), 7h`)
+           && texto.includes(`Martes ${corta(dA(1))} → Viernes ${corta(dB(4))}: 1 apunte(s), 3h`), `no dice qué día va a cuál: ${texto}`);
+        await aceptar(() => st.dias[4]?.iso === dB(4) && st.dias[4].apuntes.length === 1, "no pegó");
+        ok(copias === 1, `una confirmación hizo ${copias} copias`);
+        ok([0, 1, 2, 3, 4].map((i) => tareasDe(dB(i))).join(" | ") === "11765+12065 | 12063 | 11765 | 11765+12065 | 12063",
+           `no repite el patrón: ${[0, 1, 2, 3, 4].map((i) => tareasDe(dB(i))).join(" | ")}`);
+        ok(/Copiados 7 apuntes en 5 día\(s\)/.test($("estado").textContent), `al acabar dice: ${$("estado").textContent}`);
+        // un solo «Deshacer» para todo
+        const des = [...$("aviso-deshacer").querySelectorAll("button")].filter((b) => b.textContent === "Deshacer");
+        ok(!$("aviso-deshacer").hidden && des.length === 1, "sin un «Deshacer» a la vista");
+        des[0].click();
+        ok(await hasta(() => !st.ocupado && st.dias[0]?.iso === B && st.dias.every((d) => !d.apuntes.length)), "un «Deshacer» no lo quita todo");
+
+        // ---- menos marcados que copiados: solo los primeros
+        marcar(dB(1), dB(0));
+        texto = await pegar();
+        ok(/¿Pegar 3 apunte\(s\) en 2 día\(s\)\?/.test(texto), `con dos marcados dice: ${texto}`);
+        await aceptar(() => st.dias[1]?.iso === dB(1) && st.dias[1].apuntes.length === 1, "no pegó en los dos primeros");
+        hechos++;
+        ok([0, 1, 2, 3, 4].map((i) => tareasDe(dB(i))).join(" | ") === "11765+12065 | 12063 |  |  | ", "pegó más de la cuenta");
+
+        // ---- un solo día marcado: a partir de él, saltando el festivo y el fin de semana
+        await a.accion_dia(dB(3), "no_laborable", "festivo");
+        await cargarSemana();
+        marcar(dB(2));
+        texto = await pegar();
+        ok(texto.includes(`→ Miércoles ${corta(dB(2))}`) && texto.includes(`→ Viernes ${corta(dB(4))}`)
+           && texto.includes(`Jueves ${corta(dA(3))} → Lunes ${corta(C)}`) && !texto.includes(`→ Jueves ${corta(dB(3))}`),
+           `no va a los laborables siguientes: ${texto}`);
+        await aceptar(() => st.dias[4]?.iso === dB(4) && st.dias[4].apuntes.length === 1, "no pegó a partir del miércoles");
+        hechos++;
+        ok(tareasDe(dB(2)) === "11765+12065" && tareasDe(dB(3)) === "", "pegó en el festivo o no pegó en el miércoles");
+        // lo que ya esta se salta, como al copiar un dia
+        marcar(dB(2));
+        await pegar();
+        await aceptar(() => /No se copió nada/.test($("estado").textContent), `repetir el pegado no dice que ya estaba: ${$("estado").textContent}`);
+        hechos++;
+        await ir(C);
+        ok(tareasDe(C) === "11765" && st.dias.slice(1).every((d) => !d.apuntes.length), "el tercer día no cayó en el lunes siguiente");
+
+        // ---- en vista de mes, origen y destino se marcan sin moverse
+        st.marcados = new Set([dA(0)]);
+        await cambiarVista("mes");
+        ok(st.vista === "mes" && st.dias.some((d) => d.iso === dA(4)), "el mes no trae la semana de la prueba");
+        marcar(dA(1), dA(0));
+        teclado("c", { ctrlKey: true });
+        ok(st.portapapeles?.isos?.join() === [dA(0), dA(1)].join(), "en vista de mes no copia los dos marcados");
+        marcar(dA(4), dA(2));
+        texto = await pegar();
+        ok(texto.includes(`→ Miércoles ${corta(dA(2))}`) && texto.includes(`→ Viernes ${corta(dA(4))}`), `en vista de mes dice: ${texto}`);
+        await aceptar(() => st.dias.find((d) => d.iso === dA(4))?.apuntes.length === 1, "en vista de mes no pegó");
+        hechos++;
+        ok(tareasDe(dA(2)) === "11765+12065" && tareasDe(dA(4)) === "12063", "en vista de mes no pega por orden");
+      } finally {
+        a.ejecutar_copia = ejecutar;
+        if (!modal().hidden) document.getElementById("modal-no").click();
+        cerrarMenu();
+        await a.accion_dia(dB(3), "quitar_no_laborable");
+        for (; hechos > 0; hechos--) ultimo = await a.deshacer();
+        st.marcados = new Set();
+        if (st.vista !== "semana") await cambiarVista("semana");
+        st.lunes = antes.lunes; st.marcados = antes.marcados; st.portapapeles = antes.porta;
+        await cargarSemana();
+        pintarMarcados();
+        if (ultimo) ponerDeshacer(ultimo.quedan, ultimo.siguiente);
+        ocultarAviso();
+        estado("");
+        await espera(300);
+      }
+    });
     await prueba("sin errores de JS por el camino", async () => {
       ok(!lineas.some((l) => l.startsWith("FALLO error") || l.startsWith("FALLO promesa")), "hubo errores");
     });

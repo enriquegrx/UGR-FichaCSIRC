@@ -455,6 +455,102 @@ pub async fn preparar_copia_dia(e: &Estado, cfg: &Cfg, dias: &[String], origen: 
     Ok(json!({"vacio": format!("No hay apuntes en los 14 días anteriores al {}.", primero.format("%d/%m"))}))
 }
 
+/// Que dia copiado va a cual (los dos, por fecha). Con varios destinos, el
+/// primero al primero y, si sobran destinos, se repite el patron; si faltan,
+/// solo los primeros. Con UN destino y varios copiados, a partir de ese dia en
+/// los laborables siguientes (ese dia cuenta siempre: lo ha elegido la persona).
+/// Un dia nunca va sobre si mismo: ese par se salta.
+pub(crate) fn emparejar_copia(origenes: &[String], destinos: &[String], laborable: impl Fn(NaiveDate) -> bool) -> Vec<(String, String)> {
+    let ordenar = |v: &[String]| { let mut o = v.to_vec(); o.sort(); o.dedup(); o };
+    let (o, mut d) = (ordenar(origenes), ordenar(destinos));
+    if o.is_empty() || d.is_empty() {
+        return Vec::new();
+    }
+    if d.len() == 1 && o.len() > 1 {
+        if let Ok(mut dia) = fecha(&d[0]) {
+            // con tope: un año entero de vacaciones no deja esto dando vueltas
+            for _ in 0..366 {
+                if d.len() >= o.len() {
+                    break;
+                }
+                dia += Duration::days(1);
+                if laborable(dia) {
+                    d.push(dia.to_string());
+                }
+            }
+        }
+    }
+    d.into_iter().enumerate().map(|(i, x)| (o[i % o.len()].clone(), x)).filter(|(a, b)| a != b).collect()
+}
+
+/// Pegar VARIOS dias copiados (Ctrl+C con varios marcados) en otros: lee lo
+/// que tienen ahora, los empareja y deja la copia preparada, con una linea
+/// por par para la confirmacion. Los copiados que ya no tienen apuntes no cuentan.
+pub async fn preparar_copia_dias(e: &Estado, cfg: &Cfg, origenes: &[String], destinos: &[String]) -> Result<Value, String> {
+    *candado(&e.copia) = None;      // si esta no sale, que no quede la de antes
+    if origenes.is_empty() {
+        return Ok(json!({"error": "No hay ningún día copiado."}));
+    }
+    if destinos.is_empty() {
+        return Ok(json!({"error": "Marca al menos un día de destino."}));
+    }
+    for i in origenes.iter().chain(destinos) {
+        fecha(i)?;
+    }
+    let (cli, uid) = cliente_y_uid(e, cfg).await?;
+    let (desde, hasta) = (origenes.iter().min().unwrap(), origenes.iter().max().unwrap());
+    let mut por_dia: HashMap<String, Vec<Apunte>> = HashMap::new();
+    for a in cli.entradas_rango(&uid, desde, hasta).await.map_err(|x| x.to_string())? {
+        if origenes.contains(&a.fecha) {
+            por_dia.entry(a.fecha.clone()).or_default().push(a);
+        }
+    }
+    if por_dia.is_empty() {
+        return Ok(json!({"vacio": "Los días copiados ya no tienen apuntes que copiar."}));
+    }
+    let reglas = Reglas::desde(cfg);
+    let con_inari = crate::inari::configurado(cfg);
+    let con: Vec<String> = por_dia.keys().cloned().collect();
+    let pares = emparejar_copia(&con, destinos, |d| {
+        d.weekday().num_days_from_monday() < 5 && reglas.objetivo_de(d) > 0.0
+            && !(con_inari && reglas.es_teletrabajo(&d.to_string()))
+    });
+    if pares.is_empty() {
+        return Ok(json!({"error": "Elige otros días: no se puede pegar un día sobre sí mismo."}));
+    }
+    // un destino que no esta cargado (la semana siguiente) se lee ahora: sin
+    // saber lo que ya tiene se duplicaria
+    let faltan: Vec<String> = {
+        let cache = candado(&e.cache);
+        pares.iter().map(|(_, d)| d.clone()).filter(|d| !cache.contains_key(d)).collect()
+    };
+    if !faltan.is_empty() {
+        let (d0, d1) = (faltan.iter().min().unwrap(), faltan.iter().max().unwrap());
+        let mut leidos: HashMap<String, Vec<Apunte>> = HashMap::new();
+        for a in cli.entradas_rango(&uid, d0, d1).await.map_err(|x| x.to_string())? {
+            leidos.entry(a.fecha.clone()).or_default().push(a);
+        }
+        let mut cache = candado(&e.cache);
+        for d in faltan {
+            let v = leidos.remove(&d).unwrap_or_default();
+            cache.insert(d, Some(v));
+        }
+    }
+    let mut total = 0;
+    let (mut lins, mut detalle, mut copia) = (Vec::new(), Vec::new(), Vec::new());
+    for (o, d) in pares {
+        let aps = por_dia.get(&o).cloned().unwrap_or_default();
+        let (od, dd) = (dia_largo(fecha(&o)?), dia_largo(fecha(&d)?));
+        total += aps.len();
+        lins.push(format!("{od} → {dd}: {} apunte(s), {}", aps.len(), fmt_horas(aps.iter().map(|a| a.horas).sum())));
+        detalle.push(json!({"origen": o, "destino": d}));
+        copia.push((d, aps));
+    }
+    let r = json!({"n": total, "dias": copia.len(), "lineas": lins, "pares": detalle});
+    *candado(&e.copia) = Some(("dia".into(), copia));
+    Ok(r)
+}
+
 pub async fn preparar_copia_semana(e: &Estado, cfg: &Cfg, lunes_iso: &str) -> Result<Value, String> {
     let lunes = fecha(lunes_iso)?;
     let (cli, uid) = cliente_y_uid(e, cfg).await?;
@@ -600,6 +696,41 @@ mod tests {
         let l = plantillas(&cfg);
         assert_eq!((l[0]["semana"].as_bool(), l[0]["n"].as_u64(), l[0]["total"].as_str()), (Some(true), Some(4), Some("24,5h")));
         assert_eq!((l[1]["semana"].as_bool(), l[1]["n"].as_u64()), (Some(false), Some(1)));
+    }
+
+    /// Los mismos casos que test_emparejar_copia (Python)
+    #[test]
+    fn emparejar_copia_de_varios_dias() {
+        let v = |x: &[&str]| x.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+        let p = |x: &[(&str, &str)]| x.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>();
+        // noviembre de 2026: el 2 es lunes; el 13 (viernes) es festivo
+        let lab = |d: NaiveDate| d.weekday().num_days_from_monday() < 5 && d.to_string() != "2026-11-13";
+        let tres = v(&["2026-11-04", "2026-11-02", "2026-11-03"]);
+        // por orden de fecha, se marque como se marque
+        assert_eq!(emparejar_copia(&tres, &v(&["2026-11-11", "2026-11-09", "2026-11-10"]), lab),
+                   p(&[("2026-11-02", "2026-11-09"), ("2026-11-03", "2026-11-10"), ("2026-11-04", "2026-11-11")]));
+        // mas marcados que copiados: se repite el patron (y lo marcado no se salta aunque sea festivo)
+        assert_eq!(emparejar_copia(&v(&["2026-11-02", "2026-11-03"]), &v(&["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13"]), lab),
+                   p(&[("2026-11-02", "2026-11-09"), ("2026-11-03", "2026-11-10"), ("2026-11-02", "2026-11-11"),
+                       ("2026-11-03", "2026-11-12"), ("2026-11-02", "2026-11-13")]));
+        // menos marcados que copiados: solo los primeros
+        assert_eq!(emparejar_copia(&tres, &v(&["2026-11-10", "2026-11-09"]), lab),
+                   p(&[("2026-11-02", "2026-11-09"), ("2026-11-03", "2026-11-10")]));
+        // un solo destino: a partir de el, saltando el festivo y el fin de semana
+        assert_eq!(emparejar_copia(&tres, &v(&["2026-11-12"]), lab),
+                   p(&[("2026-11-02", "2026-11-12"), ("2026-11-03", "2026-11-16"), ("2026-11-04", "2026-11-17")]));
+        // nunca sobre si mismo: ese par se salta y los demas siguen en su sitio
+        assert_eq!(emparejar_copia(&tres, &v(&["2026-11-02", "2026-11-03", "2026-11-05"]), lab),
+                   p(&[("2026-11-04", "2026-11-05")]));
+        assert_eq!(emparejar_copia(&tres, &v(&["2026-11-03"]), lab),
+                   p(&[("2026-11-02", "2026-11-03"), ("2026-11-03", "2026-11-04"), ("2026-11-04", "2026-11-05")]));
+        assert!(emparejar_copia(&tres, &v(&["2026-11-02"]), lab).is_empty());
+        // un solo dia copiado: a todos los marcados, como siempre
+        assert_eq!(emparejar_copia(&v(&["2026-11-02"]), &v(&["2026-11-02", "2026-11-03", "2026-11-04"]), lab),
+                   p(&[("2026-11-02", "2026-11-03"), ("2026-11-02", "2026-11-04")]));
+        assert!(emparejar_copia(&tres, &[], lab).is_empty());
+        // sin ningun laborable por delante no se queda dando vueltas
+        assert_eq!(emparejar_copia(&tres, &v(&["2026-11-12"]), |_| false), p(&[("2026-11-02", "2026-11-12")]));
     }
 
     #[test]

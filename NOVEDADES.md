@@ -67,6 +67,23 @@ instalada aparece en el pie de la ventana.
   en ProyectosTIC no cambia nada.
 - **Botón derecho sobre un día**: *Copiar día anterior*, *Copiar este día* y
   *Pegar aquí* van juntos, arriba del todo.
+- 📋 **Copiar varios días a la vez**: marca los días y pulsa **Ctrl+C** (o
+  botón derecho sobre uno de ellos → *Copiar estos N días*). Se copian por
+  orden de fecha los que tienen apuntes. Al pegar (**Ctrl+V** o botón derecho →
+  *Pegar*):
+  - con **varios días marcados**, el primero copiado va al primero marcado, el
+    segundo al segundo… Si marcas más días de los copiados, se repiten (3
+    copiados y 6 marcados: dos veces); si marcas menos, se pegan solo los
+    primeros;
+  - con **un solo día** marcado, se pegan a partir de él en los días
+    laborables siguientes (salta fines de semana, festivos, vacaciones y días
+    no laborables, y sigue en la semana siguiente si hace falta).
+
+  Antes de escribir nada te enseña qué día va a cuál y cuántos apuntes son, y
+  todo se quita con un solo **Deshacer**. Lo copiado sigue ahí al cambiar de
+  semana (copias esta, **Ctrl+→**, marcas y pegas), y en la vista de mes se
+  marca origen y destino sin moverse. Copiar un solo día funciona como siempre
+  (Python y Rust).
 - **Añadir apunte** ya no vacía Horas y Comentario si al final no se crea
   nada (ProyectosTIC lo rechaza, se cae la conexión o dices que no a repetir
   la tarea): lo escrito se queda para volver a intentarlo.

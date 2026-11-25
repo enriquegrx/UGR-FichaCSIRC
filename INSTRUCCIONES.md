@@ -223,6 +223,22 @@ La app recuerda la vista que dejaste.
 - 📋 **Ctrl+C** sobre un día y **Ctrl+V** en los marcados: copia ese día tal
   cual (también con botón derecho → *Copiar este día* / *Pegar aquí*, que van
   arriba del todo, junto a *Copiar día anterior*).
+- 📋 **Varios días de una vez**: marca los días y pulsa **Ctrl+C** (o botón
+  derecho sobre uno de los marcados → *Copiar estos N días*). Se copian, por
+  orden de fecha, los que tienen apuntes; la barra de abajo te dice cuántos.
+  Luego:
+  - marca **varios días** y pulsa **Ctrl+V**: el primero copiado va al primero
+    marcado, el segundo al segundo… Con más días marcados que copiados, se
+    repiten; con menos, se pegan solo los primeros;
+  - o marca **un solo día** (o botón derecho sobre él → *Pegar desde aquí*):
+    se pegan a partir de ese día en los días laborables siguientes, saltando
+    fines de semana, festivos, vacaciones y días no laborables.
+
+  Antes de escribir te pregunta, enseñando qué día va a cuál; un día nunca se
+  pega sobre sí mismo y las tareas que ya estén en el día de destino se
+  saltan. Un solo **Deshacer** lo quita todo. Lo copiado se conserva al
+  cambiar de semana, así que puedes copiar esta semana, pasar a la siguiente
+  con **Ctrl+→**, marcar y pegar; en la vista de mes lo haces sin moverte.
 - ↩️ Después de borrar, editar, mover o añadir, arriba, en el centro de la
   caja *Días*, sale el botón **↶ Deshacer cambios realizados** (con cuántos
   quedan), y también un aviso abajo; o pulsa **Ctrl+Z**. **Otra vez** deshace

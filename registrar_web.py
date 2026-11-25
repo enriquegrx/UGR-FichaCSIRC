@@ -242,6 +242,27 @@ def objetivo_dia(d, apuntes, acts_permiso=None):
     return obj
 
 
+def emparejar_copia(origenes, destinos, laborable):
+    """Que dia copiado va a cual (los dos, por fecha): [(origen, destino)].
+    Con varios destinos, el primero al primero y, si sobran destinos, se repite
+    el patron; si faltan, solo los primeros. Con UN destino y varios copiados,
+    a partir de ese dia en los laborables siguientes (ese dia cuenta siempre:
+    lo ha elegido la persona). Un dia nunca va sobre si mismo: ese par se salta."""
+    o, d = sorted(set(origenes)), sorted(set(destinos))
+    if not o or not d:
+        return []
+    if len(d) == 1 and len(o) > 1:
+        dia = dt.date.fromisoformat(d[0])
+        # con tope: un año entero de vacaciones no deja esto dando vueltas
+        for _ in range(366):
+            if len(d) >= len(o):
+                break
+            dia += dt.timedelta(days=1)
+            if laborable(dia):
+                d.append(dia.isoformat())
+    return [(o[i % len(o)], x) for i, x in enumerate(d) if o[i % len(o)] != x]
+
+
 def estado_dia(d, apuntes, hoy=None, acts_permiso=None):
     """Lo que necesita la tarjeta de un dia. Misma logica que
     registrar_gui._pintar_semana, pero devuelta como datos: el HTML no decide
@@ -2158,6 +2179,52 @@ class Api:
             d -= dt.timedelta(days=1)
         return {"vacio": f"No hay apuntes en los 14 días anteriores al "
                          f"{primero.strftime('%d/%m')}."}
+
+    def preparar_copia_dias(self, origenes, dias_iso):
+        """Pegar VARIOS dias copiados (Ctrl+C con varios marcados) en otros: lee
+        lo que tienen ahora, los empareja (emparejar_copia) y deja la copia
+        preparada, con una linea por par para la confirmacion. Los copiados
+        que ya no tienen apuntes no cuentan."""
+        self._copia = None        # si esta no sale, que no quede la de antes
+        if not origenes:
+            return {"error": "No hay ningún día copiado."}
+        if not dias_iso:
+            return {"error": "Marca al menos un día de destino."}
+        por_dia = {}
+        for o in sorted(set(origenes)):
+            apuntes = [a for a in core.entradas_dia(o) if a.get("destino", "op") == "op"]
+            if apuntes:
+                por_dia[o] = apuntes
+        if not por_dia:
+            return {"vacio": "Los días copiados ya no tienen apuntes que copiar."}
+        con_inari = destinos.configurado()
+        pares = emparejar_copia(
+            por_dia, dias_iso,
+            lambda d: (d.weekday() < 5 and core.objetivo_de(d) > 0
+                       and not (con_inari and core.es_teletrabajo(d.isoformat()))))
+        if not pares:
+            return {"error": "Elige otros días: no se puede pegar un día sobre sí mismo."}
+        # un destino que no esta cargado (la semana siguiente) se lee ahora:
+        # sin saber lo que ya tiene se duplicaria
+        faltan = sorted({d for _, d in pares if d not in self._cache})
+        if faltan:
+            try:
+                leidos = {}
+                for a in core.entradas_rango(faltan[0], faltan[-1]):
+                    leidos.setdefault(a["fecha"], []).append(a)
+            except Exception as e:
+                return {"error": diagnostico_conexion(e)["titulo"]}
+            for d in faltan:
+                self._cache[d] = [dict(a, destino="op") for a in leidos.get(d, [])]
+
+        def largo(iso):
+            f = dt.date.fromisoformat(iso)
+            return f"{(core.DIAS_ES + ['Sábado', 'Domingo'])[f.weekday()]} {f.strftime('%d/%m')}"
+        self._copia = ("dia", [(d, por_dia[o]) for o, d in pares])
+        return {"n": sum(len(por_dia[o]) for o, _ in pares), "dias": len(pares),
+                "lineas": [f"{largo(o)} → {largo(d)}: {len(por_dia[o])} apunte(s), "
+                           f"{_horas(sum(a['horas'] for a in por_dia[o]))}" for o, d in pares],
+                "pares": [{"origen": o, "destino": d} for o, d in pares]}
 
     def preparar_copia_semana(self, lunes_iso):
         lunes = dt.date.fromisoformat(lunes_iso)

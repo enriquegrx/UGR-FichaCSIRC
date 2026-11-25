@@ -620,15 +620,43 @@
       return espera({ origen: origen || "Lunes", n: src.length, dias: dest.length,
         lineas: src.map((a) => `${fmt(a.horas)}  ${a.tarea}`) });
     },
+    // varios dias copiados: el mismo emparejado que el motor (por fecha, repitiendo
+    // el patron; con un solo destino, a partir de el en los laborables siguientes)
+    preparar_copia_dias: (origenes, destinos) => {
+      copia = null;
+      const o = [...new Set(origenes)].sort().filter((i) => (apuntes[i] || []).length);
+      const ds = [...new Set(destinos)].sort();
+      if (!o.length) return espera({ vacio: "Los días copiados ya no tienen apuntes que copiar." });
+      if (!ds.length) return espera({ error: "Marca al menos un día de destino." });
+      if (ds.length === 1 && o.length > 1) {
+        const x = new Date(`${ds[0]}T12:00:00`);
+        for (let k = 0; k < 366 && ds.length < o.length; k++) {
+          x.setDate(x.getDate() + 1);
+          if (x.getDay() !== 0 && x.getDay() !== 6 && !marcas.nolab[iso(x)]) ds.push(iso(x));
+        }
+      }
+      const pares = ds.map((x, k) => [o[k % o.length], x]).filter(([a, b]) => a !== b);
+      if (!pares.length) return espera({ error: "Elige otros días: no se puede pegar un día sobre sí mismo." });
+      const largo = (i) => `${["Domingo", ...DIAS, "Sábado"][new Date(`${i}T12:00:00`).getDay()]} ${i.slice(8)}/${i.slice(5, 7)}`;
+      copia = pares.map(([a, b]) => [b, apuntes[a].map((x) => ({ ...x }))]);
+      return espera({ n: copia.reduce((t, [, ap]) => t + ap.length, 0), dias: pares.length,
+        lineas: pares.map(([a, b]) => `${largo(a)} → ${largo(b)}: ${apuntes[a].length} apunte(s), ${fmt(apuntes[a].reduce((t, x) => t + x.horas, 0))}`),
+        pares: pares.map(([a, b]) => ({ origen: a, destino: b })) });
+    },
     preparar_copia_semana: () => espera({ vacio: "La semana anterior no tiene apuntes (demo)." }),
     ejecutar_copia: () => {
-      let creados = 0;
-      for (const [i, ap] of copia || []) for (const a of ap) {
-        if ((apuntes[i] || []).some((x) => x.wp_id === a.wp_id)) continue;
-        (apuntes[i] = apuntes[i] || []).push({ ...a, id: siguiente++ });
-        creados++;
+      let creados = 0, saltados = 0;
+      // como el motor: lo que ya habia ese dia ANTES de empezar es lo que se salta
+      for (const [i, ap] of copia || []) {
+        const habia = (apuntes[i] || []).map((x) => x.wp_id);
+        for (const a of ap) {
+          if (habia.includes(a.wp_id)) { saltados++; continue; }
+          (apuntes[i] = apuntes[i] || []).push({ ...a, id: siguiente++ });
+          creados++;
+        }
       }
-      return espera({ creados, saltados: 0, errores: 0, ultimo: "" });
+      copia = null;
+      return espera({ creados, saltados, errores: 0, ultimo: "" });
     },
     plantillas: () => espera(plantillas.map((p) => {
       const aps = p.semana ? p.dias.flat() : p.apuntes;

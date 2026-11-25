@@ -303,6 +303,11 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             let dias: Vec<String> = arg_lista(&args, 0).iter().filter_map(|d| d.as_str().map(String::from)).collect();
             herr::preparar_copia_dia(e, &cfg, &dias, &arg(&args, 1)).await
         }
+        "preparar_copia_dias" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let lista = |i| arg_lista(&args, i).iter().filter_map(|d| d.as_str().map(String::from)).collect::<Vec<String>>();
+            herr::preparar_copia_dias(e, &cfg, &lista(0), &lista(1)).await
+        }
         "preparar_copia_semana" => {
             e.exigir_desbloqueo(&cfg)?;
             herr::preparar_copia_semana(e, &cfg, &arg(&args, 0)).await

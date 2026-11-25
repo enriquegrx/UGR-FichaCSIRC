@@ -31,7 +31,7 @@ const st = {
   comHabitual: "",
   ocupado: false,
   habituales: null,     // tareas habituales (las del "+" de cada dia)
-  portapapeles: null,   // {iso, texto}: dia copiado con Ctrl+C
+  portapapeles: null,   // lo copiado con Ctrl+C: un dia {iso, texto} o varios {isos, texto}
   expandidos: new Set(),// dias de la semana con "+N mas" desplegado
   arrastre: null,       // lo que se esta arrastrando (apunte o tarea habitual)
   paneles: {},          // caja -> "abierto" | "min" | "oculto" (menu Ver)
@@ -946,8 +946,10 @@ async function menuAnadirRapido(d, x, y) {
                            + (d.falta > 0.001 ? ` · faltan ${fmtHoras(d.falta)}h` : "") },
                  // lo mas repetido, lo primero (como en el botón derecho)
                  { texto: "⧉ Copiar día anterior", clase: "destacado", accion: () => dlgCopiarDia([d.iso]) }];
-  if (st.portapapeles && st.portapapeles.iso !== d.iso) {
-    items.push({ texto: `Pegar lo del ${st.portapapeles.texto.toLowerCase()}`, accion: () => pegarDia(d.iso) });
+  if (sePuedePegarEn(d)) {
+    const n = diasCopiados().length;
+    items.push({ texto: n > 1 ? `Pegar desde aquí los ${n} días copiados` : `Pegar lo del ${st.portapapeles.texto.toLowerCase()}`,
+                 accion: () => pegarDia(d.iso) });
   }
   items.push("-");
   for (const f of filas) {
@@ -1097,6 +1099,8 @@ async function soltarEnDia(d, x, mover) {
 
 // Ctrl+C sobre un dia (con el foco, o el unico marcado) y Ctrl+V sobre los
 // marcados (o el que tiene el foco). Tambien desde el boton derecho.
+// Con varios marcados se copian todos, por fecha: al pegar, el primero va al
+// primer marcado, el segundo al segundo... (el emparejado lo hace el motor).
 function diaConFoco() {
   const n = document.activeElement?.closest?.("[data-iso]");
   return n ? st.dias.find((d) => d.iso === n.dataset.iso) : null;
@@ -1109,9 +1113,35 @@ function copiarDia(d) {
   estado(`${st.portapapeles.texto} copiado: marca los días de destino y pulsa Ctrl+V (o botón derecho → Pegar).`);
 }
 
+// Los dias copiados, por fecha (uno o varios)
+function diasCopiados() {
+  const p = st.portapapeles;
+  return p ? (p.isos || [p.iso]) : [];
+}
+
+// Un dia solo no se pega sobre si mismo; varios si pueden empezar en uno de ellos
+function sePuedePegarEn(d) {
+  const c = diasCopiados();
+  return c.length > 1 || (c.length === 1 && c[0] !== d.iso);
+}
+
+// Varios marcados: solo los que tienen apuntes. Si queda uno, como copiar ese dia.
+function copiarDias(ds) {
+  const con = ds.filter((d) => d.apuntes.length).sort((a, b) => a.iso.localeCompare(b.iso));
+  if (!con.length) { estado(`Ninguno de los ${ds.length} días marcados tiene apuntes que copiar.`); return; }
+  if (con.length === 1) { copiarDia(con[0]); return; }
+  const nombres = con.map((d) => `${d.nombre.toLowerCase()} ${d.fecha}`);
+  st.portapapeles = { isos: con.map((d) => d.iso),
+                      texto: `${con.length} días (${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]})` };
+  estado(`Copiados ${st.portapapeles.texto}: marca los días de destino y pulsa Ctrl+V (o botón derecho → Pegar). `
+    + "Con un solo día marcado se pegan a partir de él, en los días laborables siguientes.");
+}
+
 function pegarDia(destino = null) {
   if (!st.portapapeles) return;
   const dias = destino ? [destino] : [...st.marcados];
+  const copiados = diasCopiados();
+  if (copiados.length > 1) return dlgPegarDias(copiados, dias);
   return dlgCopiarDia(dias.length ? dias : null, st.portapapeles.iso);
 }
 
@@ -1367,14 +1397,28 @@ function menuDia(x, y, d) {
   // Lo mas repetido del dia a dia, lo primero y destacado (en negrita, no en
   // rojo: el rojo en la app es borrar). Copiar y pegar, juntos: el dia anterior,
   // este dia y, si hay algo copiado, pegarlo aqui.
+  const marcados = diasMarcados();
+  const varios = marcados.length > 1 && st.marcados.has(d.iso);
   const items = [{ titulo: `${d.nombre} ${d.fecha}` },
                  { texto: "⧉ Copiar día anterior", clase: "destacado",
                    accion: () => dlgCopiarDia([d.iso]) },
-                 { texto: "Copiar este día (Ctrl+C)", desactivado: !d.apuntes.length,
-                   accion: () => copiarDia(d) }];
-  if (st.portapapeles && st.portapapeles.iso !== d.iso) {
-    items.push({ texto: `Pegar aquí lo del ${st.portapapeles.texto.toLowerCase()} (Ctrl+V)`,
-                 accion: () => pegarDia(d.iso) });
+                 // sobre uno de varios marcados, copiar (y pegar varios) va con todos ellos
+                 varios
+                   ? { texto: `Copiar estos ${marcados.length} días (Ctrl+C)`,
+                       desactivado: !marcados.some((x) => x.apuntes.length), accion: () => copiarDias(marcados) }
+                   : { texto: "Copiar este día (Ctrl+C)", desactivado: !d.apuntes.length,
+                       accion: () => copiarDia(d) }];
+  if (sePuedePegarEn(d)) {
+    const n = diasCopiados().length;
+    if (n === 1) {
+      items.push({ texto: `Pegar aquí lo del ${st.portapapeles.texto.toLowerCase()} (Ctrl+V)`,
+                   accion: () => pegarDia(d.iso) });
+    } else if (varios) {
+      items.push({ texto: `Pegar los ${n} días copiados en los ${marcados.length} marcados (Ctrl+V)`,
+                   accion: () => pegarDia() });
+    } else {
+      items.push({ texto: `Pegar desde aquí los ${n} días copiados (Ctrl+V)`, accion: () => pegarDia(d.iso) });
+    }
   }
   items.push("-",
     { texto: "✎ Editar día…", desactivado: d.estado === "error", accion: () => dlgEditarDia(d) },
@@ -2033,7 +2077,9 @@ document.addEventListener("keydown", (e) => {
   else if (e.ctrlKey && e.key === "ArrowRight") { e.preventDefault(); navegar(1); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") { e.preventDefault(); deshacer(); }
   else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-    const d = diaConFoco() || (st.marcados.size === 1 ? diasMarcados()[0] : null);
+    const marcados = diasMarcados();
+    if (marcados.length > 1) { e.preventDefault(); copiarDias(marcados); return; }
+    const d = diaConFoco() || (st.marcados.size === 1 ? marcados[0] : null);
     if (d) { e.preventDefault(); copiarDia(d); }
   } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v" && st.portapapeles) {
     e.preventDefault();
