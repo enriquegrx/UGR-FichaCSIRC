@@ -242,6 +242,24 @@ def objetivo_dia(d, apuntes, acts_permiso=None):
     return obj
 
 
+def ordenar_favoritas(favoritas, ids):
+    """Las favoritas en el orden de 'ids' (numeros de tarea). Las que 'ids' no
+    nombra se quedan detras, como estaban; lo que no es favorita o viene
+    repetido no cuenta. Ni añade ni quita ninguna."""
+    por_id = {}
+    for f in favoritas:
+        por_id.setdefault(str(f["id"]), f)
+    if not isinstance(ids, (list, tuple)):
+        ids = []
+    vistas, out = set(), []
+    for i in ids:
+        k = str(i).strip().lstrip("#")
+        if k in por_id and k not in vistas:
+            vistas.add(k)
+            out.append(por_id[k])
+    return out + [f for f in favoritas if str(f["id"]) not in vistas]
+
+
 def emparejar_copia(origenes, destinos, laborable):
     """Que dia copiado va a cual (los dos, por fecha): [(origen, destino)].
     Con varios destinos, el primero al primero y, si sobran destinos, se repite
@@ -708,6 +726,7 @@ class Api:
             # Ultima vista elegida (semana/mes): se abre como se dejo.
             "vista": self.vista(),
             "paneles": self.paneles(),
+            "pestana_tareas": self.pestana_tareas(),
         }
 
     def _recuperada(self):
@@ -738,14 +757,17 @@ class Api:
     def tareas(self):
         """Tareas del desplegable: las buscadas en la sesion y las favoritas
         (marcadas, para la estrella del buscador)."""
-        favs = {int(f["id"]) for f in core.FAVORITOS}
+        # 'orden': el puesto de cada favorita en la lista guardada (las buscadas
+        # van delante y la descolocarian); None si no es favorita
+        orden = {int(f["id"]): i for i, f in enumerate(core.FAVORITOS)}
         vistas, out = set(), []
         for w in self._extras + list(core.FAVORITOS):
             if int(w["id"]) in vistas:
                 continue
             vistas.add(int(w["id"]))
             out.append({"id": int(w["id"]), "nombre": w["nombre"],
-                        "texto": f"{w['id']} - {w['nombre']}", "favorita": int(w["id"]) in favs})
+                        "texto": f"{w['id']} - {w['nombre']}", "favorita": int(w["id"]) in orden,
+                        "orden": orden.get(int(w["id"]))})
         return out
 
     def favorita(self, wp_id, nombre, si):
@@ -757,6 +779,15 @@ class Api:
             # sigue en el desplegable de esta sesion, como una buscada
             if all(int(e["id"]) != int(wp_id) for e in self._extras):
                 self._extras.insert(0, {"id": int(wp_id), "nombre": nombre})
+        return {"tareas": self.tareas()}
+
+    def favoritas_ordenar(self, ids):
+        """El orden de las favoritas (Mis favoritas): el de la pestaña y el del
+        campo Tarea. Ni añade ni quita: solo las cambia de sitio."""
+        nuevo = ordenar_favoritas(core.FAVORITOS, ids)
+        if nuevo != list(core.FAVORITOS):          # el mismo orden: nada que escribir
+            core.FAVORITOS[:] = nuevo
+            core.guardar_config_valor("favoritos", core.FAVORITOS)
         return {"tareas": self.tareas()}
 
     # ---- semana ----
@@ -1039,6 +1070,22 @@ class Api:
         except Exception:
             pass      # comodidad: nunca debe romper nada
         return self.paneles()
+
+    # La pestaña abierta en la caja de habituales y favoritas: se abre como se dejo.
+    PESTANAS_TAREAS = ("habituales", "favoritas")
+
+    def pestana_tareas(self):
+        p = core.config_valor("pestana_tareas")
+        return p if p in self.PESTANAS_TAREAS else "habituales"
+
+    def guardar_pestana_tareas(self, cual):
+        if cual not in self.PESTANAS_TAREAS:
+            return {"error": "Pestaña desconocida."}
+        try:
+            core.guardar_config_valor("pestana_tareas", cual)
+        except Exception:
+            pass      # comodidad: nunca debe romper nada
+        return {"ok": True}
 
     TEMAS = ("sistema", "claro", "oscuro")
 

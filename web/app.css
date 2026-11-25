@@ -164,7 +164,7 @@ h2 { margin: 0 0 8px; font-size: 15px; }
 
 /* ---------- cajas: minimizar / cerrar (menu Ver) ---------- */
 .controles-panel { display: flex; gap: 2px; margin-left: 4px; }
-#habituales-periodo { margin-left: auto; }
+#habituales-periodo { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .b-panel { border: 0; background: none; color: var(--tenue); padding: 0 7px; height: 24px;
            font-size: 16px; line-height: 1; border-radius: 5px; }
 .b-panel:hover { background: var(--fondo); color: var(--texto); }
@@ -644,7 +644,7 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
             padding: 7px 12px 2px; }
 /* «Tus proyectos» lleva «Actualizar» a la derecha */
 .bt-grupo.bt-grupo-accion { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-.bt-grupo .bt-actualizar, .bt-grupo .bt-actualizando { font-size: 12px; text-transform: none; letter-spacing: 0; padding: 0; }
+.bt-grupo .bt-actualizar, .bt-grupo .bt-actualizando, .bt-grupo .bt-gestionar { font-size: 12px; text-transform: none; letter-spacing: 0; padding: 0; }
 .bt-item { display: flex; gap: 8px; align-items: flex-start; padding: 5px 10px 5px 6px; cursor: pointer; }
 .bt-item:hover, .bt-item.activo { background: var(--seleccion); }
 .bt-fav { border: 0; background: none; padding: 0 3px; font-size: 16px; line-height: 1.15; color: var(--tenue); }
@@ -727,6 +727,39 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .hab-sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hab-mas { font-size: 12px; padding: 4px 10px; white-space: nowrap; }
 
+/* ---------- pestañas de la caja: Habituales | Favoritas ---------- */
+/* el titulo de la caja lo dicen las pestañas: el h2 queda para los lectores de pantalla */
+.solo-lectores { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.pestanas { display: flex; gap: 4px; flex: none; }
+.pestanas [role="tab"] { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+                         padding: 1px 6px 3px; font-size: 15px; font-weight: 600; color: var(--tenue); white-space: nowrap; }
+.pestanas [role="tab"]:hover:not(:disabled) { background: none; color: var(--texto); }
+.pestanas [role="tab"][aria-selected="true"] { color: var(--texto); border-bottom-color: var(--primario); }
+#b-gestionar-fav { margin-left: auto; padding: 0; font-size: 13px; white-space: nowrap; }
+/* las favoritas pueden ser muchas: desplazan dentro, sin empujar la ventana */
+#lista-favoritas { max-height: 236px; overflow-y: auto; }
+.fav-fila { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; align-items: center;
+            padding: 3px 0; border-top: 1px solid var(--borde-suave); }
+.fav-info { display: flex; gap: 8px; align-items: baseline; min-width: 0; border: 0; background: none;
+            padding: 4px; text-align: left; border-radius: 5px; font-size: 13px; }
+.fav-info:hover { background: var(--fondo); }
+.fav-id { flex: none; color: var(--tenue); font-variant-numeric: tabular-nums; }
+.fav-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-estrella { cursor: pointer; }
+.fav-mas { font-size: 14px; padding: 2px 10px; white-space: nowrap; }
+/* «Mis favoritas»: todas, con subir, bajar y quitar */
+.fav-lista { max-height: 340px; overflow: auto; margin: 10px 0 6px; border: 1px solid var(--borde); border-radius: 8px; }
+.fav-lista > .nota { margin: 8px 12px; }
+.fav-item { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-size: 13px;
+            border-bottom: 1px solid var(--borde-suave); }
+.fav-item:last-child { border-bottom: 0; }
+.fav-item:focus-within { background: var(--seleccion); }
+.fav-puesto { flex: none; min-width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.fav-texto { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: baseline; }
+.fav-b { flex: none; padding: 2px 9px; line-height: 1.3; }
+.fav-b.fav-quitar { color: var(--peligro); }
+.fav-aviso { min-height: 1.4em; }
+
 /* ---------- pantallas bajas (portatiles, escalado de Windows al 125-150 %) ----------
    Se recuperan ~100 px: cabecera y logo mas pequenos, menos margenes y sin la
    leyenda de colores (los colores se explican solos tras el primer dia). */
@@ -750,6 +783,7 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
   .zona-trabajo input, .zona-trabajo select { padding-top: 4px; padding-bottom: 4px; }
   /* solo las 3 habituales principales: las que de verdad se usan */
   #lista-habituales .hab-fila:nth-child(n+4) { display: none; }
+  #lista-favoritas { max-height: 132px; }
 }
 
 /* ================================================================ rediseño 4.0

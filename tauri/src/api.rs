@@ -669,6 +669,20 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             favorita(e, &cfg, id, &arg(&args, 1), si)?;
             Ok(json!({"tareas": tareas(e, &config::leer()?)}))
         }
+        // El orden de las favoritas (Mis favoritas): el de la pestaña y el del campo Tarea.
+        "favoritas_ordenar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let ids: Vec<i64> = arg_lista(&args, 0).iter().filter_map(id_entero).collect();
+            let antes = cfg.lista("favoritos");
+            let nuevo = ordenar_favoritas(&antes, &ids);
+            // el mismo orden: nada que escribir
+            if nuevo != antes {
+                let mut m = Map::new();
+                m.insert("favoritos".into(), Value::Array(nuevo));
+                config::guardar_valores(m)?;
+            }
+            Ok(json!({"tareas": tareas(e, &config::leer()?)}))
+        }
         "elegir_tareas" => {
             e.exigir_desbloqueo(&cfg)?;
             let a_favoritas = args.get(1).and_then(Value::as_bool).unwrap_or(false);
@@ -731,6 +745,15 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             let v = arg(&args, 0);
             if v != "semana" && v != "mes" { return Ok(json!({"error": "Vista desconocida."})) }
             guardar("vista_inicio", Value::String(v))
+        }
+        // la pestaña abierta en la caja de habituales y favoritas: se abre como se dejo
+        "pestana_tareas" => Ok(Value::String(pestana_tareas(&cfg))),
+        "guardar_pestana_tareas" => {
+            let p = arg(&args, 0);
+            if !PESTANAS_TAREAS.contains(&p.as_str()) { return Ok(json!({"error": "Pestaña desconocida."})) }
+            // comodidad: nunca debe romper nada
+            let _ = guardar("pestana_tareas", Value::String(p));
+            Ok(json!({"ok": true}))
         }
         "guardar_tema" => {
             let t = arg(&args, 0);
@@ -854,6 +877,13 @@ fn tema(cfg: &Cfg) -> String {
     if TEMAS.contains(&t.as_str()) { t } else { "sistema".into() }
 }
 
+const PESTANAS_TAREAS: [&str; 2] = ["habituales", "favoritas"];
+
+fn pestana_tareas(cfg: &Cfg) -> String {
+    let p = cfg.texto("pestana_tareas");
+    if PESTANAS_TAREAS.contains(&p.as_str()) { p } else { "habituales".into() }
+}
+
 fn estados_panel(panel: &str) -> &'static [&'static str] {
     match panel {
         "form" | "habituales" | "apuntes" => &["abierto", "min", "oculto"],
@@ -891,16 +921,37 @@ fn ids_favoritas(cfg: &Cfg) -> std::collections::HashSet<i64> {
     cfg.lista("favoritos").iter().filter_map(|f| id_entero(&f["id"])).collect()
 }
 
+/// Las favoritas en el orden de 'ids' (numeros de tarea). Las que 'ids' no
+/// nombra se quedan detras, como estaban; lo que no es favorita o viene
+/// repetido no cuenta. Ni añade ni quita ninguna.
+fn ordenar_favoritas(favs: &[Value], ids: &[i64]) -> Vec<Value> {
+    let mut vistas: Vec<i64> = Vec::new();
+    let mut out: Vec<Value> = Vec::new();
+    for id in ids {
+        if vistas.contains(id) { continue }
+        if let Some(f) = favs.iter().find(|f| id_entero(&f["id"]) == Some(*id)) {
+            vistas.push(*id);
+            out.push(f.clone());
+        }
+    }
+    out.extend(favs.iter().filter(|f| !id_entero(&f["id"]).is_some_and(|i| vistas.contains(&i))).cloned());
+    out
+}
+
 /// Tareas del desplegable: las buscadas en la sesion y las favoritas.
+/// 'orden': el puesto de cada favorita en la lista guardada (las buscadas van
+/// delante y la descolocarian); null si no es favorita.
 pub(crate) fn tareas(e: &Estado, cfg: &Cfg) -> Value {
-    let favs = ids_favoritas(cfg);
+    let guardadas = cfg.lista("favoritos");
+    let puesto = |id: i64| guardadas.iter().position(|f| id_entero(&f["id"]) == Some(id));
     let mut vistas = std::collections::HashSet::new();
-    let todas: Vec<Value> = candado(&e.extras).iter().cloned().chain(cfg.lista("favoritos")).collect();
+    let todas: Vec<Value> = candado(&e.extras).iter().cloned().chain(guardadas.iter().cloned()).collect();
     let out: Vec<Value> = todas.iter().filter_map(|f| {
         let id = id_entero(&f["id"])?;
         if !vistas.insert(id) { return None }
         let nombre = f["nombre"].as_str().unwrap_or("").to_string();
-        Some(json!({"id": id, "nombre": nombre, "texto": format!("{id} - {nombre}"), "favorita": favs.contains(&id)}))
+        let orden = puesto(id);
+        Some(json!({"id": id, "nombre": nombre, "texto": format!("{id} - {nombre}"), "favorita": orden.is_some(), "orden": orden}))
     }).collect();
     Value::Array(out)
 }
@@ -976,6 +1027,7 @@ fn inicio(e: &Estado, cfg: &Cfg) -> Value {
         "comentario_guardia": reglas.comentario_guardia,
         "vista": vista(cfg),
         "paneles": paneles(cfg),
+        "pestana_tareas": pestana_tareas(cfg),
     })
 }
 
@@ -1090,6 +1142,30 @@ async fn pintar_semana(e: &Estado, cfg: &Cfg, lunes: NaiveDate) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn las_favoritas_se_ordenan_sin_anadir_ni_quitar() {
+        let f = |id: i64| json!({"id": id, "nombre": format!("T{id}")});
+        let ids = |vs: &[Value]| vs.iter().filter_map(|v| id_entero(&v["id"])).collect::<Vec<_>>();
+        let favs = vec![f(1), f(2), f(3), json!({"id": "4", "nombre": "T4"})];
+        assert_eq!(ids(&ordenar_favoritas(&favs, &[3, 1, 4, 2])), vec![3, 1, 4, 2]);
+        // las que no se nombran, detras y como estaban
+        assert_eq!(ids(&ordenar_favoritas(&favs, &[4])), vec![4, 1, 2, 3]);
+        // ni se cuela una que no es favorita ni se repite ninguna
+        assert_eq!(ids(&ordenar_favoritas(&favs, &[9, 2, 2, 1])), vec![2, 1, 3, 4]);
+        assert_eq!(ordenar_favoritas(&favs, &[]), favs);
+        assert!(ordenar_favoritas(&[], &[1, 2]).is_empty());
+        // se conserva la favorita entera (su nombre), no solo el numero
+        assert_eq!(ordenar_favoritas(&favs, &[2])[0]["nombre"], "T2");
+    }
+
+    #[test]
+    fn la_pestana_de_tareas_se_lee_limpia() {
+        let cfg = |v: Value| Cfg(v.as_object().cloned().unwrap());
+        assert_eq!(pestana_tareas(&cfg(json!({"pestana_tareas": "favoritas"}))), "favoritas");
+        assert_eq!(pestana_tareas(&cfg(json!({"pestana_tareas": "otra"}))), "habituales");
+        assert_eq!(pestana_tareas(&cfg(json!({}))), "habituales");
+    }
 
     #[test]
     fn los_proyectos_ocultos_son_numeros_sin_repetir() {

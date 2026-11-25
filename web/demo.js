@@ -135,13 +135,16 @@
     const t = [...tareas, ...deOtros].find((x) => x.id === id);
     return t ? { id: t.id, nombre: t.nombre, proyecto: "Sistemas de Gestión", pid: 1, padre_id: null, padre: "" } : null;
   };
-  const listaDemo = () => tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) }));
+  // 'orden': el puesto de cada favorita (favDemo guarda el orden en que se marcaron o se dejaron)
+  const listaDemo = () => tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id),
+    orden: favDemo.has(t.id) ? [...favDemo].indexOf(t.id) : null }));
+  let pestanaDemo = "habituales";
   const yaFallo = new Set();
 
   window.pywebview = { api: {
     inicio: () => espera({
       version: "3.1.0", plataforma: "Demo", lunes: iso(l), inari: false, logo: "../logo_ugr.png",
-      tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })),
+      tareas: listaDemo(),
       actividades: ["Actuaciones técnicas", "Asuntos propios", "Formación", "Soporte"],
       actividad_preferida: "Actuaciones técnicas", comentario_guardia: "Servicio de Guardia",
       github: "enriquegrx/UGR-FichaCSIRC", inari_listo: false,
@@ -152,6 +155,7 @@
       vista: /[?&]mes\b/.test(location.search) ? "mes" : "semana",
       zoom: 1, tema: (location.search.match(/[?&]tema=(\w+)/) || [])[1] || "sistema", pin: { activo: /[?&]pin\b/.test(location.search), desbloqueada: true, auto_min: 15 },
       paneles: { form: "abierto", habituales: "abierto", apuntes: "abierto", franja: "abierto", leyenda: "abierto" },
+      pestana_tareas: pestanaDemo,
     }),
     usuario: () => espera("Persona de Prueba"),
     semana: (lunes) => espera(semana(lunes)),
@@ -511,7 +515,7 @@
       ultimoCrear = p.id;
       const padre = [...tareasAulas, ...tareas].find((x) => String(x.id) === String(n.padre));
       return espera({ ok: true, tarea: { ...nueva, proyecto: p.nombre, padre: padre ? padre.nombre : "" },
-                      tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })) });
+                      tareas: listaDemo() });
     },
     // ---- plantillas de tarea ----
     plantilla_tarea_guardar: (p) => {
@@ -607,11 +611,23 @@
     favorita: (id, nombre, si) => {
       if (si) { favDemo.add(Number(id)); if (!tareas.some((x) => x.id === Number(id))) tareas.unshift({ id: Number(id), nombre }); }
       else favDemo.delete(Number(id));
-      return espera({ tareas: tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}`, favorita: favDemo.has(t.id) })) });
+      return espera({ tareas: listaDemo() });
     },
-    elegir_tareas: (ts) => {
-      for (const t of ts) if (!tareas.some((x) => x.id === t.id)) tareas.unshift(t);
-      return espera(tareas.map((t) => ({ ...t, texto: `${t.id} - ${t.nombre}` })));
+    // el orden de las favoritas: primero las que se nombran; las demas, detras y como estaban
+    favoritas_ordenar: (ids) => {
+      const antes = [...favDemo];
+      const nuevo = [...new Set((ids || []).map(Number).filter((id) => favDemo.has(id)))];
+      favDemo.clear();
+      for (const id of [...nuevo, ...antes]) favDemo.add(id);
+      return espera({ tareas: listaDemo() });
+    },
+    guardar_pestana_tareas: (p) => { pestanaDemo = p; return espera({ ok: true }); },
+    elegir_tareas: (ts, aFavoritas) => {
+      for (const t of ts) {
+        if (!tareas.some((x) => x.id === t.id)) tareas.unshift(t);
+        if (aFavoritas) favDemo.add(Number(t.id));
+      }
+      return espera(listaDemo());       // con su estrella: si no, la pestaña Favoritas se quedaria vacia
     },
     preparar_copia_dia: (dias, origen) => {
       const src = (apuntes[origen || d(0)] || []).map((a) => ({ ...a }));

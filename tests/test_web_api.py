@@ -925,6 +925,55 @@ class TestDialogos(Base):
             # sigue en el desplegable de la sesion, ya sin estrella
             self.assertFalse(next(t for t in r["tareas"] if t["id"] == 11754)["favorita"])
 
+    def test_ordenar_favoritas(self):
+        f = lambda i: {"id": i, "nombre": f"T{i}"}
+        favs = [f(1), f(2), f(3), {"id": "4", "nombre": "T4"}]
+        ids = lambda vs: [int(v["id"]) for v in vs]
+        self.assertEqual(ids(web.ordenar_favoritas(favs, [3, 1, 4, 2])), [3, 1, 4, 2])
+        # las que no se nombran, detras y como estaban
+        self.assertEqual(ids(web.ordenar_favoritas(favs, [4])), [4, 1, 2, 3])
+        # ni se cuela una que no es favorita ni se repite ninguna
+        self.assertEqual(ids(web.ordenar_favoritas(favs, [9, "2", 2, 1])), [2, 1, 3, 4])
+        self.assertEqual(web.ordenar_favoritas(favs, []), favs)
+        self.assertEqual(web.ordenar_favoritas(favs, "no es una lista"), favs)
+        self.assertEqual(web.ordenar_favoritas([], [1, 2]), [])
+        self.assertEqual(web.ordenar_favoritas(favs, [2])[0]["nombre"], "T2")
+
+    def test_el_orden_de_las_favoritas_se_guarda_y_lo_dicen_las_tareas(self):
+        favs = [{"id": 1, "nombre": "Uno"}, {"id": 2, "nombre": "Dos"}, {"id": 3, "nombre": "Tres"}]
+        self.api._extras = [{"id": 3, "nombre": "Tres"}, {"id": 9, "nombre": "Buscada"}]
+        orden = lambda r: {t["id"]: t["orden"] for t in r}
+        with mock.patch.object(core, "FAVORITOS", favs), \
+             mock.patch.object(core, "guardar_config_valor") as m_guardar:
+            # una favorita que ademas se busco va delante en la lista, pero dice su puesto
+            self.assertEqual([t["id"] for t in self.api.tareas()], [3, 9, 1, 2])
+            self.assertEqual(orden(self.api.tareas()), {3: 2, 9: None, 1: 0, 2: 1})
+            r = self.api.favoritas_ordenar([3, 1, 2])
+            self.assertEqual([f["id"] for f in favs], [3, 1, 2])
+            m_guardar.assert_called_once_with("favoritos", favs)
+            self.assertEqual(orden(r["tareas"]), {3: 0, 9: None, 1: 1, 2: 2})
+            self.assertFalse(next(t for t in r["tareas"] if t["id"] == 9)["favorita"])
+            # el mismo orden: no se escribe (ni copia de seguridad)
+            self.api.favoritas_ordenar(["3", 1, 2])
+            m_guardar.assert_called_once()
+            # ni añade ni quita
+            self.api.favoritas_ordenar([9, 2])
+            self.assertEqual([f["id"] for f in favs], [2, 3, 1])
+
+    def test_la_pestana_de_tareas_se_recuerda(self):
+        with mock.patch.object(core, "config_valor", return_value="favoritas") as m_leer:
+            self.assertEqual(self.api.pestana_tareas(), "favoritas")
+        m_leer.assert_called_once_with("pestana_tareas")
+        with mock.patch.object(core, "config_valor", return_value="otra"):
+            self.assertEqual(self.api.pestana_tareas(), "habituales")
+        with mock.patch.object(core, "guardar_config_valor") as m_guardar:
+            self.assertEqual(self.api.guardar_pestana_tareas("favoritas"), {"ok": True})
+            m_guardar.assert_called_once_with("pestana_tareas", "favoritas")
+            self.assertIn("error", self.api.guardar_pestana_tareas("otra"))
+            m_guardar.assert_called_once()
+        import copias
+        self.assertIn("pestana_tareas", copias.VOLATILES)      # no merece una copia de seguridad
+
     def test_nueva_tarea_solo_donde_proyectostic_deja(self):
         ps = [{"id": 42, "name": "ATE", "_links": {"createWorkPackage": {"href": "/api/v3/projects/42/work_packages/form"}}},
               {"id": 43, "name": "Sistemas", "_links": {"self": {"href": "/api/v3/projects/43"}}}]

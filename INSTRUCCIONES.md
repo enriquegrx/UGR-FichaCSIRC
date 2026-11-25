@@ -177,9 +177,25 @@ tienes **todos los apuntes de la semana** (o del mes) agrupados por día, cada u
 con su ✏️ **editar** y 🗑️ **borrar**; los días marcados van resaltados y pulsar la
 cabecera de un día lo marca.
 
-Debajo del formulario, **tus tareas habituales**: una barra por tarea con lo que
-le dedicas. **Clic** en una rellena el formulario con su tarea, actividad y horas
-de siempre; el botón **«+»** la añade directamente a los días marcados. ⚡
+Debajo del formulario hay una caja con dos pestañas (se abre en la que dejaste;
+con el teclado, las flechas cambian de una a otra):
+
+- **Habituales**: una barra por tarea con lo que le dedicas. **Clic** en una
+  rellena el formulario con su tarea, actividad y horas de siempre; el botón
+  **«+»** la añade directamente a los días marcados. ⚡
+- **Favoritas**: todas las tareas que has marcado con la ☆, con su número y su
+  nombre. **Clic** rellena el formulario con esa tarea; **«+»** la añade a los
+  días marcados con las horas que le faltan a cada uno (a los que ya están
+  completos no les añade nada); la **★** la quita de favoritas, y abajo sale
+  *Deshacer* por si no querías.
+
+Para **ordenar tus favoritas**, pulsa **Gestionar…** (en la pestaña *Favoritas*,
+junto a «Favoritas y buscadas» en la lista del campo Tarea, o en **Herramientas
+→ Mis favoritas…**). Se abre **Mis favoritas** con todas en una lista: las
+subes y las bajas con **↑** y **↓** (o Alt + flecha arriba o abajo), las quitas
+con **×** y añades otras con el buscador de abajo. Cada cambio vale al momento.
+El orden que les des es el de la pestaña y el del campo Tarea, que enseña las
+primeras.
 
 Bajo los días, la **franja de resumen** te dice cómo va el mes (y el anterior si
 quedó a medias), lo que te queda de cada permiso y tus vacaciones. Pulsa

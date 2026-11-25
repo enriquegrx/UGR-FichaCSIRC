@@ -61,6 +61,15 @@ instalada aparece en el pie de la ventana.
 - **⟳ Actualizar** (en «Tus proyectos» y en *Buscar tarea*; ahí también con
   F5): si alguien acaba de crear una tarea en ProyectosTIC, la trae sin esperar,
   y la lista se queda donde estaba, con lo que tenías marcado.
+- ⭐ **Tus favoritas, a la vista**: la caja de las tareas habituales tiene ahora
+  dos pestañas, **Habituales** y **Favoritas**. En *Favoritas* salen todas, con
+  su número y su nombre: **clic** rellena el formulario, **«+»** la añade a los
+  días marcados con las horas que le faltan a cada uno, y la **★** la quita ahí
+  mismo (con *Deshacer*). La caja se abre en la pestaña que dejaste.
+- **Mis favoritas** (*Gestionar…* en esa pestaña y en el campo Tarea, o
+  *Herramientas → Mis favoritas…*): todas en una lista para **ordenarlas** con
+  ↑ y ↓, quitarlas y añadir otras con el buscador. El orden que les des es el
+  de la pestaña y el del campo Tarea, que enseña las primeras.
 - **Proyectos visibles** (*Herramientas*): si te salen proyectos en los que no
   fichas, quítalos de en medio. También desde el propio árbol, con **«No
   mostrar»** al pasar por el proyecto. Solo dejan de salir al buscar tareas:

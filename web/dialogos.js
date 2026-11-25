@@ -1685,6 +1685,102 @@ function dlgProyectosVisibles({ alGuardar = null } = {}) {
   }
 }
 
+// Lo del grupo «Favoritas y buscadas» del campo Tarea: primero las favoritas,
+// en el orden que se les ha dado en «Mis favoritas»; detras, las buscadas.
+function favoritasYBuscadas() {
+  const puesto = new Map((st.favLista || []).map((t, i) => [t.id, i]));
+  const de = (t) => (puesto.has(Number(t.id)) ? puesto.get(Number(t.id)) : Infinity);
+  return [...st.tareas].map(([texto, id]) => ({ id, nombre: texto.split(" - ").slice(1).join(" - ") || texto }))
+    .map((t, i) => [t, i]).sort((a, b) => (de(a[0]) - de(b[0])) || (a[1] - b[1])).map(([t]) => t);
+}
+
+/* «Mis favoritas» (Gestionar… en la pestaña Favoritas y en el campo Tarea,
+   y Herramientas > Mis favoritas): todas, en su orden. Se suben y se bajan, se
+   quitan y se añaden con un buscador. Cada cambio vale al momento (como la
+   estrella): la pestaña y el campo Tarea lo ven sin cerrar. */
+function dlgFavoritas() {
+  if (st.alFavoritas) return;                 // ya esta abierto
+  const lista = el("div", { class: "fav-lista", role: "list", "aria-label": "Tus favoritas, en su orden" });
+  const info = el("p", { class: "nota tenue fav-aviso", role: "status" });
+  const campo = entrada("", { placeholder: "Busca por nombre o por número de tarea", "aria-label": "Añadir una favorita" });
+  const d = dialogo({ titulo: "Mis favoritas", ancho: 560, botones: [cerrarBoton] });
+  d.cuerpo.append(
+    nota("El orden de aquí es el de la pestaña «Favoritas» y el del campo Tarea, que enseña las primeras.", ""),
+    lista, info,
+    rejilla(["Añadir", campo]));
+  let quitada = null;                         // la ultima que se quito aqui: { t, orden }
+  const decir = (texto, deshacer = false) => {
+    info.replaceChildren(texto, deshacer ? el("button", { type: "button", class: "enlace", text: "Deshacer", onclick: async () => {
+      const q = quitada;
+      quitada = null;
+      if (q) await reponerFavorita(q.t, q.orden);
+      decir(q ? `«${q.t.nombre}» vuelve a tus favoritas.` : "");
+    } }) : "");
+  };
+  // tras mover una fila, el foco sigue en su boton (o en el otro, si ha llegado al borde)
+  let foco = null;                            // { id, accion }
+  const mover = (i, delta) => {
+    const ids = st.favLista.map((t) => t.id), j = i + delta;
+    if (j < 0 || j >= ids.length) return;
+    foco = { id: ids[i], accion: delta < 0 ? "subir" : "bajar" };
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    ordenarFavoritas(ids);                    // repinta (st.alFavoritas) y guarda con un respiro
+  };
+  function pintar() {
+    const favs = st.favLista;
+    lista.replaceChildren(...favs.map((t, i) => {
+      const boton = (accion, texto, titulo, fn, apagado = false) => el("button", { type: "button",
+        class: `fav-b fav-${accion}`, "data-accion": accion, text: texto, title: titulo,
+        "aria-label": `${titulo}: ${t.nombre}`, disabled: apagado, onclick: fn });
+      const fila = el("div", { class: "fav-item", role: "listitem", "data-id": String(t.id) },
+        el("span", { class: "fav-puesto tenue", text: `${i + 1}.` }),
+        el("span", { class: "fav-texto", title: `${t.id} · ${t.nombre}` },
+          el("span", { class: "fav-id", text: String(t.id) }), el("span", { class: "fav-nombre", text: t.nombre })),
+        boton("subir", "↑", "Subir", () => mover(i, -1), i === 0),
+        boton("bajar", "↓", "Bajar", () => mover(i, 1), i === favs.length - 1),
+        boton("quitar", "×", "Quitar de favoritas", async () => {
+          const orden = await quitarFavorita(t, { aviso: false });
+          quitada = { t, orden };
+          decir(`«${t.nombre}» ya no es favorita. `, true);
+          (lista.querySelector(".fav-quitar") || campo).focus();
+        }));
+      // Alt + flecha arriba/abajo con el foco en la fila: lo mismo que sus botones
+      fila.addEventListener("keydown", (e) => {
+        if (!e.altKey || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+        e.preventDefault();
+        mover(i, e.key === "ArrowUp" ? -1 : 1);
+      });
+      return fila;
+    }));
+    if (!favs.length) lista.append(el("p", { class: "nota tenue", text: "Aún no tienes favoritas: añade la primera aquí abajo." }));
+    if (foco) {
+      const fila = [...lista.children].find((x) => x.dataset.id === String(foco.id));
+      const b = fila?.querySelector(`.fav-${foco.accion}:not([disabled])`) || fila?.querySelector(".fav-b:not([disabled])");
+      foco = null;
+      b?.focus();
+    }
+  }
+  buscadorTarea(campo, { alElegir: async (t) => {
+    campo.value = "";
+    if (st.favoritas?.has(Number(t.id))) { decir(`«${t.nombre}» ya estaba entre tus favoritas.`); return; }
+    await guardarOrdenFavoritas();
+    ponerTareas((await llamar("favorita", t.id, t.nombre, true)).tareas);
+    quitada = null;
+    decir(`«${t.nombre}» añadida a favoritas.`);
+    lista.lastElementChild?.scrollIntoView({ block: "nearest" });
+  } });
+  st.alFavoritas = pintar;
+  const cerrar = d.cerrar;
+  d.cerrar = () => {
+    st.alFavoritas = null;
+    guardarOrdenFavoritas();                  // el orden que quedara por guardar
+    repintarCampos();
+    cerrar();
+  };
+  pintar();
+  (lista.querySelector(".fav-b:not([disabled])") || campo).focus();
+}
+
 function buscadorTarea(input, { alElegir, fuente = null }) {
   input.removeAttribute("list");
   input.setAttribute("autocomplete", "off");
@@ -1738,8 +1834,22 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
     pintar();
     subir(pid);
   }
-  // El titulo de un grupo; el de «Tus proyectos» lleva «Actualizar».
+  // El titulo de un grupo; el de «Tus proyectos» lleva «Actualizar» y el de las
+  // favoritas, «Gestionar…» (salvo dentro de «Mis favoritas», que ya esta abierto).
   function cabecera(titulo) {
+    if (titulo === "Favoritas y buscadas" && !st.alFavoritas) {
+      const gestionar = el("button", { type: "button", class: "enlace bt-gestionar", tabindex: "-1",
+                                       text: "Gestionar…", title: "Ordenar, quitar y añadir favoritas" });
+      gestionar.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cerrar();
+        input.blur();                     // al cerrar el dialogo el foco no vuelve aqui a reabrir la lista
+        dlgFavoritas();
+      });
+      const fila = el("div", { class: "bt-grupo bt-grupo-accion" }, el("span", { text: titulo }), gestionar);
+      fila.addEventListener("mousedown", (e) => e.preventDefault());     // sin quitarle el foco al campo
+      return fila;
+    }
     if (titulo !== "Tus proyectos") return el("div", { class: "bt-grupo", text: titulo });
     const accion = mios.actualizando ? el("span", { class: "bt-actualizando", text: "Actualizando…" })
       : el("button", { type: "button", class: "enlace bt-actualizar", tabindex: "-1", text: "⟳ Actualizar",
@@ -1785,7 +1895,7 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
       [st.vista === "mes" ? "Usadas este mes" : "Usadas esta semana",
        tomar(st.dias.flatMap((d) => d.apuntes).filter((a) => a.destino !== "inari")
          .map((a) => ({ id: a.wp_id, nombre: a.tarea })))],
-      ["Favoritas y buscadas", tomar([...st.tareas].map(([texto, id]) => ({ id, nombre: texto.split(" - ").slice(1).join(" - ") || texto })))],
+      ["Favoritas y buscadas", tomar(favoritasYBuscadas())],
     ];
     if (remoto.q && remoto.q === q) {
       out.push(["En todos tus proyectos", remoto.tareas ? tomar(remoto.tareas) : null]);
@@ -4134,6 +4244,8 @@ function dlgAtajos() {
     ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados. Con varios días marcados se copian todos: "
                         + "se pegan por orden en los que marques (si marcas más, se repiten) o, con uno solo marcado, a partir de él"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
+    ["← / →", "En las pestañas Habituales y Favoritas: cambiar de una a otra"],
+    ["Alt+↑ / ↓", "En «Mis favoritas»: subir o bajar la favorita"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],
     ["Arrastrar", "Un apunte a otro día lo copia (con Mayús, lo mueve); una tarea habitual, la añade"],
     ["F5", "Recargar la semana"], ["Ctrl+← / →", "Semana anterior / siguiente"],

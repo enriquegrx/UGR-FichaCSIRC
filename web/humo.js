@@ -1946,6 +1946,278 @@
         await espera(300);
       }
     });
+    await prueba("favoritas: pestaña junto a las habituales; rellena el formulario, «+» añade lo que falta, se quita y se deshace, y se recuerda", async () => {
+      const a = api(), guardar = a.guardar_pestana_tareas;
+      const antes = { lunes: st.lunes, marcados: st.marcados, pestana: st.pestana, elegida: st.pestanaElegida,
+                      panel: st.paneles.habituales, hab: st.habituales, orden: st.favLista.map((t) => t.id),
+                      tarea: $("tarea").value, horas: $("horas").value, horasAuto: st.horasAuto };
+      const tab = (id) => $(`tab-${id}`);
+      const elegida = (id) => tab(id).getAttribute("aria-selected") === "true" && !$(`lista-${id}`).hidden
+        && $(`lista-${id === "favoritas" ? "habituales" : "favoritas"}`).hidden;
+      const filas = () => [...document.querySelectorAll("#lista-favoritas .fav-fila")];
+      const fila = (id) => filas().find((x) => x.dataset.id === String(id));
+      const tecla = (n, key) => n.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+      const modal = () => document.getElementById("modal");
+      const aceptar = () => document.getElementById("modal-si").click();
+      const dia = (iso) => st.dias.find((d) => d.iso === iso);
+      const A = sumarDias(st.hoyLunes, 49), dA = (i) => sumarDias(A, i);       // una semana vacia, lejos de las demas pruebas
+      const marcar = (...isos) => { st.marcados = new Set(isos); pintarMarcados(); };
+      const guardadas = [];
+      let hechos = 0, ultimo = null, anadidos = 0;
+      const anadir = a.anadir;
+      a.guardar_pestana_tareas = (p) => { guardadas.push(p); return guardar(p); };
+      a.anadir = (...args) => { anadidos++; return anadir(...args); };
+      try {
+        ok(st.vista === "semana" && !st.estad, "no está en la vista de semana");
+        st.pestana = "habituales"; st.pestanaElegida = false; pintarCajaTareas();
+        // ---- la caja y sus dos pestañas
+        ok(!$("habituales").hidden, "la caja no se ve");
+        ok(tab("habituales").getAttribute("role") === "tab" && tab("favoritas").getAttribute("role") === "tab"
+           && tab("habituales").parentNode.getAttribute("role") === "tablist", "las pestañas no son role=tab");
+        ok(elegida("habituales") && $("b-gestionar-fav").hidden, "no abre en Habituales");
+        ok(st.favLista.length >= 3 && tab("favoritas").textContent === `Favoritas (${st.favLista.length})`,
+           `la pestaña no dice cuántas hay: ${tab("favoritas").textContent}`);
+        tab("favoritas").click();
+        ok(elegida("favoritas") && !$("b-gestionar-fav").hidden && $("habituales-periodo").hidden, "el clic no cambia a Favoritas");
+        ok(guardadas.join() === "favoritas", `no guarda la pestaña elegida: ${guardadas.join()}`);
+        ok(tab("favoritas").tabIndex === 0 && tab("habituales").tabIndex === -1, "el tabulador no entra por la pestaña elegida");
+        // con el teclado: flechas, Inicio y Fin
+        tab("favoritas").focus();
+        tecla(tab("favoritas"), "ArrowLeft");
+        ok(elegida("habituales") && document.activeElement === tab("habituales"), "flecha izquierda no cambia de pestaña");
+        tecla(tab("habituales"), "End");
+        ok(elegida("favoritas") && document.activeElement === tab("favoritas"), "Fin no lleva a Favoritas");
+        tecla(tab("favoritas"), "Home");
+        tecla(tab("habituales"), "ArrowRight");
+        ok(elegida("favoritas") && guardadas.join() === "favoritas,habituales,favoritas,habituales,favoritas", `teclado: ${guardadas.join()}`);
+        // minimizada, la pestaña la abre; cerrada y repuesta desde Ver, sigue en su pestaña
+        ponerPanel("habituales", "min", false);
+        ok($("habituales").classList.contains("minimizado") && getComputedStyle($("lista-favoritas")).display === "none", "no minimiza");
+        tab("favoritas").click();
+        ok(!$("habituales").classList.contains("minimizado"), "la pestaña no abre la caja minimizada");
+        ponerPanel("habituales", "oculto", false);
+        document.querySelector('.menubar [data-menu="ver"]').click();
+        pulsarMenu("Habituales y favoritas");
+        ok(!$("habituales").classList.contains("cerrado") && elegida("favoritas"), "Ver no repone la caja");
+
+        // ---- solo las favoritas de verdad, en su orden: una buscada no sale
+        ponerTareas(await a.elegir_tareas([{ id: 15005, nombre: "Sustitución de lámparas" }], false));
+        ok(textoDeTarea(15005) && !st.favoritas.has(15005), "la 15005 no queda como buscada: la prueba no vale");
+        ok(filas().map((x) => x.dataset.id).join() === st.favLista.map((t) => t.id).join() && !fila(15005),
+           `la pestaña no enseña solo las favoritas: ${filas().map((x) => x.dataset.id).join()}`);
+        const suelta = st.favLista.find((t) => !habitualDe(t.id)), habitual = st.favLista.find((t) => habitualDe(t.id)?.tipico === 6.5);
+        ok(suelta && habitual, "hace falta una favorita que no sea habitual y la habitual de 6,5h");
+        ok(fila(suelta.id).querySelector(".fav-id").textContent === String(suelta.id)
+           && fila(suelta.id).querySelector(".fav-nombre").textContent === suelta.nombre, "la fila no dice número y nombre");
+        ok(getComputedStyle(fila(suelta.id).querySelector(".fav-nombre")).textOverflow === "ellipsis", "el nombre no se recorta");
+        // marcada o quitada desde otro sitio (lo que hacen las estrellas): la pestaña se entera
+        ponerTareas((await a.favorita(15005, "Sustitución de lámparas", true)).tareas);
+        ok(fila(15005) && filas().at(-1) === fila(15005) && tab("favoritas").textContent === `Favoritas (${st.favLista.length})`,
+           "una favorita nueva no sale (la última) en la pestaña");
+        ponerTareas((await a.favorita(15005, "Sustitución de lámparas", false)).tareas);
+        ok(!fila(15005), "al dejar de ser favorita sigue en la pestaña");
+
+        // ---- clic: rellena el formulario (una habitual, con su actividad y sus horas)
+        fila(suelta.id).querySelector(".fav-info").click();
+        ok(await hasta(() => $("tarea").value.startsWith(`${suelta.id} - `) && $("estado").textContent.includes("Formulario rellenado")),
+           `el clic no rellena el formulario: ${$("tarea").value}`);
+        fila(habitual.id).querySelector(".fav-info").click();
+        ok(await hasta(() => $("tarea").value.startsWith(`${habitual.id} - `) && $("horas").value === "6,5"
+           && $("actividad").value === habitualDe(habitual.id).actividad), "la favorita habitual no trae sus horas y su actividad");
+
+        // ---- «+»: a los dias marcados, lo que le falta a cada uno
+        st.lunes = A; st.marcados = new Set(); await cargarSemana();
+        ok(st.dias[0].iso === A && st.dias.every((d) => !d.apuntes.length), "la semana de la prueba no está vacía");
+        fila(suelta.id).querySelector(".fav-mas").click();
+        ok(await hasta(() => !modal().hidden) && /Marca/.test($("modal-titulo").textContent), "sin días marcados no avisa");
+        aceptar();
+        marcar(dA(0));
+        fila(suelta.id).querySelector(".fav-mas").click();
+        ok(await hasta(() => dia(dA(0))?.apuntes.length === 1), "el + no añade al día marcado");
+        hechos++;
+        ok(dia(dA(0)).apuntes[0].horas === 7 && String(dia(dA(0)).apuntes[0].wp_id) === String(suelta.id), "no añade lo que le falta al día");
+        marcar(dA(0));
+        fila(suelta.id).querySelector(".fav-mas").click();       // ya esta completo: nada que añadir
+        ok(await hasta(() => !modal().hidden) && /Nada que añadir/.test($("modal-titulo").textContent), "a un día completo no avisa");
+        aceptar();
+        ok(anadidos === 1, "añade a un día al que no le falta nada");
+        // la habitual: como mucho sus horas de siempre, con su actividad
+        marcar(dA(3));
+        fila(habitual.id).querySelector(".fav-mas").click();
+        ok(await hasta(() => dia(dA(3))?.apuntes.length === 1), "el + de una favorita habitual no añade");
+        hechos++;
+        ok(dia(dA(3)).apuntes[0].horas === 6.5 && dia(dA(3)).apuntes[0].actividad === habitualDe(habitual.id).actividad,
+           "la favorita habitual no va con sus horas y su actividad");
+        // varios dias: una pregunta que dice cuanto va a cada uno, y a cada uno lo suyo
+        await a.anadir([dA(1)], 14000, "2", "", "Soporte", true);
+        hechos++;
+        await cargarSemana();
+        marcar(dA(0), dA(1), dA(2));
+        anadidos = 0;
+        fila(suelta.id).querySelector(".fav-mas").click();
+        ok(await hasta(() => !modal().hidden), "con varios días no pregunta");
+        const texto = $("modal-texto").textContent;
+        ok(texto.includes("a 2 días") && texto.includes(`${dia(dA(1)).nombre} ${dia(dA(1)).fecha}: 5h`)
+           && texto.includes(`${dia(dA(2)).nombre} ${dia(dA(2)).fecha}: 7h`) && !texto.includes(dia(dA(0)).fecha),
+           `la pregunta no dice lo de cada día (o cuenta el que ya está completo): ${texto}`);
+        aceptar();
+        ok(await hasta(() => dia(dA(1))?.apuntes.length === 2 && dia(dA(2))?.apuntes.length === 1), "no añade a los dos días");
+        hechos += anadidos;
+        ok(anadidos === 2 && dia(dA(1)).reg === 7 && dia(dA(2)).reg === 7 && dia(dA(0)).apuntes.length === 1,
+           `no deja cada día completo: ${dia(dA(1)).reg} y ${dia(dA(2)).reg} (llamadas: ${anadidos})`);
+        ok(await hasta(() => $("estado").textContent.includes("añadida a 2 días")), `la barra dice: ${$("estado").textContent}`);
+
+        // ---- la estrella la quita ahi mismo, y se puede deshacer (vuelve a su sitio)
+        const orden = st.favLista.map((t) => t.id).join(), n = st.favLista.length;
+        ok(st.favLista.at(-1).id !== suelta.id, "la que se quita es la última: no se vería que vuelve a su sitio");
+        ocultarAviso();                        // el de los apuntes recien añadidos: que no pase por el de la favorita
+        fila(suelta.id).querySelector(".fav-estrella").click();
+        ok(await hasta(() => !st.favoritas.has(suelta.id) && !fila(suelta.id)), "la estrella no la quita");
+        ok(tab("favoritas").textContent === `Favoritas (${n - 1})`, "la pestaña no cuenta una menos");
+        ok(textoDeTarea(suelta.id), "al quitarla desaparece también del campo Tarea");
+        const aviso = document.getElementById("aviso-deshacer");
+        ok(!aviso.hidden && aviso.textContent.includes("ya no es favorita"), "no sale el aviso con «Deshacer»");
+        [...aviso.querySelectorAll("button")].find((b) => b.textContent === "Deshacer").click();
+        ok(await hasta(() => st.favLista.map((t) => t.id).join() === orden), `Deshacer no la devuelve a su sitio: ${st.favLista.map((t) => t.id).join()}`);
+        ok(aviso.hidden && fila(suelta.id) && filas().map((x) => x.dataset.id).join() === orden, "tras Deshacer la pestaña no queda como estaba");
+
+        // ---- se recuerda: al volver a abrir, la pestaña que se dejo
+        ok((await a.inicio()).pestana_tareas === "favoritas", "la pestaña elegida no queda guardada");
+        // y con una sola clase de tareas se abre en esa, sin cambiar lo recordado
+        await espera(400);                     // que no llegue ahora una franja pedida antes
+        st.pestanaElegida = false; st.pestana = "habituales";
+        st.habituales = { ...antes.hab, filas: [] }; pintarHabituales(st.habituales);
+        ok(!$("habituales").hidden && elegida("favoritas") && st.pestana === "habituales", "sin habituales no abre en Favoritas");
+        const favs = st.favLista;
+        st.favLista = []; pintarCajaTareas();
+        ok($("habituales").hidden, "sin habituales ni favoritas la caja sigue a la vista");
+        st.habituales = antes.hab; pintarHabituales(antes.hab);
+        ok(!$("habituales").hidden && elegida("habituales"), "con habituales y sin favoritas no abre en Habituales");
+        st.pestana = "favoritas"; pintarCajaTareas();
+        ok(elegida("habituales"), "sin favoritas abre en Favoritas");
+        tab("favoritas").click();              // pero si se pulsa, se ve (y dice como añadirlas)
+        ok(elegida("favoritas") && /Aún no tienes favoritas/.test($("lista-favoritas").textContent), "la pestaña vacía no dice nada");
+        st.favLista = favs; pintarCajaTareas();
+      } finally {
+        a.guardar_pestana_tareas = guardar; a.anadir = anadir;
+        if (!modal().hidden) document.getElementById("modal-no").click();
+        cerrarMenu();
+        for (; hechos > 0; hechos--) ultimo = await a.deshacer();
+        st.habituales = antes.hab;
+        await guardar(antes.pestana);
+        st.pestana = antes.pestana; st.pestanaElegida = antes.elegida;
+        ponerPanel("habituales", antes.panel, false);
+        await a.favorita(15005, "Sustitución de lámparas", false);
+        ponerTareas((await a.favoritas_ordenar(antes.orden)).tareas);
+        pintarHabituales(antes.hab);
+        st.lunes = antes.lunes; st.marcados = antes.marcados;
+        await cargarSemana();
+        pintarMarcados();
+        $("tarea").value = antes.tarea; await elegirTarea();
+        $("horas").value = antes.horas; st.horasAuto = antes.horasAuto;
+        if (ultimo) ponerDeshacer(ultimo.quedan, ultimo.siguiente);
+        ocultarAviso();
+        estado("");
+        await espera(300);
+      }
+    });
+    await prueba("Mis favoritas (Gestionar…): se ordenan, se quitan y se añaden; el orden es el de la pestaña y el del campo Tarea", async () => {
+      const a = api(), ordenar = a.favoritas_ordenar;
+      const antes = { orden: st.favLista.map((t) => t.id), pestana: st.pestana, elegida: st.pestanaElegida, tarea: $("tarea").value };
+      const items = () => [...document.querySelectorAll(".fav-lista .fav-item")];
+      const item = (id) => items().find((x) => x.dataset.id === String(id));
+      const ids = () => st.favLista.map((t) => t.id).join();
+      const enPestana = () => [...document.querySelectorAll("#lista-favoritas .fav-fila")].map((x) => x.dataset.id).join();
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      const pulsar = (x) => x.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      const nueva = [13990, 14000, 11754].find((id) => !st.favoritas.has(id));
+      const guardados = [];
+      a.favoritas_ordenar = (x) => { guardados.push(x.join()); return ordenar(x); };
+      try {
+        ok(nueva && st.favLista.length >= 3, "hacen falta tres favoritas y una tarea que no lo sea");
+        st.pestana = "favoritas"; st.pestanaElegida = true; pintarCajaTareas();
+        $("b-gestionar-fav").click();
+        ok(await hasta(() => dlg()?.getAttribute("aria-label") === "Mis favoritas"), "«Gestionar…» no abre «Mis favoritas»");
+        ok(items().map((x) => x.dataset.id).join() === ids(), "no están todas, en su orden");
+        ok(items()[0].querySelector(".fav-subir").disabled && items().at(-1).querySelector(".fav-bajar").disabled
+           && !items()[0].querySelector(".fav-bajar").disabled, "subir y bajar no se apagan en los extremos");
+        // ---- ordenar: se ve al momento (tambien en la pestaña) y se guarda una vez
+        const [p0, p1, p2] = antes.orden;
+        item(p0).querySelector(".fav-bajar").click();
+        ok(ids().startsWith(`${p1},${p0},${p2}`) && enPestana() === ids() && items().map((x) => x.dataset.id).join() === ids(),
+           `bajar no la mueve al momento: ${ids()}`);
+        ok(document.activeElement === item(p0).querySelector(".fav-bajar"), "tras mover, el foco no sigue en su botón");
+        document.activeElement.click();
+        ok(ids().startsWith(`${p1},${p2},${p0}`), `bajar otra vez: ${ids()}`);
+        ok(!guardados.length, "guarda a cada paso (una copia de seguridad por clic)");
+        // con el teclado: Alt + flecha en la fila
+        item(p0).querySelector(".fav-subir").dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true, cancelable: true }));
+        ok(ids().startsWith(`${p1},${p0},${p2}`) && document.activeElement === item(p0).querySelector(".fav-subir"), `Alt+flecha arriba: ${ids()}`);
+        await espera(900);
+        ok(guardados.length === 1 && guardados[0] === ids(), `no guarda el orden una sola vez: ${guardados.join(" | ")}`);
+        const guardado = (await a.inicio()).tareas.filter((t) => t.favorita).sort((x, y) => x.orden - y.orden).map((t) => t.id).join();
+        ok(guardado === ids(), `el orden no queda guardado: ${guardado}`);
+        // el campo Tarea las da en ese orden, delante de las buscadas
+        const delCampo = favoritasYBuscadas().map((t) => Number(t.id));
+        ok(delCampo.slice(0, st.favLista.length).join() === ids(), `el campo Tarea no sigue el orden: ${delCampo.join()}`);
+
+        // ---- quitar, con su Deshacer ahi mismo
+        const n = st.favLista.length, orden = ids();
+        item(p0).querySelector(".fav-quitar").click();
+        ok(await hasta(() => !st.favoritas.has(p0) && !item(p0)), "la × no la quita");
+        ok(items().length === n - 1 && enPestana() === ids() && $("tab-favoritas").textContent === `Favoritas (${n - 1})`, "la pestaña no se entera");
+        const des = [...dlg().querySelectorAll(".fav-aviso button")].find((b) => b.textContent === "Deshacer");
+        ok(des && document.getElementById("aviso-deshacer").hidden, "sin «Deshacer» en el diálogo (o sale el aviso de debajo)");
+        des.click();
+        ok(await hasta(() => ids() === orden && item(p0)), `Deshacer no la devuelve a su sitio: ${ids()}`);
+
+        // ---- añadir con el buscador
+        const campo = dlg().querySelector(".rejilla input");
+        campo.dispatchEvent(new Event("focus"));
+        ok(await hasta(() => caja()?.textContent.includes("Favoritas y buscadas")), "el buscador de «Mis favoritas» no enseña las de siempre");
+        ok(!caja().querySelector(".bt-gestionar"), "dentro de «Mis favoritas» el buscador ofrece «Gestionar…»");
+        campo.value = String(nueva); campo.dispatchEvent(new Event("input"));
+        const hallada = () => [...(caja()?.querySelectorAll(".bt-item") || [])].find((x) => x.querySelector(".bt-id")?.textContent === String(nueva));
+        ok(await hasta(() => hallada()), "el buscador no encuentra la tarea por su número");
+        pulsar(hallada());
+        ok(await hasta(() => st.favoritas.has(nueva) && item(nueva)), "no la añade");
+        ok(items().at(-1) === item(nueva) && campo.value === "" && enPestana() === ids(), "la nueva no queda la última (o el campo no se vacía)");
+        ok(dlg().querySelector(".fav-aviso").textContent.includes("añadida"), "no dice que la ha añadido");
+        campo.dispatchEvent(new Event("blur"));
+        await espera(200);
+        cerrarTodo();
+        ok(!st.alFavoritas, "al cerrar sigue apuntado el diálogo");
+
+        // ---- se abre tambien desde el campo Tarea y desde Herramientas
+        const inp = $("tarea");
+        inp.dispatchEvent(new Event("focus"));
+        ok(await hasta(() => caja()?.querySelector(".bt-gestionar")), "el campo Tarea no ofrece «Gestionar…» junto a «Favoritas y buscadas»");
+        const g = caja().querySelector(".bt-gestionar");
+        ok(g.closest(".bt-grupo").textContent.includes("Favoritas y buscadas"), "«Gestionar…» no va en su grupo");
+        ok(!pulsar(g), "pulsar «Gestionar…» le quita el foco al campo antes de tiempo");
+        g.click();
+        ok(await hasta(() => dlg()?.getAttribute("aria-label") === "Mis favoritas") && !caja(), "desde el campo no abre «Mis favoritas» (o deja la lista abierta)");
+        cerrarTodo();
+        document.querySelector('.menubar [data-menu="herramientas"]').click();
+        pulsarMenu("Mis favoritas");
+        ok(await hasta(() => dlg()?.getAttribute("aria-label") === "Mis favoritas"), "Herramientas no abre «Mis favoritas»");
+        cerrarTodo();
+      } finally {
+        a.favoritas_ordenar = ordenar;
+        cerrarMenu();
+        cerrarTodo();
+        await guardarOrdenFavoritas();
+        if (nueva) await a.favorita(nueva, "", false);
+        for (const id of antes.orden) if (!st.favoritas.has(id)) await a.favorita(id, st.favLista.find((t) => t.id === id)?.nombre || "", true);
+        ponerTareas((await a.favoritas_ordenar(antes.orden)).tareas);
+        st.pestana = antes.pestana; st.pestanaElegida = antes.elegida; pintarCajaTareas();
+        $("tarea").dispatchEvent(new Event("blur"));
+        $("tarea").value = antes.tarea;
+        ocultarAviso();
+        estado("");
+        await espera(300);
+      }
+    });
     await prueba("sin errores de JS por el camino", async () => {
       ok(!lineas.some((l) => l.startsWith("FALLO error") || l.startsWith("FALLO promesa")), "hubo errores");
     });

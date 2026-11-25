@@ -16,10 +16,10 @@ use std::path::{Path, PathBuf};
 
 pub const MAX_RECIENTES: usize = 10;
 pub const DIAS_DIARIAS: i64 = 7;
-const VOLATILES: [&str; 17] = ["ventana", "ultimo_chequeo_update_ts", "pin_intentos", "aviso_semana_vista",
+const VOLATILES: [&str; 18] = ["ventana", "ultimo_chequeo_update_ts", "pin_intentos", "aviso_semana_vista",
     "ultima_version_abierta", "vista_inicio", "zoom", "paneles", "tema", "pin_sugerencia_hasta",
     "aviso_aplicaciones", "ultima_actividad", "permisos_anio_revisado", "recordatorio_ejecutable", "aviso_mes_visto",
-    "nueva_tarea_proyecto", "proyectos_desplegados"];
+    "nueva_tarea_proyecto", "proyectos_desplegados", "pestana_tareas"];
 const SECRETOS: [&str; 2] = ["api_key", "inari_token"];
 const PIN: [&str; 4] = ["pin", "pin_intentos", "pin_auto_min", "pin_sugerencia_hasta"];
 const DE_ESTE_EQUIPO: [&str; 1] = ["bandeja"];

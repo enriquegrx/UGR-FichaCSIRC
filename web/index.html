@@ -133,14 +133,22 @@
         </form>
       </section>
 
-      <!-- Tareas habituales: barras con la parte del tiempo de cada tarea desde
-           el 1 del mes pasado. Clic: rellena el formulario; "+": la anade. -->
+      <!-- Habituales y favoritas, en dos pestañas. Habituales: barras con la
+           parte del tiempo de cada tarea desde el 1 del mes pasado. Favoritas:
+           las marcadas con la estrella, en el orden que se les da. En las dos,
+           clic: rellena el formulario; "+": la anade a los dias marcados. -->
       <section id="habituales" class="panel panel-habituales" data-panel="habituales" hidden>
         <div class="cabeza-seccion" title="Clic en una tarea: rellena el formulario · «+»: la añade a los días marcados">
-          <h2>Tus tareas habituales</h2>
+          <h2 class="solo-lectores">Habituales y favoritas</h2>
+          <div class="pestanas" role="tablist" aria-label="Habituales y favoritas">
+            <button type="button" role="tab" id="tab-habituales" data-pestana="habituales" aria-controls="lista-habituales" aria-selected="true">Habituales</button>
+            <button type="button" role="tab" id="tab-favoritas" data-pestana="favoritas" aria-controls="lista-favoritas" aria-selected="false" tabindex="-1">Favoritas</button>
+          </div>
           <span id="habituales-periodo" class="tenue"></span>
+          <button type="button" id="b-gestionar-fav" class="enlace" title="Ordenar, quitar y añadir favoritas" hidden>Gestionar…</button>
         </div>
-        <div id="lista-habituales"></div>
+        <div id="lista-habituales" role="tabpanel" aria-labelledby="tab-habituales"><p class="nota tenue">Cargando…</p></div>
+        <div id="lista-favoritas" role="tabpanel" aria-labelledby="tab-favoritas" hidden></div>
       </section>
     </div>
 

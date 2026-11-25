@@ -31,6 +31,11 @@ const st = {
   comHabitual: "",
   ocupado: false,
   habituales: null,     // tareas habituales (las del "+" de cada dia)
+  favLista: [],         // las favoritas de verdad, en su orden: [{id, nombre}]
+  pestana: "habituales",// la pestaña de la caja de habituales y favoritas (se recuerda)
+  pestanaElegida: false,// se ha pulsado una pestaña en esta sesion: se respeta aunque este vacia
+  habLeidas: false,     // ya se sabe si hay habituales (llegan despues que las favoritas)
+  alFavoritas: null,    // «Mis favoritas» abierto: se repinta cuando cambian
   portapapeles: null,   // lo copiado con Ctrl+C: un dia {iso, texto} o varios {isos, texto}
   expandidos: new Set(),// dias de la semana con "+N mas" desplegado
   arrastre: null,       // lo que se esta arrastrando (apunte o tarea habitual)
@@ -380,6 +385,7 @@ const MENUS = {
   ],
   herramientas: () => [
     { texto: "Plantillas…", accion: dlgPlantillas },
+    { texto: "Mis favoritas…", accion: () => dlgFavoritas() },
     { texto: "Proyectos visibles…", accion: () => dlgProyectosVisibles() },
     { texto: "Importar festivos…", accion: dlgFestivos },
     { texto: "Vacaciones y teletrabajo…", accion: dlgAjustesDias },
@@ -413,7 +419,7 @@ const MENUS = {
 
 // Cada caja se puede minimizar (queda su titulo; un clic la abre) o cerrar, y
 // volver a poner desde Ver. La franja y la leyenda, solo mostrar u ocultar.
-const PANELES = [["form", "Añadir apunte"], ["habituales", "Tus tareas habituales"],
+const PANELES = [["form", "Añadir apunte"], ["habituales", "Habituales y favoritas"],
                  ["apuntes", "Apuntes de la semana"], ["franja", "Franja de resumen"],
                  ["leyenda", "Leyenda de colores"]];
 const MINIMIZABLES = ["form", "habituales", "apuntes"];
@@ -486,6 +492,7 @@ async function arrancar() {
   st.vista = ini.vista === "mes" ? "mes" : "semana";
   pintarSelectorVista();
   st.asociaciones = ini.asociaciones || {};
+  st.pestana = ini.pestana_tareas === "favoritas" ? "favoritas" : "habituales";
   $("version").textContent = `${ini.plataforma} · v${ini.version}${ini.experimento ? " · prototipo web" : ""}`;
   document.querySelector(".etiqueta-prototipo").hidden = !ini.experimento;
   if (ini.logo) { $("logo").src = ini.logo; $("logo").hidden = false; }
@@ -656,6 +663,7 @@ async function refrescarFranja() {
   try {
     r = await api().resumen_franja();       // sin modal: si falla, no se pinta
   } catch (_e) {
+    if (!st.habLeidas) pintarHabituales(null);     // sin habituales: que la caja abra en Favoritas
     return;
   }
   if (mio !== franjaSeq) return;
@@ -692,7 +700,14 @@ async function refrescarFranja() {
 
 function pintarHabituales(h) {
   const lista = $("lista-habituales");
-  if (!h || !h.filas.length) { $("habituales").hidden = true; return; }
+  st.habLeidas = true;
+  if (!h || !h.filas.length) {
+    $("habituales-periodo").textContent = "";
+    lista.replaceChildren(el("p", { class: "nota tenue",
+      text: "Aún no hay tareas habituales: salen solas cuando llevas unos días fichando." }));
+    pintarCajaTareas();
+    return;
+  }
   $("habituales-periodo").textContent = `${h.desde} · ${h.total}`;
   const max = Math.max(...h.filas.map((f) => f.horas));
   lista.replaceChildren(...h.filas.map((f) => {
@@ -717,7 +732,189 @@ function pintarHabituales(h) {
     requestAnimationFrame(() => { barra.firstChild.style.width = `${Math.round((f.horas / max) * 100)}%`; });
     return fila;
   }));
-  $("habituales").hidden = false;
+  pintarCajaTareas();
+}
+
+// ---------------------------------------------------------------- pestañas: habituales y favoritas
+
+// La caja tiene dos pestañas y se ve si hay habituales o favoritas. Se abre en
+// la que se dejo; si de esa clase no hay nada y de la otra si, en la otra
+// (salvo que la pestaña se acabe de pulsar: entonces se respeta). Al arrancar,
+// hasta saber si hay habituales no se salta a la otra: no baila.
+function pestanaVisible() {
+  const hab = !!st.habituales?.filas?.length, fav = !!st.favLista.length;
+  if (st.pestanaElegida || hab === fav || !st.habLeidas) return st.pestana;
+  return fav ? "favoritas" : "habituales";
+}
+function pintarCajaTareas() {
+  const hab = !!st.habituales?.filas?.length, n = st.favLista.length;
+  $("habituales").hidden = !hab && !n;
+  const ver = pestanaVisible();
+  for (const id of ["habituales", "favoritas"]) {
+    const tab = $(`tab-${id}`), elegida = id === ver;
+    tab.setAttribute("aria-selected", String(elegida));
+    tab.tabIndex = elegida ? 0 : -1;        // con el tabulador se entra en la elegida; las flechas cambian
+    $(`lista-${id}`).hidden = !elegida;
+  }
+  $("tab-favoritas").textContent = `Favoritas (${n})`;
+  $("habituales-periodo").hidden = ver !== "habituales";
+  $("b-gestionar-fav").hidden = ver !== "favoritas";
+  pintarFavoritas();
+}
+function elegirPestana(id, { foco = false } = {}) {
+  st.pestanaElegida = true;
+  if (st.paneles.habituales === "min") ponerPanel("habituales", "abierto");   // minimizada: la pestaña la abre
+  if (id !== st.pestana) {
+    st.pestana = id;
+    llamar("guardar_pestana_tareas", id).catch(() => {});
+  }
+  pintarCajaTareas();
+  if (foco) $(`tab-${id}`).focus();
+}
+
+// La habitual de esa tarea (la primera, si tiene varias actividades), o null.
+const habitualDe = (id) => (st.habituales?.filas || []).find((f) => Number(f.wp_id) === Number(id)) || null;
+
+// Pestaña Favoritas: una fila por favorita, en su orden. Clic: al formulario;
+// la estrella la quita (con «Deshacer»); «+»: a los dias marcados.
+function pintarFavoritas() {
+  const lista = $("lista-favoritas");
+  if (!st.favLista.length) {
+    lista.replaceChildren(el("p", { class: "nota tenue",
+      text: "Aún no tienes favoritas. Márcalas con la ☆ al buscar una tarea, o añádelas en «Gestionar…»." }));
+    return;
+  }
+  lista.replaceChildren(...st.favLista.map((t) => el("div", { class: "fav-fila", "data-id": String(t.id) },
+    el("button", { class: "fav-info", title: `${t.id} · ${t.nombre}\nClic: rellena el formulario con esta tarea`,
+                   onclick: () => usarFavorita(t) },
+      el("span", { class: "fav-id", text: String(t.id) }), el("span", { class: "fav-nombre", text: t.nombre })),
+    el("button", { class: "bt-fav si fav-estrella", title: "Quitar de favoritas",
+                   "aria-label": `Quitar «${t.nombre}» de favoritas`, text: "★", onclick: () => quitarFavorita(t) }),
+    el("button", { class: "fav-mas", title: "Añadirla a los días marcados, con las horas que le faltan a cada día",
+                   "aria-label": `Añadir «${t.nombre}» a los días marcados`, text: "+", onclick: () => anadirFavorita(t) }))));
+}
+
+// Clic en una favorita: al formulario, como una habitual. Si ademas es
+// habitual, con su actividad y sus horas de siempre.
+async function usarFavorita(t) {
+  const hab = habitualDe(t.id);
+  if (hab) { await usarHabitual(hab); return; }
+  if (st.paneles.form !== "abierto") ponerPanel("form", "abierto");
+  $("tarea").value = textoDeTarea(t.id) || `${t.id} - ${t.nombre}`;
+  await elegirTarea();                  // carga SUS actividades
+  $("horas").focus();
+  estado(`Formulario rellenado con «${t.nombre}».`);
+}
+
+// El «+» de una favorita: a cada dia marcado, las horas que le faltan. Si la
+// tarea es ademas habitual, lo mismo que propone su «+» del dia (como mucho
+// las de siempre) y con su actividad. Los dias a los que no les falta nada se
+// saltan. Un dia: el añadido rapido de siempre; varios: una sola pregunta.
+async function anadirFavorita(t) {
+  if (st.ocupado) return;
+  const marcados = diasMarcados();
+  if (!marcados.length) { await avisar("Marca un día", "Marca primero el día (o los días) al que quieres añadirla."); return; }
+  const hab = habitualDe(t.id);
+  const f = { wp_id: t.id, tarea: t.nombre, actividad: hab?.actividad || "" };
+  const horasDe = (d) => (hab ? horasPropuestas(d, hab) : Math.max(0, d.falta || 0));
+  const dias = marcados.filter((d) => d.estado !== "error" && horasDe(d) > 0.001);
+  if (!dias.length) {
+    await avisar("Nada que añadir", marcados.length === 1 ? "A ese día no le faltan horas."
+                                                           : "A los días marcados no les faltan horas.");
+    return;
+  }
+  if (dias.length === 1) { await anadirRapido(dias[0], f, horasDe(dias[0])); return; }
+  if (!(await preguntar("Confirmar", `¿Añadir «${t.nombre}» a ${dias.length} días?\n\n`
+      + dias.map((d) => `${d.nombre} ${d.fecha}: ${fmtHoras(horasDe(d))}h`).join("\n")))) return;
+  // los dias con las mismas horas van juntos: una llamada por cantidad
+  const tandas = new Map();
+  for (const d of dias) {
+    const h = fmtHoras(horasDe(d));
+    tandas.set(h, [...(tandas.get(h) || []), d.iso]);
+  }
+  const planes = [];
+  for (const [h, isos] of tandas) {
+    const chk = await llamar("comprobar", isos, f.wp_id, h);
+    if (chk.error) { await avisar("No se puede añadir", chk.error); return; }
+    let repetir = true;
+    for (const a of chk.avisos) {
+      const si = await preguntar(a.titulo, a.texto);
+      if (a.clave === "repetir") repetir = si;           // "No" = saltar esos dias
+      else if (!si) return;
+    }
+    planes.push([h, isos, repetir]);
+  }
+  st.ocupado = true;
+  estado("Registrando…");
+  try {
+    const comentario = (await llamar("actividades", f.wp_id).catch(() => ({}))).comentario || "";
+    const total = { creados: 0, saltados: 0, errores: 0, ultimo: "" };
+    let r = {};
+    for (const [h, isos, repetir] of planes) {
+      r = await llamar("anadir", isos, f.wp_id, h, comentario, f.actividad, repetir);
+      if (r.error) { total.errores += 1; total.ultimo = r.error; break; }
+      total.creados += r.creados || 0;
+      total.saltados += r.saltados || 0;
+      total.errores += r.errores || 0;
+      total.ultimo = r.ultimo || total.ultimo;
+    }
+    await informarLote({ ...r, error: undefined, ...total }, {
+      hecho: (n) => `«${corto(t.nombre, 50)}» añadida a ${n} ${n === 1 ? "día" : "días"}.`,
+      nada: "No se añadió nada: esa tarea ya estaba en los días marcados." });
+  } finally {
+    st.ocupado = false;
+  }
+}
+
+// Quitar una favorita (la estrella de la pestaña, la × de «Mis favoritas»):
+// se puede deshacer, y vuelve a su sitio. Devuelve el orden que habia.
+async function quitarFavorita(t, { aviso = true } = {}) {
+  await guardarOrdenFavoritas();        // un cambio de orden aun sin guardar, antes
+  const orden = st.favLista.map((x) => x.id);
+  const r = await llamar("favorita", t.id, t.nombre, false);
+  ponerTareas(r.tareas);
+  repintarCampos();
+  const texto = `«${corto(t.nombre, 50)}» ya no es favorita.`;
+  estado(texto);
+  if (aviso) {
+    const a = $("aviso-deshacer");
+    a.replaceChildren(el("span", { text: texto }),
+      el("button", { class: "enlace", text: "Deshacer", onclick: () => { ocultarAviso(); reponerFavorita(t, orden); } }),
+      el("button", { class: "cerrar-aviso", text: "×", title: "Cerrar", "aria-label": "Cerrar", onclick: ocultarAviso }));
+    a.hidden = false;
+    clearTimeout(avisoT);
+    avisoT = setTimeout(ocultarAviso, 10000);
+  }
+  return orden;
+}
+async function reponerFavorita(t, orden) {
+  await llamar("favorita", t.id, t.nombre, true);
+  ponerTareas((await llamar("favoritas_ordenar", orden)).tareas);
+  repintarCampos();
+  estado(`«${corto(t.nombre, 50)}» vuelve a tus favoritas.`);
+}
+
+// Cambiar el orden: se ve al momento y se guarda con un respiro (varios pasos
+// seguidos, una escritura: cada una deja una copia de seguridad).
+let ordenFavT = null, ordenFavPend = null;
+function ordenarFavoritas(ids) {
+  const porId = new Map(st.favLista.map((t) => [t.id, t]));
+  st.favLista = ids.map((id) => porId.get(Number(id))).filter(Boolean);
+  ordenFavPend = st.favLista.map((t) => t.id);
+  clearTimeout(ordenFavT);
+  ordenFavT = setTimeout(guardarOrdenFavoritas, 600);
+  pintarCajaTareas();
+  st.alFavoritas?.();
+}
+async function guardarOrdenFavoritas() {
+  clearTimeout(ordenFavT);
+  if (!ordenFavPend) return;
+  const ids = ordenFavPend;
+  ordenFavPend = null;
+  try {
+    const r = await llamar("favoritas_ordenar", ids);
+    if (!ordenFavPend) ponerTareas(r.tareas);     // si se ha vuelto a mover entretanto, manda lo ultimo
+  } catch (_e) { /* llamar() ya aviso */ }
 }
 
 // Rellena el formulario con la tarea, su actividad y sus horas habituales; con
@@ -1626,10 +1823,19 @@ function actualizarTotales() {
 function ponerTareas(tareas) {
   st.tareas.clear();
   st.favoritas = new Set(tareas.filter((t) => t.favorita).map((t) => Number(t.id)));
+  // las favoritas de verdad y en su orden (lo que llega las mezcla con las
+  // buscadas de la sesion, que van delante)
+  st.favLista = tareas.filter((t) => t.favorita)
+    .map((t, i) => ({ id: Number(t.id), nombre: t.nombre || String(t.texto).split(" - ").slice(1).join(" - "),
+                      orden: Number.isInteger(t.orden) ? t.orden : i }))
+    .sort((a, b) => a.orden - b.orden).map(({ id, nombre }) => ({ id, nombre }));
   $("lista-tareas").replaceChildren(...tareas.map((t) => {
     st.tareas.set(t.texto, t.id);
     return el("option", { value: t.texto });
   }));
+  // la pestaña Favoritas y «Mis favoritas», al dia desde donde se haya marcado
+  pintarCajaTareas();
+  st.alFavoritas?.();
 }
 
 function ponerActividades(nombres, preferida) {
@@ -2008,6 +2214,18 @@ for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   });
 }
 $("b-buscar").onclick = () => dlgBuscar();
+$("b-gestionar-fav").onclick = () => dlgFavoritas();
+// Pestañas de la caja: clic, o flechas / Inicio / Fin con el foco en una
+for (const tab of document.querySelectorAll("#habituales [role=tab]")) {
+  tab.addEventListener("click", () => elegirPestana(tab.dataset.pestana));
+  tab.addEventListener("keydown", (e) => {
+    const otra = { ArrowLeft: "habituales", ArrowRight: "favoritas", Home: "habituales", End: "favoritas" }[e.key];
+    if (!otra || e.ctrlKey || e.altKey || e.metaKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    elegirPestana(otra, { foco: true });
+  });
+}
 $("b-tareas").onclick = (e) => { e.stopPropagation(); menuBajo($("b-tareas"), menuTareas()); };
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
   { texto: "Copiar día anterior a los días marcados", accion: dlgCopiarDia },
