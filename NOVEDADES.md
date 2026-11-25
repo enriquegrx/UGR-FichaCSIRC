@@ -50,11 +50,12 @@ instalada aparece en el pie de la ventana.
 - El árbol **se acuerda de los proyectos que dejaste desplegados**: la próxima
   vez (y al volver a abrir la app) salen así, en el campo Tarea y en *Buscar
   tarea*.
-- Cada tarea del árbol lleva su **☆** al final de la fila: la haces favorita
-  ahí mismo, sin tener que buscarla otra vez. (Y la ☆ ya no elige la tarea al
+- Al pasar por una tarea del árbol sale su **☆** al final de la fila: la haces
+  favorita ahí mismo, sin tener que buscarla otra vez. (Y la ☆ ya no elige la tarea al
   pulsarla: solo la marca o la quita de favoritas.)
-- **⟳ Actualizar** (en «Tus proyectos» y en *Buscar tarea*, también con F5): si
-  alguien acaba de crear una tarea en ProyectosTIC, la trae sin esperar.
+- **⟳ Actualizar** (en «Tus proyectos» y en *Buscar tarea*; ahí también con
+  F5): si alguien acaba de crear una tarea en ProyectosTIC, la trae sin esperar,
+  y la lista se queda donde estaba, con lo que tenías marcado.
 - **Proyectos visibles** (*Herramientas*): si te salen proyectos en los que no
   fichas, quítalos de en medio. También desde el propio árbol, con **«No
   mostrar»** al pasar por el proyecto. Solo dejan de salir al buscar tareas:

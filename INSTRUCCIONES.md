@@ -160,8 +160,8 @@ Abre **FichaCSIRC**:
   mirar también entre las **cerradas**. Con Ctrl o Mayús marcas varias.
 
 El árbol **se queda como lo dejas**: los proyectos que despliegues salen
-desplegados la próxima vez, también al volver a abrir la app. Cada tarea lleva
-una **☆** al final de su fila para hacerla favorita (★) sin elegirla. Y si
+desplegados la próxima vez, también al volver a abrir la app. Al pasar por una
+tarea sale una **☆** al final de su fila para hacerla favorita (★) sin elegirla. Y si
 alguien acaba de crear una tarea en ProyectosTIC y aún no la ves, pulsa
 **⟳ Actualizar** (o F5 dentro de *Buscar tarea*).
 

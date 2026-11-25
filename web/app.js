@@ -1975,7 +1975,9 @@ document.addEventListener("keydown", (e) => {
   if (!$("menu").hidden && e.key === "Escape") { cerrarMenu(); return; }
   if (typeof pila !== "undefined" && pila.length) {
     if (e.key === "Escape") { e.preventDefault(); pila[pila.length - 1].cerrar(); }
-    if (e.key === "F5") e.preventDefault();   // que no recargue la pagina con un dialogo a medias
+    // F5: que no recargue la pagina con un dialogo a medias; si el de arriba
+    // sabe actualizarse (Buscar tarea), lo hace, este donde este el foco
+    if (e.key === "F5") { e.preventDefault(); pila[pila.length - 1].alF5?.(); }
     return;                                   // con un dialogo abierto, nada mas
   }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }

@@ -406,21 +406,28 @@
         // la estrella de una tarea del arbol: la hace favorita sin elegirla, y la lista sigue abierta
         pulsar(proyecto("Sistemas de Gestión"));
         ok(await hasta(() => fila(14000)), "no despliega el segundo");
-        ok(!st.favoritas.has(14000) && fila(14000).querySelector(".bt-fav-fin")?.textContent === "☆", "la del árbol no lleva estrella");
+        // (la 15003 no es habitual ni favorita ni se ha usado: arriba no esta hasta que se marca)
+        const deArriba = (n) => [...caja().querySelectorAll(".bt-item:not(.bt-desp)")].find((x) => x.querySelector(".bt-id")?.textContent === String(n));
+        const flecha = (key) => inp.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+        ok(!st.favoritas.has(15003) && !deArriba(15003), "la 15003 ya está entre las de arriba: la prueba no vale");
+        ok(fila(15003).querySelector(".bt-fav-fin")?.textContent === "☆", "la del árbol no lleva estrella");
         const valor = inp.value;
-        pulsar(fila(14000).querySelector(".bt-fav"));
+        // (pulsar devuelve false si alguien frena el mousedown: sin eso el campo perderia el foco)
+        ok(!pulsar(fila(15003).querySelector(".bt-fav")), "pulsar la estrella le quita el foco al campo");
         ok(inp.value === valor && caja(), "pulsar la estrella elige la tarea");
-        fila(14000).querySelector(".bt-fav").click();
-        ok(await hasta(() => st.favoritas.has(14000)), "la estrella del árbol no la hace favorita");
-        ok(await hasta(() => fila(14000)?.querySelector(".bt-fav.si")?.textContent === "★"), "no se ve que ya es favorita");
-        ok(caja().textContent.includes("Favoritas y buscadas"), "no pasa a las favoritas del campo");
+        flecha("ArrowUp");                    // el teclado, en una fila de debajo
+        ok(caja().querySelector(".bt-item.activo"), "la flecha no lleva el teclado a ninguna fila");
+        fila(15003).querySelector(".bt-fav").click();
+        ok(await hasta(() => st.favoritas.has(15003)), "la estrella del árbol no la hace favorita");
+        ok(await hasta(() => fila(15003)?.querySelector(".bt-fav.si")?.textContent === "★"), "no se ve que ya es favorita");
+        ok(deArriba(15003), "la favorita nueva no sale arriba");
+        // las filas se han corrido: el teclado no se queda en otra (Intro la elegiria)
+        ok(!caja().querySelector(".bt-item.activo"), "tras la estrella, el teclado se queda en una fila que ya es otra");
         // y la de las filas de arriba (habituales, favoritas): tampoco elige la tarea
-        const arriba = [...caja().querySelectorAll(".bt-item:not(.bt-desp)")].find((x) => x.querySelector(".bt-id")?.textContent === "14000");
-        ok(arriba, "la favorita nueva no sale arriba");
-        pulsar(arriba.querySelector(".bt-fav"));
+        ok(!pulsar(deArriba(15003).querySelector(".bt-fav")), "la estrella de las de arriba le quita el foco al campo");
         ok(inp.value === valor, "la estrella de las de arriba elige la tarea");
-        arriba.querySelector(".bt-fav").click();
-        ok(await hasta(() => !st.favoritas.has(14000)), "no deja de ser favorita");
+        deArriba(15003).querySelector(".bt-fav").click();
+        ok(await hasta(() => !st.favoritas.has(15003)), "no deja de ser favorita");
 
         // «Actualizar»: lo creado en ProyectosTIC sale sin esperar a que caduque lo guardado
         api().tareas_de_proyecto = (pid) => original(pid).then((r) => (pid === "3"
@@ -428,13 +435,15 @@
         pulsar(proyecto("Aulas")); pulsar(proyecto("Aulas"));        // recoger y desplegar no la trae
         await espera(300);
         ok(fila(15004) && !fila(15099), "desplegar otra vez vuelve a pedir las tareas");
+        flecha("ArrowUp");
+        ok(caja().querySelector(".bt-item.activo"), "la flecha no lleva el teclado a ninguna fila");
         const boton = caja().querySelector(".bt-grupo .bt-actualizar");
         ok(boton, "«Tus proyectos» no lleva «Actualizar»");
-        pulsar(boton);
-        ok(caja(), "pulsar «Actualizar» cierra la lista");
+        ok(!pulsar(boton) && caja(), "pulsar «Actualizar» le quita el foco al campo (y se cerraría la lista)");
         boton.click();
         ok(caja().querySelector(".bt-actualizando"), "no dice que está actualizando");
         ok(await hasta(() => fila(15099)), "«Actualizar» no trae la tarea nueva");
+        ok(!caja().querySelector(".bt-item.activo"), "tras actualizar, el teclado se queda en una fila que ya es otra");
         ok(proyecto("Aulas").getAttribute("aria-expanded") === "true" && caja().querySelector(".bt-actualizar"), "tras actualizar no queda como estaba");
         inp.dispatchEvent(new Event("blur"));
         await espera(200);
@@ -458,14 +467,26 @@
         ok(!tarea(14000), "no se recoge");
         await espera(800);
         ok(JSON.stringify(await api().proyectos_desplegados()) === "[3]", `no recuerda lo recogido: ${JSON.stringify(await api().proyectos_desplegados())}`);
+        // quien abre la app y va directo a Buscar tarea: lee por su cuenta lo recordado, y
+        // con algo recordado no despliega ademas el proyecto de la tarea del formulario
+        ok(String(await proyectoDeTarea(tareaDelFormulario()?.id)) === "1", "la tarea del formulario no es de Sistemas de Gestión: la prueba no vale");
+        cerrarTodo();
+        desplegados.ids.clear(); desplegados.leyendo = null; desplegados.tocados = false;
+        dlgBuscar();
+        ok(await hasta(() => tarea(15004)), "Buscar tarea no lee por su cuenta los proyectos desplegados");
+        await espera(400);                    // lo que tarda en saber de que proyecto es la del formulario
+        ok(proyD("Sistemas de Gestión").getAttribute("aria-expanded") === "false", "con uno recordado, despliega además el de la tarea del formulario");
         // «Actualizar» (boton y F5): tareas nuevas sin cerrar, con lo desplegado como estaba
         api().tareas_de_proyecto = (pid) => original(pid).then((r) => (pid === "3"
           ? { tareas: [...r.tareas, { id: 15098, nombre: "[AUL] Otra recién creada" }] } : r));
         botonDlg("⟳ Actualizar");
         ok(await hasta(() => tarea(15098) && !tarea(15099)), "el botón «Actualizar» no trae lo nuevo");
         api().tareas_de_proyecto = original;
-        dlg().querySelector(".bq-lista").dispatchEvent(new KeyboardEvent("keydown", { key: "F5", bubbles: true, cancelable: true }));
-        ok(await hasta(() => tarea(15004) && !tarea(15098)), "F5 no actualiza");
+        // F5 vale aunque el foco no este dentro del dialogo (tras pulsar el titulo, p. ej.)
+        document.activeElement?.blur();
+        ok(!dlg().contains(document.activeElement), "el foco sigue dentro del diálogo: la prueba no vale");
+        ok(!teclado("F5", { cancelable: true }), "F5 con un diálogo abierto recargaría la página");
+        ok(await hasta(() => tarea(15004) && !tarea(15098)), "F5 no actualiza si el foco no está en el diálogo");
         ok(proyD("Aulas").getAttribute("aria-expanded") === "true" && !/null|undefined/.test(dlg().textContent), "tras actualizar no queda como estaba");
       } finally {
         api().tareas_de_proyecto = original;
@@ -475,6 +496,132 @@
         inp.dispatchEvent(new Event("blur"));
         inp.value = antes;
         await elegirTarea();
+      }
+    });
+    await prueba("buscar tarea: ni el filtro cambia lo recordado ni la estrella quita el foco, y «Actualizar» deja la lista como estaba", async () => {
+      await recoger();
+      const tareasDe = api().tareas_de_proyecto, ocultosDe = api().proyectos_ocultos, buscarDe = api().buscar_tareas;
+      const lista = () => dlg().querySelector(".bq-lista");
+      const filas = () => [...(dlg()?.querySelectorAll(".bq-lista .bt-item") || [])];
+      const proyD = (n) => filas().find((x) => x.classList.contains("bt-proy") && x.textContent.includes(n));
+      const tarea = (n) => filas().find((x) => x.querySelector(".bt-id")?.textContent === String(n));
+      const clic = (x, extra = {}) => x.dispatchEvent(new MouseEvent("click", { bubbles: true, ...extra }));
+      const baja = (x) => x.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      const marcadas = () => [...new Set([...lista().querySelectorAll(".marcada .bt-id")].map((x) => x.textContent))].sort().join(",");
+      const cursor = () => lista().querySelector(".bt-item.cursor .bt-id")?.textContent;
+      const actualizar = async () => {
+        const b = [...dlg().querySelectorAll(".dlg-pie button")].find((x) => x.textContent.trim() === "⟳ Actualizar");
+        b.click();
+        ok(await hasta(() => !b.disabled), "«Actualizar» no termina");
+      };
+      let ojo = null;
+      try {
+        dlgBuscar();
+        ok(await hasta(() => proyD("Aulas")), "no salen los proyectos");
+        await espera(400);                    // sin nada recordado, se abre solo el de la tarea del formulario
+        clic(proyD("Aulas"));
+        ok(await hasta(() => tarea(15011)), "no se despliega");
+        const filtro = dlg().querySelector("input.ancho"), proy = dlg().querySelector("select");
+        const escribir = (t) => { filtro.value = t; filtro.dispatchEvent(new Event("input")); };
+        const recordados = () => [...desplegados.ids].sort().join(",");
+
+        // con filtro todos salen abiertos: pulsar uno no cambia nada, tampoco lo recordado
+        escribir("megafon");
+        ok(await hasta(() => tarea(15004) && !tarea(15011) && !proyD("ATE")), "el filtro no filtra");
+        clic(proyD("Aulas"));
+        ok(recordados() === "3" && tarea(15004), `con filtro, pulsar un proyecto cambia lo recordado: ${recordados()}`);
+        lista().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+        ok(recordados() === "3" && tarea(15004), `con filtro, la flecha izquierda cambia lo recordado: ${recordados()}`);
+        escribir("");
+        ok(await hasta(() => tarea(15011)), "al borrar el filtro no vuelve el árbol");
+
+        // la estrella y «No mostrar» no se llevan el foco: el teclado sigue yendo a la lista
+        filtro.focus();
+        ok(!baja(tarea(15011).querySelector(".bt-fav")) && document.activeElement === lista(), "la estrella le quita el foco a la lista");
+        filtro.focus();
+        ok(!baja(proyD("ATE").querySelector(".bt-ocultar")) && document.activeElement === lista(), "«No mostrar» le quita el foco a la lista");
+
+        // «Actualizar»: lo marcado, el cursor y el sitio se quedan, y lo que habia se ve hasta tener lo nuevo
+        clic(tarea(15010)); clic(tarea(15011), { ctrlKey: true });
+        ok(marcadas() === "15010,15011" && cursor() === "15011", `no marca: ${marcadas()} / ${cursor()}`);
+        lista().scrollTop = 60;
+        const sitio = lista().scrollTop;
+        ok(sitio > 0, "la lista no da para moverla: la prueba no vale");
+        let leidos = 0, cargando = false;
+        api().proyectos_ocultos = () => { leidos++; return ocultosDe(); };
+        api().tareas_de_proyecto = (pid) => tareasDe(pid).then((r) => (pid === "3"
+          ? { tareas: [...r.tareas, { id: 15097, nombre: "[AUL] Recién creada" }] } : r));
+        ojo = new MutationObserver(() => { if (lista().textContent.includes("Cargando tareas")) cargando = true; });
+        ojo.observe(lista(), { childList: true, subtree: true });
+        await actualizar();
+        ojo.disconnect();
+        ok(tarea(15097), "«Actualizar» no trae lo nuevo");
+        ok(!cargando, "al actualizar la lista se vacía («Cargando tareas…») en vez de seguir con lo que había");
+        ok(marcadas() === "15010,15011" && cursor() === "15011", `al actualizar se pierde lo marcado o el cursor: ${marcadas()} / ${cursor()}`);
+        ok(lista().scrollTop === sitio, `al actualizar la lista se mueve: ${lista().scrollTop} (estaba en ${sitio})`);
+        ok(leidos === 0, "«Actualizar» vuelve a leer los proyectos ocultos (pisaría un «No mostrar» hecho entretanto)");
+        api().tareas_de_proyecto = tareasDe;
+
+        // con un proyecto elegido: al volver a todos, los desplegados no se quedan en «Cargando tareas…»
+        proy.value = "1"; proy.dispatchEvent(new Event("change"));
+        ok(await hasta(() => tarea(14000) && !proyD("Aulas")), "no enseña el proyecto elegido");
+        await actualizar();
+        proy.value = ""; proy.dispatchEvent(new Event("change"));
+        ok(await hasta(() => tarea(15011)), `tras actualizar con un proyecto elegido, el desplegado se queda sin sus tareas: ${lista().textContent.slice(0, 200)}`);
+        ok(!lista().textContent.includes("Cargando tareas"), "queda algún «Cargando tareas…»");
+
+        // en la lista de las cerradas tambien se queda lo marcado; y al borrar el filtro vuelve el arbol entero
+        escribir("auditor");
+        ok(await hasta(() => dlg().querySelector(".bq-fuera")), "no ofrece buscar entre las cerradas");
+        dlg().querySelector(".bq-fuera").click();
+        ok(await hasta(() => tarea(13990)), "no busca entre las cerradas");
+        clic(tarea(13990));
+        let buscadas = 0;
+        api().buscar_tareas = (t) => { buscadas++; return buscarDe(t); };
+        await actualizar();
+        ok(buscadas === 1 && tarea(13990), "«Actualizar» no vuelve a buscar entre las cerradas");
+        ok(marcadas() === "13990" && cursor() === "13990", `en las cerradas, «Actualizar» borra lo marcado: ${marcadas()} / ${cursor()}`);
+        escribir("");
+        ok(await hasta(() => tarea(15011) && tarea(14000)), `tras actualizar en las cerradas, el árbol no vuelve entero: ${lista().textContent.slice(0, 200)}`);
+        ok(!lista().textContent.includes("Cargando tareas") && !/null|undefined/.test(dlg().textContent), "queda algún «Cargando tareas…»");
+      } finally {
+        ojo?.disconnect();
+        api().tareas_de_proyecto = tareasDe; api().proyectos_ocultos = ocultosDe; api().buscar_tareas = buscarDe;
+        cerrarTodo();
+        olvidarMisProyectos();
+        await recoger();
+      }
+    });
+    await prueba("campo Tarea: un segundo campo se entera de lo que pidió el primero", async () => {
+      await recoger();
+      const inp = $("tarea");
+      const otro = el("input", { type: "text" });
+      document.body.append(otro);
+      buscadorTarea(otro, { alElegir() {} });
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      try {
+        // los proyectos ya estan leidos (el campo del formulario) y Aulas, desplegado
+        await espera(200);
+        inp.dispatchEvent(new Event("focus"));
+        ok(await hasta(() => caja()?.textContent.includes("Tus proyectos")), "no salen los proyectos");
+        inp.dispatchEvent(new Event("blur"));
+        await espera(200);
+        desplegados.ids.add("3");
+        mios.tareas.delete("3");
+        pedirTareasDeMiProyecto("3", () => {});      // las pide un campo...
+        otro.dispatchEvent(new Event("focus"));      // ...y mientras llegan se abre otro
+        ok(caja()?.textContent.includes("Cargando tareas"), `el segundo campo no espera las tareas: ${caja()?.textContent}`);
+        ok(await hasta(() => caja()?.textContent.includes("15004")), "el segundo campo se queda en «Cargando tareas…»");
+        // igual con «Actualizar» pulsado en otro campo
+        actualizarMisProyectos(() => {});
+        ok(caja().querySelector(".bt-actualizando"), "el segundo campo no dice que se está actualizando");
+        ok(await hasta(() => caja().querySelector(".bt-actualizar") && caja().textContent.includes("15004")), "el segundo campo se queda en «Actualizando…»");
+      } finally {
+        otro.dispatchEvent(new Event("blur"));
+        otro.remove();
+        await espera(200);
+        olvidarMisProyectos();
+        await recoger();
       }
     });
     await prueba("deshacer en varios niveles", async () => {
