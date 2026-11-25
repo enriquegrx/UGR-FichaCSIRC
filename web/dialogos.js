@@ -1817,6 +1817,20 @@ function tareaDelFormulario() {
   return id ? { id, nombre: texto.split(" - ").slice(1).join(" - ") || texto } : null;
 }
 
+// El proyecto (su numero) de una tarea, o null si no se sabe. Se pregunta una
+// vez por tarea: sirve para abrir Nueva tarea en el proyecto en el que se esta.
+const proyectosDeTareas = new Map();
+async function proyectoDeTarea(id) {
+  if (!id) return null;
+  if (!proyectosDeTareas.has(id)) {
+    try {
+      const r = await api().tarea_datos(id);
+      if (r?.proyecto?.id) proyectosDeTareas.set(id, r.proyecto.id);
+    } catch (_e) { /* sin red: se queda el primero de la lista */ }
+  }
+  return proyectosDeTareas.get(id) ?? null;
+}
+
 // Las tareas de un proyecto de las que PUEDE colgar la tarea 'id': todas menos
 // ella y las que cuelgan de ella.
 function sinSuRama(tareas, id) {
@@ -2039,7 +2053,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     api().tareas_de_proyecto(pid).then((r) => r.tareas || [], () => []).then((ts) => {
       if (proy.value !== pid) return;
       tareasProy = ts;
-      listaPadre.repintar();
+      listaPadre?.repintar();
       if (padreSel) pintarVista();
     });
     const r = await opciones(null);
@@ -2078,9 +2092,14 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     quitar.hidden = !t;
     pintarVista();
   }
-  const listaPadre = buscadorTarea(padre, { alElegir: ponerPadre, fuente: () => ({
-    titulo: "Tareas abiertas del proyecto", tareas: tareasProy, arbol: true,
-    vacio: (q) => (q ? "Ninguna tarea abierta del proyecto con eso." : "Este proyecto no tiene tareas abiertas.") }) });
+  // La lista se monta con el campo ya en el dialogo (montar): el buscador
+  // retira la suya en cuanto ve que su campo no esta en la pagina.
+  let listaPadre = null;
+  const montarListaPadre = () => {
+    listaPadre = buscadorTarea(padre, { alElegir: ponerPadre, fuente: () => ({
+      titulo: "Tareas abiertas del proyecto", tareas: tareasProy, arbol: true,
+      vacio: (q) => (q ? "Ninguna tarea abierta del proyecto con eso." : "Este proyecto no tiene tareas abiertas.") }) });
+  };
   // De quien cuelga la elegida, hasta arriba: lo que se vera en ProyectosTIC.
   function ramaDelPadre() {
     if (!padreSel) return [];
@@ -2193,6 +2212,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
         el("label", { class: "check" }, asignar, " Asignármela", notaAsignar),
         el("label", { class: "check" }, fav, " Guardarla en mis favoritas")),
       vista, error));
+    montarListaPadre();
   }
 
   function sinPermiso() {
@@ -2215,9 +2235,15 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     if (!puedeCrearTareas()) { sinPermiso(); return; }
     const ps = st.crear.proyectos;
     proy.replaceChildren(...ps.map((p) => el("option", { value: String(p.id), text: p.nombre })));
-    // el proyecto que se estaba mirando; si no, el de la ultima vez
-    const preferido = [proyecto, st.crear.ultimo].map(String).find((x) => ps.some((p) => String(p.id) === x));
-    if (preferido) proy.value = preferido;
+    // el proyecto que se estaba mirando; si no, el de la ultima vez; y la
+    // primera vez, el de la tarea que hay puesta en el formulario
+    const esta = (x) => ps.some((p) => String(p.id) === String(x));
+    let preferido = [proyecto, st.crear.ultimo].find(esta);
+    if (!preferido && ps.length > 1) {
+      preferido = [await proyectoDeTarea(tareaDelFormulario()?.id)].find(esta);
+      if (!pila.includes(d)) return;
+    }
+    if (preferido) proy.value = String(preferido);
     montar();
     tit.focus();
     cargarProyecto();

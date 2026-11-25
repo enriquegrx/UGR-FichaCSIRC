@@ -97,7 +97,10 @@ instalada aparece en el pie de la ventana.
 - Si ProyectosTIC pide un dato que FichaCSIRC no rellena (un campo propio
   obligatorio), te lo dice antes y te lleva a la web.
 - En la cabecera, en broma: **Nivel dios** si puedes crear tareas y **Nivel
-  loser** si no. Al pasar el ratón explica cada nivel.
+  loser** si no. Al pasar el ratón explica cada nivel y dice en qué proyectos
+  puedes crearlas.
+- «Nueva tarea» se abre en el último proyecto en el que creaste una; la primera
+  vez, en el de la tarea que tengas puesta en *Añadir apunte*.
 
 **Icono junto al reloj**
 - **«Completar hoy con…»** tu tarea habitual, desde el menú del icono y sin

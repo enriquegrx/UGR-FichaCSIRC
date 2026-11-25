@@ -296,7 +296,8 @@ La app recuerda la vista que dejaste.
 Si en ProyectosTIC tienes permiso para **crear tareas** en algún proyecto, la
 cabecera dice **Nivel dios** y junto a *Buscar…* aparece el botón **＋ Nueva**.
 Si no lo tienes, dice **Nivel loser** y no verás nada de este apartado: el
-permiso lo da quien administra cada proyecto.
+permiso lo da quien administra cada proyecto. Al pasar el ratón por el nivel
+verás en qué proyectos puedes crear tareas: basta con uno.
 
 - ➕ **Crear una tarea**: **＋ Nueva** (o Ctrl+N). Escribe el título, elige el
   proyecto y el tipo y, si quieres, la tarea de la que cuelga, el tiempo

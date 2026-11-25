@@ -765,6 +765,21 @@
          `la cabecera no dice el nivel: ${modo.textContent}`);
       ok(modo.querySelectorAll(".modo-nivel").length === 2 && modo.querySelector(".modo-nivel.mio").textContent.includes("2 proyectos"),
          `la galleta no explica los niveles: ${modo.querySelector(".modo-galleta").textContent}`);
+      // y dice en que proyectos deja crear, solo en el nivel dios
+      const donde = [...modo.querySelectorAll(".modo-nivel.mio .modo-proyectos li")].map((x) => x.textContent).join(" | ");
+      ok(donde === "Sistemas de Gestión | Aulas y Teledocencia", `la galleta no dice en qué proyectos: ${donde}`);
+      ok(modo.querySelectorAll(".modo-proyectos").length === 1, "la lista de proyectos sale también en el otro nivel");
+      // la primera vez, el dialogo se abre en el proyecto de la tarea del formulario
+      const antes = $("tarea").value, deAulas = "15004 - Revisión de megafonía del Aulario";
+      st.tareas.set(deAulas, 15004);
+      $("tarea").value = deAulas;
+      $("b-nueva").click();
+      ok(await hasta(() => document.querySelector(".nt-tipo")), "no pinta los tipos del proyecto");
+      ok(document.querySelector(".nt-dos select").value === "3",
+         `no se abre en el proyecto de la tarea del formulario: ${document.querySelector(".nt-dos select").value}`);
+      cerrarTodo();
+      st.tareas.delete(deAulas);
+      $("tarea").value = antes;
       ok(getComputedStyle(modo.querySelector(".modo-galleta")).display === "none", "la galleta sale sin pasar el ratón");
       ok(!/null|undefined/.test(modo.textContent), "la insignia escribe null/undefined");
       $("b-nueva").click();

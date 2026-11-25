@@ -122,6 +122,9 @@ button, input, select { font: inherit; color: inherit; }
 .modo-nivel i { font-style: normal; font-size: 11px; margin-left: 8px; padding: 1px 7px; border-radius: 999px;
                 background: var(--tooltip-fg); color: var(--tooltip-bg); }
 .modo-nivel p { margin: 4px 0 0; }
+.modo-proyectos { margin: 5px 0 0; padding: 0 0 0 16px; }
+.modo-proyectos li { overflow-wrap: anywhere; }
+.modo-proyectos li.mas { list-style: none; margin-left: -16px; opacity: .8; }
 .modo:not([hidden]) ~ .usuario { margin-left: 0; }
 @media (max-width: 900px) { .modo { display: none; } }
 /* Bloquear y Salir, a la vista junto al nombre; Salir, en rojo al pasar el

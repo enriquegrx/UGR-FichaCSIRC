@@ -274,6 +274,7 @@ async function cargarPermisoCrear() {
   catch (_e) { st.crear = null; }
   pintarPermisoCrear();
 }
+const MAX_PROYECTOS_NIVEL = 6;
 function pintarPermisoCrear() {
   const n = st.crear?.proyectos?.length || 0, no = !n;
   $("b-nueva").hidden = no;
@@ -283,15 +284,20 @@ function pintarPermisoCrear() {
   m.hidden = !st.crear;
   m.classList.toggle("dios", !no);
   // al pasar el raton (o con el foco), una galleta explica los dos niveles y marca el tuyo
-  const nivel = (icono, nombre, texto, mio) => el("div", { class: `modo-nivel${mio ? " mio" : ""}` },
+  const nivel = (icono, nombre, texto, mio, extra = null) => el("div", { class: `modo-nivel${mio ? " mio" : ""}` },
     el("span", { class: "ico", "aria-hidden": "true", text: icono }),
-    el("div", {}, el("b", { text: nombre }), mio ? el("i", { text: "tu nivel" }) : null, el("p", { text: texto })));
+    el("div", {}, el("b", { text: nombre }), mio ? el("i", { text: "tu nivel" }) : null, el("p", { text: texto }), extra));
+  // de donde viene el nivel: los proyectos en los que deja (los primeros, si son muchos)
+  const ps = st.crear?.proyectos || [];
+  const donde = no ? null : el("ul", { class: "modo-proyectos" },
+    ...ps.slice(0, MAX_PROYECTOS_NIVEL).map((p) => el("li", { text: p.nombre })),
+    n > MAX_PROYECTOS_NIVEL ? el("li", { class: "mas", text: `y ${n - MAX_PROYECTOS_NIVEL} más` }) : null);
   m.replaceChildren(el("span", { class: "ico", "aria-hidden": "true", text: no ? "🎮" : "⚔️" }), no ? "Nivel loser" : "Nivel dios",
     el("div", { class: "modo-galleta", role: "tooltip" },
       nivel("⚔️", "Nivel dios", no ? "ProyectosTIC te deja crear tareas en algún proyecto: puedes crearlas, modificarlas, "
         + "duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el menú Archivo."
-        : `ProyectosTIC te deja crear tareas en ${n === 1 ? "1 proyecto" : `${n} proyectos`}: puedes crearlas, modificarlas, `
-        + "duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el menú Archivo.", !no),
+        : "Puedes crear tareas, modificarlas, duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el "
+        + `menú Archivo. ProyectosTIC te deja crearlas en ${n === 1 ? "1 proyecto" : `${n} proyectos`}:`, !no, donde),
       nivel("🎮", "Nivel loser", "A fichar en las tareas que ya existen. Para subir de nivel, quien administra un proyecto "
         + "tiene que darte permiso para crear tareas en él.", no)));
 }
