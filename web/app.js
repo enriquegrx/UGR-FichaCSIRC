@@ -379,6 +379,7 @@ const MENUS = {
   ],
   herramientas: () => [
     { texto: "Plantillas…", accion: dlgPlantillas },
+    { texto: "Proyectos visibles…", accion: () => dlgProyectosVisibles() },
     { texto: "Importar festivos…", accion: dlgFestivos },
     { texto: "Vacaciones y teletrabajo…", accion: dlgAjustesDias },
     { texto: "Permisos (horas)…", accion: dlgPermisos },
@@ -1339,15 +1340,22 @@ function pintarMarcados() {
 
 function menuDia(x, y, d) {
   // Lo mas repetido del dia a dia, lo primero y destacado (en negrita, no en
-  // rojo: el rojo en la app es borrar).
+  // rojo: el rojo en la app es borrar). Copiar y pegar, juntos: el dia anterior,
+  // este dia y, si hay algo copiado, pegarlo aqui.
   const items = [{ titulo: `${d.nombre} ${d.fecha}` },
                  { texto: "⧉ Copiar día anterior", clase: "destacado",
                    accion: () => dlgCopiarDia([d.iso]) },
-                 { texto: "✎ Editar día…", desactivado: d.estado === "error",
-                   accion: () => dlgEditarDia(d) },
-                 { texto: "🗑 Eliminar apuntes de este día…", clase: "destacado",
-                   desactivado: !d.apuntes.length, accion: () => dlgEliminarDia(d) },
-                 "-"];
+                 { texto: "Copiar este día (Ctrl+C)", desactivado: !d.apuntes.length,
+                   accion: () => copiarDia(d) }];
+  if (st.portapapeles && st.portapapeles.iso !== d.iso) {
+    items.push({ texto: `Pegar aquí lo del ${st.portapapeles.texto.toLowerCase()} (Ctrl+V)`,
+                 accion: () => pegarDia(d.iso) });
+  }
+  items.push("-",
+    { texto: "✎ Editar día…", desactivado: d.estado === "error", accion: () => dlgEditarDia(d) },
+    { texto: "🗑 Eliminar apuntes de este día…", clase: "destacado",
+      desactivado: !d.apuntes.length, accion: () => dlgEliminarDia(d) },
+    "-");
   // Rellenar lo que falta con una tarea habitual: un clic y el dia en verde.
   if (d.falta > 0.001 && !d.no_laborable && d.estado !== "error") {
     for (const f of (st.habituales?.filas || []).slice(0, 2)) {
@@ -1358,13 +1366,6 @@ function menuDia(x, y, d) {
     // opcion pulsada ya no existe, lo toma por "fuera del menu" y lo cierra.
     items.push({ texto: "＋ Añadir otra tarea…", accion: () => setTimeout(() => menuAnadirRapido(d, x, y)) }, "-");
   }
-  items.push({ texto: "Copiar este día (Ctrl+C)", desactivado: !d.apuntes.length,
-               accion: () => copiarDia(d) });
-  if (st.portapapeles && st.portapapeles.iso !== d.iso) {
-    items.push({ texto: `Pegar aquí lo del ${st.portapapeles.texto.toLowerCase()} (Ctrl+V)`,
-                 accion: () => pegarDia(d.iso) });
-  }
-  items.push("-");
   const marca = (accion, motivo = "") => async () => {
     if (accion === "teletrabajo" && (await llamar("teletrabajo_lleno", d.iso))
         && !(await preguntar("Teletrabajo",

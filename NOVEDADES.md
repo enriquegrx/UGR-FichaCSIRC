@@ -38,9 +38,21 @@ instalada aparece en el pie de la ventana.
   tarea, para elegirlos sin volver a escribirlos.
 - En *Añadir apunte*, cada botón dice de qué habla: **«Buscar tarea…»** y
   **«Añadir apunte a…»** el día marcado.
-- **Buscar tarea** enseña las tareas del proyecto en árbol, cada una debajo de
-  la que cuelga. Al filtrar quedan las que encajan y las que tienen encima, y
-  ya no hace falta escribir las tildes.
+- **Buscar tarea**, siempre en árbol: se abre con **tus proyectos**, cada uno
+  se despliega al pulsarlo y enseña sus tareas, cada una debajo de la que
+  cuelga. Las tareas con otras debajo se recogen con su flecha. Al escribir en
+  el filtro busca en todos tus proyectos a la vez, sin tildes, y al borrarlo
+  vuelves al árbol. Si no encuentra nada, ofrece buscar también entre las
+  tareas cerradas.
+- El campo **Tarea** (en *Añadir apunte* y en *Editar día*) enseña, debajo de
+  tus habituales y favoritas, **«Tus proyectos»**: pulsas uno y eliges la tarea
+  en su árbol, sin abrir nada más.
+- **Proyectos visibles** (*Herramientas*): si te salen proyectos en los que no
+  fichas, quítalos de en medio. También desde el propio árbol, con **«No
+  mostrar»** al pasar por el proyecto. Solo dejan de salir al buscar tareas:
+  en ProyectosTIC no cambia nada.
+- **Botón derecho sobre un día**: *Copiar día anterior*, *Copiar este día* y
+  *Pegar aquí* van juntos, arriba del todo.
 
 **Estadísticas**
 - Botón **📊 Estadísticas**, dentro de la propia ventana: **Semanal, Mensual o
@@ -90,8 +102,8 @@ instalada aparece en el pie de la ventana.
   lista para fichar.
 - **De cuál cuelga**: eliges la tarea madre en el árbol de tareas abiertas del
   proyecto. Si no eliges ninguna, cuelga directamente del proyecto.
-- Desde el **buscador de tareas**: si lo que escribes no existe, la última
-  fila ofrece crearla con ese nombre.
+- Desde **Buscar tarea**: si la que buscas no existe, **＋ Nueva tarea…** la
+  crea con lo que hayas escrito en el filtro.
 - **Plantillas de tarea**: guarda lo que repites (proyecto, tipo, de cuál
   cuelga, tiempo estimado, descripción) y rellena la tarea con un clic. Un
   asterisco en el título marca lo que cambia cada vez, como el número de

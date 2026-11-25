@@ -848,6 +848,20 @@ class TestDialogos(Base):
             r = self.api.nueva_tarea_proyectos()
         self.assertEqual(r, {"proyectos": [{"id": 42, "nombre": "ATE"}], "modificar": [], "ultimo": 42, "plantillas": []})
 
+    def test_proyectos_ocultos(self):
+        # lo guardado se lee limpio: numeros, sin repetir, y nada raro
+        with mock.patch.object(core, "config_valor", return_value=[285, "12", 285, 0, "x", None]) as m_leer:
+            self.assertEqual(self.api.proyectos_ocultos(), [285, 12])
+        m_leer.assert_called_once_with("proyectos_ocultos")
+        with mock.patch.object(core, "config_valor", return_value=None):
+            self.assertEqual(self.api.proyectos_ocultos(), [])
+        with mock.patch.object(core, "guardar_config_valores") as m_guardar:
+            self.assertEqual(self.api.proyectos_ocultos_guardar(["7", 7, 3, -1]), [7, 3])
+            m_guardar.assert_called_once_with({"proyectos_ocultos": [7, 3]})
+            # volver a verlos todos: lista vacia (no se borra la clave a medias)
+            self.assertEqual(self.api.proyectos_ocultos_guardar([]), [])
+            self.assertEqual(self.api.proyectos_ocultos_guardar("no es una lista"), [])
+
     def test_quien_no_puede_crear_quiza_pueda_modificar(self):
         sin_enlace = [{"id": 43, "name": "Sistemas", "_links": {"self": {"href": "/api/v3/projects/43"}}}]
         caps = [{"_links": {"context": {"href": "/api/v3/projects/43", "title": "Sistemas"}}},

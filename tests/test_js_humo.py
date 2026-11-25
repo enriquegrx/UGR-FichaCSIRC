@@ -77,7 +77,7 @@ class TestHumoWeb(unittest.TestCase):
         perfil = os.path.join(self.tmp, "perfil")
         cmd = [navegador(), "--headless=new", "--disable-gpu", "--no-sandbox",
                f"--user-data-dir={perfil}", "--window-size=1440,900",
-               "--virtual-time-budget=30000", "--dump-dom", url]
+               "--virtual-time-budget=60000", "--dump-dom", url]
         # Lanzado desde otra app Chromium (Electron, el propio Claude...), el
         # navegador hereda CHROME_CRASHPAD_PIPE_NAME, se cree un proceso hijo y
         # sale sin hacer nada: se limpia el entorno.

@@ -1715,6 +1715,30 @@ class Api:
     def proyectos(self):
         return core.proyectos()
 
+    @staticmethod
+    def _ids_proyectos(valor):
+        """Numeros de proyecto validos y sin repetir, en el orden en que vienen."""
+        out = []
+        for x in valor if isinstance(valor, list) else []:
+            try:
+                n = int(str(x).strip())
+            except (TypeError, ValueError):
+                continue
+            if n > 0 and n not in out:
+                out.append(n)
+        return out
+
+    def proyectos_ocultos(self):
+        """Los proyectos que el usuario no quiere ver al buscar una tarea para
+        fichar (Buscar tarea y el campo Tarea). Solo en la app: en ProyectosTIC
+        no cambia nada. Se recuperan en Herramientas > Proyectos visibles."""
+        return self._ids_proyectos(core.config_valor("proyectos_ocultos"))
+
+    def proyectos_ocultos_guardar(self, ids):
+        limpios = self._ids_proyectos(ids)
+        core.guardar_config_valores({"proyectos_ocultos": limpios})
+        return limpios
+
     def tareas_de_proyecto(self, pid):
         try:
             return {"tareas": core.tareas_proyecto(int(pid))}

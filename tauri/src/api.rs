@@ -548,6 +548,18 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
             Ok(json!(cli.proyectos().await.map_err(|err| err.to_string())?))
         }
+        // Los proyectos que el usuario no quiere ver al buscar una tarea para fichar
+        // (Buscar tarea y el campo Tarea). Solo en la app: en ProyectosTIC no cambia
+        // nada. Se recuperan en Herramientas > Proyectos visibles.
+        "proyectos_ocultos" => Ok(json!(ids_proyectos(&cfg.lista("proyectos_ocultos")))),
+        "proyectos_ocultos_guardar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let ids = ids_proyectos(&arg_lista(&args, 0));
+            let mut m = Map::new();
+            m.insert("proyectos_ocultos".into(), json!(ids));
+            config::guardar_valores(m)?;
+            Ok(json!(ids))
+        }
         "tareas_de_proyecto" => {
             e.exigir_desbloqueo(&cfg)?;
             let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
@@ -841,6 +853,17 @@ fn paneles(cfg: &Cfg) -> Value {
     Value::Object(out)
 }
 
+/// Numeros de proyecto validos y sin repetir, en el orden en que vienen.
+fn ids_proyectos(vs: &[Value]) -> Vec<i64> {
+    let mut out: Vec<i64> = Vec::new();
+    for n in vs.iter().filter_map(id_entero).filter(|n| *n > 0) {
+        if !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out
+}
+
 pub(crate) fn id_entero(v: &Value) -> Option<i64> {
     v.as_i64().or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse().ok()))
 }
@@ -1043,4 +1066,16 @@ async fn pintar_semana(e: &Estado, cfg: &Cfg, lunes: NaiveDate) -> Value {
         "conexion_detalle": detalle,
         "dias": tarjetas,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn los_proyectos_ocultos_son_numeros_sin_repetir() {
+        let vs = vec![json!(285), json!("12"), json!(285), json!(0), json!(-3), json!("x"), Value::Null, json!(7)];
+        assert_eq!(ids_proyectos(&vs), vec![285, 12, 7]);
+        assert!(ids_proyectos(&[]).is_empty());
+    }
 }

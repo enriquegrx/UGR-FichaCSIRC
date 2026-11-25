@@ -110,6 +110,7 @@
     aul(15010, "[AUL] Renovación de proyectores", 14990, "[2026_AUL] Proyectos"),
     aul(15011, "Proyectores de la Facultad de Ciencias", 15010, "[AUL] Renovación de proyectores")];
   let ultimoCrear = null, sigTarea = 14100;
+  let ocultosDemo = [];
   // Plantillas de tarea (ninguna con ?sinplantillas).
   let plantillasDemo = /[?&]sinplantillas\b/.test(location.search) ? [] : [{
     nombre: "Incidencia de Iris", titulo: "Incidencia de Iris con ticket: *", proyecto: 3, tipo: 1,
@@ -472,6 +473,9 @@
     },
     asociar: (wp, act) => { asoc[act] = Number(wp); return espera({ ...asoc }); },
     desasociar: (act) => { delete asoc[act]; return espera({ ...asoc }); },
+    // los que el usuario no quiere ver al buscar tareas (Herramientas > Proyectos visibles)
+    proyectos_ocultos: () => espera([...ocultosDemo]),
+    proyectos_ocultos_guardar: (ids) => { ocultosDemo = ids.map(Number); return espera([...ocultosDemo]); },
     proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" },
                               { id: 3, nombre: "Aulas y Teledocencia" }]),
     tareas_de_proyecto: (pid) => espera(pid === "2" ? { error: "No tienes permiso para ver las tareas de este proyecto." }
@@ -589,7 +593,9 @@
       const q = t.trim().replace(/^#/, "");
       const todas = [{ id: 14000, nombre: "[ASG] Migración de correo", proyecto: "Sistemas de Gestión", padre: "[2026_ASG] Proyectos" },
         { id: 11765, nombre: "[2026_ASG] Mantenimientos", proyecto: "Sistemas de Gestión", padre: "[2026_ASG] Servicio" },
-        { id: 11754, nombre: "[2026_ATE] Mantenimientos", proyecto: "ATE", padre: "[2026_ATE] Servicio" }];
+        { id: 11754, nombre: "[2026_ATE] Mantenimientos", proyecto: "ATE", padre: "[2026_ATE] Servicio" },
+        // cerrada: no sale en el arbol de su proyecto, pero buscando se encuentra
+        { id: 13990, nombre: "Auditoría de licencias de 2025", proyecto: "Sistemas de Gestión", padre: "[2025_ASG] Proyectos" }];
       if (/^\d+$/.test(q)) return espera({ tareas: todas.filter((x) => String(x.id) === q).map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
       if (!q) return espera({ tareas: todas.map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });
       return espera({ tareas: todas.filter((x) => x.nombre.toLowerCase().includes(q.toLowerCase())).map((x) => ({ ...x, favorita: favDemo.has(x.id) })) });

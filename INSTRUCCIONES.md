@@ -142,9 +142,27 @@ Abre **FichaCSIRC**:
    (🟢 verde = día completo, 🟠 ámbar = a medias). Haz **clic en el día** que
    quieras rellenar (hoy ya viene marcado).
 2. Elige la **tarea**, revisa las **horas** (vienen pre-rellenas con lo que te
-   falta) y la **actividad**, y pulsa **Añadir a…** (o Enter). ↵ El botón dice a
-   qué días va: «Añadir a lun 26/10», «Añadir a 3 días».
+   falta) y la **actividad**, y pulsa **Añadir apunte a…** (o Enter). ↵ El
+   botón dice a qué días va: «Añadir apunte a lun 26/10», «Añadir apunte a 3
+   días».
 3. Listo. La tarjeta se pone verde cuando completas tu jornada. 🎉
+
+**Para elegir la tarea** tienes tres caminos:
+
+- 🔎 **El campo Tarea**: al entrar salen tus tareas habituales, las de la
+  semana y tus favoritas. Escribe parte del nombre o el número y busca en
+  todos tus proyectos.
+- 🌳 **«Tus proyectos»**, al final de esa misma lista: pulsa un proyecto y se
+  despliegan sus tareas en árbol, cada una debajo de la que cuelga.
+- 🗂️ **Buscar tarea…**: lo mismo, en grande. Se abre con tus proyectos; cada
+  uno se despliega al pulsarlo, y las tareas con otras debajo se recogen con su
+  flecha. El filtro busca en todos a la vez y, si no encuentra nada, ofrece
+  mirar también entre las **cerradas**. Con Ctrl o Mayús marcas varias.
+
+¿Te salen proyectos en los que nunca fichas? Pasa el ratón por el proyecto y
+pulsa **No mostrar**, o ve a **Herramientas → Proyectos visibles…** y desmarca
+los que sobren. Ahí mismo los vuelves a marcar. Solo dejan de salir al buscar
+tareas: en ProyectosTIC no cambia nada y el botón *Tareas* sigue ofreciéndolos.
 
 Cada tarjeta enseña **lo que imputaste ese día**. A la derecha del formulario
 tienes **todos los apuntes de la semana** (o del mes) agrupados por día, cada uno
@@ -195,7 +213,8 @@ La app recuerda la vista que dejaste.
 - 🫳 **Arrastra** una tarea a otro día: la copia (con **Mayús** pulsada, la
   mueve). Arrastrar una de tus tareas habituales a un día la añade.
 - 📋 **Ctrl+C** sobre un día y **Ctrl+V** en los marcados: copia ese día tal
-  cual (también con botón derecho → *Copiar este día* / *Pegar aquí*).
+  cual (también con botón derecho → *Copiar este día* / *Pegar aquí*, que van
+  arriba del todo, junto a *Copiar día anterior*).
 - ↩️ Después de borrar, editar, mover o añadir, arriba, en el centro de la
   caja *Días*, sale el botón **↶ Deshacer cambios realizados** (con cuántos
   quedan), y también un aviso abajo; o pulsa **Ctrl+Z**. **Otra vez** deshace
@@ -311,8 +330,8 @@ fichas en ella un día. Por eso este botón va aparte del panel *Añadir apunte*
   el formulario para fichar en ella.
 - 🌳 **De cuál cuelga**: al pulsar en ese campo sale el árbol de tareas
   abiertas del proyecto. Si lo dejas vacío, la tarea cuelga del proyecto.
-- 🔎 **Desde el buscador**: escribe el nombre de la tarea y, si no existe, la
-  última fila de la lista es **«Crear la tarea…»**.
+- 🔎 **Desde Buscar tarea**: si la que buscas no existe, **＋ Nueva tarea…**
+  (abajo a la izquierda) la crea con lo que hayas escrito en el filtro.
 - 🧩 **Plantillas de tarea**: con el diálogo relleno, **Guardar como
   plantilla…**. La próxima vez, un clic en su nombre lo rellena todo. Pon un
   asterisco en el título donde vaya lo que cambia cada vez (el número de

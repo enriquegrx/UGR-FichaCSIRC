@@ -82,9 +82,19 @@
     await prueba("menú del día: orden y destacados", async () => {
       const b = menuDe(0);
       ok(b[0].textContent.includes("Copiar día anterior") && b[0].classList.contains("destacado"), "1.ª opción");
-      ok(b[1].textContent.includes("Editar día"), "2.ª opción");
-      ok(b[2].textContent.includes("Eliminar apuntes") && b[2].classList.contains("destacado"), "3.ª opción");
+      // copiar y pegar van juntos, arriba: el dia anterior, este dia y (con algo copiado) pegar
+      ok(b[1].textContent.includes("Copiar este día"), `2.ª opción: ${b[1].textContent}`);
+      ok(b[2].textContent.includes("Editar día"), `3.ª opción: ${b[2].textContent}`);
+      ok(b[3].textContent.includes("Eliminar apuntes") && b[3].classList.contains("destacado"), "4.ª opción");
       cerrarMenu();
+      const copiado = st.portapapeles;
+      st.portapapeles = { iso: "2000-01-01", texto: "Lunes 1/1", apuntes: [] };
+      try {
+        const c = menuDe(0).map((x) => x.textContent);
+        ok(c[2].startsWith("Pegar aquí lo del lunes 1/1") && c[3].includes("Editar día"), `pegar no va con los de copiar: ${c.slice(0, 4).join(" | ")}`);
+        ok([...document.querySelectorAll("#menu > *")].slice(1, 4).every((x) => x.tagName === "BUTTON"),
+           "copiar y pegar salen separados por una raya");
+      } finally { st.portapapeles = copiado; cerrarMenu(); }
     });
     await prueba("editar día: guardar y deshacer", async () => {
       const antes = cifra(0);
@@ -102,6 +112,9 @@
     await prueba("buscador de tareas: sin favoritas, por número y estrella", async () => {
       const guardadas = new Map(st.tareas);
       st.tareas.clear();                      // usuario sin favoritas ni buscadas
+      // la primera habitual, tambien con otra actividad: dos filas de la misma tarea
+      const repetida = { ...st.habituales.filas[0], actividad: "Otra actividad" };
+      st.habituales.filas.push(repetida);
       try {
         menuDe(0); pulsarMenu("Editar día");
         ok(await hasta(() => dlg()), "no abre");
@@ -112,8 +125,20 @@
         const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
         ok(await hasta(() => caja()), "no se abre la lista");
         ok(caja().textContent.includes("Tus tareas habituales"), "sin habituales");
+        const con = (n) => [...caja().querySelectorAll(".bt-item")].filter((x) => x.querySelector(".bt-id")?.textContent === String(n));
+        ok(con(repetida.wp_id).length === 1, `la habitual con dos actividades sale ${con(repetida.wp_id).length} veces`);
+        // debajo, tus proyectos: se despliegan y se elige del arbol, como en el formulario
+        ok(await hasta(() => caja()?.querySelector(".bt-proy")), "en Editar día no salen los proyectos");
+        [...caja().querySelectorAll(".bt-proy")].find((x) => x.textContent.includes("Aulas"))
+          .dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        ok(await hasta(() => con(15004).length === 1), "en Editar día el proyecto no se despliega");
+        con(15004)[0].dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+        ok(inp.value.startsWith("15004 - "), `no elige del árbol: ${inp.value}`);
+        ok(await hasta(() => !document.querySelector(".ed-fila.nueva .ed-act").disabled), "no carga las actividades de la del árbol");
+        await espera(400);                  // al elegir, el foco pasa a las horas y la lista se cierra sola
+        inp.dispatchEvent(new Event("focus"));
         inp.value = "11754"; inp.dispatchEvent(new Event("input"));
-        ok(await hasta(() => caja()?.textContent.includes("ATE › [2026_ATE] Servicio")), "no busca por número (o sin proyecto › padre)");
+        ok(await hasta(() => caja()?.textContent.includes("ATE › [2026_ATE] Servicio")), `no busca por número (o sin proyecto › padre): ${caja()?.textContent}`);
         const fila = [...caja().querySelectorAll(".bt-item")].find((x) => x.textContent.includes("11754"));
         fila.querySelector(".bt-fav").click();
         ok(await hasta(() => st.favoritas.has(11754)), "la estrella no la hace favorita");
@@ -123,15 +148,136 @@
         ok(await hasta(() => !document.querySelector(".ed-fila.nueva .ed-act").disabled), "no carga sus actividades");
       } finally {
         cerrarTodo();
+        st.habituales.filas.splice(st.habituales.filas.indexOf(repetida), 1);
         if (!st.tareas.size) for (const [k, v] of guardadas) st.tareas.set(k, v);
       }
     });
-    await prueba("buscar en todo sin escribir nada", async () => {
+    await prueba("buscar tarea: todos mis proyectos en árbol, se despliegan y se busca en todos", async () => {
+      const antes = $("tarea").value;
       dlgBuscar();
-      ok(await hasta(() => dlg()), "no abre");
-      [...dlg().querySelectorAll("button")].find((b) => b.textContent.includes("Buscar en todo")).click();
-      ok(await hasta(() => dlg().querySelectorAll(".bq-lista .bt-item").length >= 2), "no lista todas");
-      ok(dlg().querySelector(".bq-lista .bt-ruta").textContent.includes("›"), "en todo no dice el proyecto y de cuál cuelga");
+      const filas = () => [...(dlg()?.querySelectorAll(".bq-lista .bt-item") || [])];
+      const proys = () => filas().filter((x) => x.classList.contains("bt-proy"));
+      const proyecto = (n) => proys().find((x) => x.textContent.includes(n));
+      const tarea = (n) => filas().find((x) => x.querySelector(".bt-id")?.textContent === String(n));
+      const clic = (x) => x.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      ok(await hasta(() => proys().length === 3), `no salen los proyectos: ${proys().length}`);
+      ok(!/Buscar en todo/.test(dlg().textContent) && dlg().querySelector("select").value === "", "sigue la lista plana de «Buscar en todo»");
+      // se abre con el proyecto de la tarea del formulario desplegado; los demas, recogidos
+      ok(await hasta(() => proyecto("Sistemas de Gestión").getAttribute("aria-expanded") === "true" && tarea(14000)), "no despliega el proyecto de la tarea del formulario");
+      ok(proyecto("Aulas").getAttribute("aria-expanded") === "false" && !tarea(15001), "despliega proyectos que nadie ha pedido");
+      // pulsar un proyecto lo despliega, con sus tareas en arbol debajo; otra vez, lo recoge
+      clic(proyecto("Sistemas de Gestión"));
+      ok(!tarea(14000), "pulsar el proyecto desplegado no lo recoge");
+      clic(proyecto("Aulas"));
+      ok(await hasta(() => tarea(15004)), "pulsar un proyecto no lo despliega");
+      ok(tarea(15001).getAttribute("aria-level") === "2" && tarea(15004).getAttribute("aria-level") === "4", "las tareas no cuelgan de su proyecto");
+      ok(/7 tareas/.test(proyecto("Aulas").textContent), `el proyecto no dice cuántas tiene: ${proyecto("Aulas").textContent}`);
+      // un proyecto que no deja ver sus tareas lo dice en su sitio
+      clic(proyecto("ATE"));
+      ok(await hasta(() => /No tienes permiso/.test(dlg().querySelector(".bq-lista").textContent)), "no dice que no deja ver las de ATE");
+      clic(proyecto("ATE"));
+      // una tarea con otras debajo se recoge y se despliega con su flecha; el clic en la fila la marca
+      clic(tarea(15002).querySelector(".bt-giro"));
+      ok(!tarea(15004) && tarea(15003) && tarea(15002).getAttribute("aria-expanded") === "false", "la flecha no recoge las que cuelgan");
+      ok(!tarea(15002).classList.contains("marcada"), "la flecha marca la tarea");
+      clic(tarea(15002).querySelector(".bt-giro"));
+      ok(tarea(15004), "la flecha no las vuelve a desplegar");
+      ok(!tarea(15004).querySelector(".bt-giro") && tarea(15004).querySelector(".bt-codo"), "una tarea sin nada debajo lleva flecha");
+      // el filtro busca en todos: quedan los proyectos con algo, desplegados
+      const filtro = dlg().querySelector("input.ancho");
+      const escribir = (t) => { filtro.value = t; filtro.dispatchEvent(new Event("input")); };
+      escribir("manten");
+      ok(await hasta(() => tarea(15002) && proys().length === 2), `no busca en todos los proyectos: ${proys().map((x) => x.textContent).join(" | ")}`);
+      ok(!tarea(15004) && tarea(15001).classList.contains("bt-contexto"), "el filtro no deja solo las que encajan y las de encima");
+      // al borrarlo se vuelve al arbol, como estaba
+      escribir("");
+      ok(proys().length === 3 && tarea(15004) && !tarea(14000), "al borrar el filtro no vuelve al árbol");
+      // nada entre las abiertas: se ofrece mirar tambien las cerradas, y de ahi se vuelve
+      escribir("auditor");
+      ok(await hasta(() => dlg().querySelector(".bq-fuera")), `no ofrece buscar entre las cerradas: ${dlg().querySelector(".bq-lista").textContent}`);
+      dlg().querySelector(".bq-fuera").click();
+      ok(await hasta(() => tarea(13990)), "no busca fuera del árbol");
+      ok(tarea(13990).querySelector(".bt-ruta").textContent.includes("›"), "lo de fuera no dice el proyecto y de cuál cuelga");
+      escribir("");
+      ok(proys().length === 3 && !tarea(13990), "de la búsqueda entre las cerradas no se vuelve");
+      ok(!/null|undefined/.test(dlg().textContent), `escribe null/undefined: ${dlg().textContent}`);
+      // se elige una del arbol
+      clic(tarea(15005));
+      botonDlg("Elegir");
+      ok(await hasta(() => !dlg()), "no se cierra al elegir");
+      ok(await hasta(() => $("tarea").value.startsWith("15005 - ")), `formulario: ${$("tarea").value}`);
+      $("tarea").value = antes;
+      await elegirTarea();
+    });
+    await prueba("proyectos visibles: se ocultan desde el árbol, se deshace y se eligen en Herramientas", async () => {
+      ok(MENUS.herramientas().some((x) => x.texto === "Proyectos visibles…"), "Herramientas no ofrece «Proyectos visibles…»");
+      dlgBuscar();
+      const filas = () => [...(dlg()?.querySelectorAll(".bq-lista .bt-item") || [])];
+      const proys = () => filas().filter((x) => x.classList.contains("bt-proy"));
+      const proyecto = (n) => proys().find((x) => x.textContent.includes(n));
+      const pie = () => dlg()?.querySelector(".bq-lista .bt-pie");
+      const delPie = (t) => [...pie().querySelectorAll("button")].find((b) => b.textContent.includes(t));
+      const opciones = () => [...dlg().querySelectorAll("select option")].map((o) => o.textContent).join(" | ");
+      ok(await hasta(() => proys().length === 3), `no salen los proyectos: ${proys().length}`);
+      ok(!pie(), "habla de proyectos ocultos sin haber ninguno");
+      // «No mostrar» lo quita del arbol y del desplegable de arriba, y lo dice al pie con «Deshacer»
+      proyecto("ATE").querySelector(".bt-ocultar").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      ok(await hasta(() => proys().length === 2 && pie()), "«No mostrar» no quita el proyecto");
+      ok(!proyecto("ATE") && !opciones().includes("ATE") && opciones().includes("Todos mis proyectos (2)"), `sigue en el desplegable: ${opciones()}`);
+      ok(pie().textContent.includes("«ATE» ya no se muestra") && delPie("Deshacer"), `el pie no deja deshacer: ${pie().textContent}`);
+      ok(JSON.stringify(await api().proyectos_ocultos()) === "[2]", "no lo guarda en la configuración");
+      delPie("Deshacer").click();
+      ok(await hasta(() => proys().length === 3 && !pie()), "«Deshacer» no lo vuelve a mostrar");
+      // oculto otra vez, y al volver a abrir sigue oculto: el pie dice cuantos hay
+      proyecto("ATE").querySelector(".bt-ocultar").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      ok(await hasta(() => proys().length === 2), "no se oculta la segunda vez");
+      cerrarTodo();
+      dlgBuscar();
+      ok(await hasta(() => proys().length === 2 && pie()), "al volver a abrir Buscar tarea sale el oculto");
+      ok(pie().textContent.includes("1 proyecto oculto") && !delPie("Deshacer"), `pie: ${pie().textContent}`);
+      // el filtro no busca en los ocultos... (ATE no deja ver sus tareas; se oculta Aulas para verlo)
+      proyecto("Aulas").querySelector(".bt-ocultar").dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      ok(await hasta(() => proys().length === 1), "no oculta el segundo");
+      const filtro = dlg().querySelector("input.ancho");
+      filtro.value = "megafon"; filtro.dispatchEvent(new Event("input"));
+      ok(await hasta(() => dlg().querySelector(".bq-fuera")), "busca en un proyecto oculto");
+      ok(!filas().some((x) => x.textContent.includes("15004")), "enseña tareas de un proyecto oculto");
+      filtro.value = ""; filtro.dispatchEvent(new Event("input"));
+      // ...ni salen en el campo Tarea del formulario, que tambien dice cuantos hay ocultos
+      cerrarTodo();
+      const inp = $("tarea");
+      await espera(200);
+      inp.dispatchEvent(new Event("focus"));
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      ok(await hasta(() => caja()?.querySelector(".bt-pie")), `el campo Tarea no dice que hay ocultos: ${caja()?.textContent}`);
+      ok(caja().querySelectorAll(".bt-proy").length === 1 && caja().querySelector(".bt-pie").textContent.includes("2 proyectos ocultos"),
+         `el campo Tarea enseña los ocultos: ${caja().textContent}`);
+      // desde ahi tambien se oculta: sin ninguno a la vista queda el pie para recuperarlos
+      caja().querySelector(".bt-proy .bt-ocultar").dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      ok(await hasta(() => caja() && !caja().querySelector(".bt-proy") && caja().querySelector(".bt-pie")), "el campo Tarea no deja ocultar");
+      ok(/Sistemas de Gestión» ya no se muestra/.test(caja().querySelector(".bt-pie").textContent), `pie del campo: ${caja().querySelector(".bt-pie").textContent}`);
+      inp.dispatchEvent(new Event("blur"));
+      await espera(200);
+      // Herramientas > Proyectos visibles: casillas, y «Marcar todos» los devuelve
+      dlgProyectosVisibles();
+      const casillas = () => [...(dlg()?.querySelectorAll(".pv-lista input[type=checkbox]") || [])];
+      ok(await hasta(() => casillas().length === 3), `no lista los proyectos: ${casillas().length}`);
+      ok(casillas().every((c) => !c.checked) && dlg().textContent.includes("0 de 3 a la vista"), `no trae lo guardado: ${dlg().textContent}`);
+      ok(!/null|undefined/.test(dlg().textContent), `escribe null/undefined: ${dlg().textContent}`);
+      casillas()[2].click();
+      ok(dlg().textContent.includes("1 de 3 a la vista"), "no cuenta los marcados");
+      botonDlg("Guardar");
+      ok(await hasta(() => !dlg()), "no se cierra al guardar");
+      ok(JSON.stringify(await api().proyectos_ocultos()) === "[1,2]", `guardado: ${JSON.stringify(await api().proyectos_ocultos())}`);
+      dlgProyectosVisibles();
+      ok(await hasta(() => casillas().length === 3), "no vuelve a abrir");
+      botonDlg("Marcar todos");
+      botonDlg("Guardar");
+      ok(await hasta(() => !dlg()), "no se cierra al guardar todos");
+      ok(JSON.stringify(await api().proyectos_ocultos()) === "[]", "«Marcar todos» no los devuelve");
+      // y Buscar tarea los vuelve a enseñar
+      dlgBuscar();
+      ok(await hasta(() => proys().length === 3 && !pie()), "tras marcarlos todos no vuelven al árbol");
       cerrarTodo();
     });
     await prueba("buscar tarea: las del proyecto en árbol, se filtra, se marcan varias y se eligen", async () => {
@@ -186,6 +332,39 @@
       caja().querySelector(".bt-item").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       ok(await hasta(() => inp.value.includes("Proxmox")), "no rellena el formulario");
       inp.dispatchEvent(new Event("blur"));
+    });
+    await prueba("formulario: con la tarea puesta salen las de siempre y tus proyectos, que se despliegan", async () => {
+      const inp = $("tarea"), antes = inp.value;
+      ok(/^\d+ - /.test(antes), `sin tarea en el formulario: ${antes}`);
+      await espera(200);                    // el blur de la prueba anterior cierra la lista un poco despues
+      inp.dispatchEvent(new Event("focus"));
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      ok(await hasta(() => caja()?.textContent.includes("Tus proyectos")), `no salen los proyectos: ${caja()?.textContent}`);
+      ok(!/Sin resultados|Crear la tarea/.test(caja().textContent) && caja().textContent.includes("Tus tareas habituales"),
+         `con la tarea puesta busca su texto: ${caja().textContent}`);
+      const proyecto = (n) => [...caja().querySelectorAll(".bt-proy")].find((x) => x.textContent.includes(n));
+      const pulsar = (x) => x.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      ok(caja().querySelectorAll(".bt-proy").length === 3 && !caja().textContent.includes("15004"), "los proyectos no salen recogidos");
+      pulsar(proyecto("Aulas"));
+      ok(await hasta(() => caja()?.textContent.includes("15004")), "pulsar un proyecto no enseña sus tareas");
+      ok(proyecto("Aulas").getAttribute("aria-expanded") === "true", "no dice que está desplegado");
+      const fila = (n) => [...caja().querySelectorAll(".bt-item")].find((x) => x.querySelector(".bt-id")?.textContent === String(n));
+      ok(parseFloat(getComputedStyle(fila(15004)).paddingLeft) > parseFloat(getComputedStyle(fila(15002)).paddingLeft)
+         && parseFloat(getComputedStyle(fila(15001)).paddingLeft) > parseFloat(getComputedStyle(proyecto("Aulas")).paddingLeft),
+         "las tareas no van en árbol bajo su proyecto");
+      pulsar(proyecto("Aulas"));
+      ok(!caja().textContent.includes("15004"), "pulsar otra vez no lo recoge");
+      pulsar(proyecto("Aulas"));
+      ok(await hasta(() => fila(15005)), "no vuelve a desplegarse");
+      pulsar(fila(15005));
+      ok(await hasta(() => inp.value.startsWith("15005 - ")), `no pone la tarea en el formulario: ${inp.value}`);
+      // al escribir se busca, y los proyectos dejan sitio a los resultados
+      inp.dispatchEvent(new Event("focus"));
+      inp.value = "Proxmox"; inp.dispatchEvent(new Event("input"));
+      ok(await hasta(() => caja()?.querySelector(".bt-item") && !caja().querySelector(".bt-proy")), "al escribir siguen los proyectos");
+      inp.dispatchEvent(new Event("blur"));
+      inp.value = antes;
+      await elegirTarea();
     });
     await prueba("deshacer en varios niveles", async () => {
       const antes = cifra(2);
@@ -915,13 +1094,17 @@
       ok(st.crear.ultimo === 3, "no recuerda el proyecto para la próxima");
       ocultarAviso();
     });
-    await prueba("nueva tarea: desde el buscador, y lo que rechaza ProyectosTIC", async () => {
-      const inp = $("tarea");
+    await prueba("nueva tarea: el campo del apunte no la crea, y lo que rechaza ProyectosTIC", async () => {
+      // el campo Tarea es para el apunte de cada dia: crear va en el boton «Tareas»
+      const inp = $("tarea"), antes = inp.value;
       inp.dispatchEvent(new Event("focus"));
       inp.value = "Algo que no existe"; inp.dispatchEvent(new Event("input"));
       const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
-      ok(await hasta(() => caja()?.querySelector(".bt-crear")), "el buscador no ofrece crearla");
-      caja().querySelector(".bt-crear").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      ok(await hasta(() => /Nada más con eso/.test(caja()?.textContent || "")), `no dice que no hay nada: ${caja()?.textContent}`);
+      ok(!/Crear la tarea/.test(caja().textContent), "el campo del apunte ofrece crear una tarea");
+      inp.dispatchEvent(new Event("blur"));
+      inp.value = antes;
+      dlgNuevaTarea({ titulo: "Algo que no existe" });
       ok(await hasta(() => document.querySelector(".nt-titulo")?.value === "Algo que no existe"), "no lleva lo escrito al título");
       ok(await hasta(() => document.querySelector(".nt-tipo")), "sin tipos");
       ok(document.querySelector(".nt-dos select").value === "3", "no propone el proyecto de la última vez");

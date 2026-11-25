@@ -657,6 +657,24 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
 .bt-item.bt-rama { padding-left: calc(12px + var(--nivel, 0) * 18px); gap: 5px; }
 .bt-codo { flex: none; color: var(--tenue); opacity: .7; margin-left: -14px; width: 9px; }
 .bt-item.bt-contexto .bt-nombre { color: var(--tenue); }
+/* arbol que se despliega (proyectos, y tareas con otras debajo): hueco a la izquierda para la flecha */
+.bt-item.bt-rama.bt-desp { padding-left: calc(32px + var(--nivel, 0) * 18px); }
+.bt-giro { flex: none; width: 20px; height: 20px; margin: -1px 0 -1px -25px; display: grid; place-items: center;
+           color: var(--texto); font-size: 17px; line-height: 1; cursor: pointer; border-radius: 5px; }
+.bt-giro:hover { background: var(--borde); }
+.bt-item.bt-proy .bt-nombre { font-weight: 600; }
+.bt-cuantas { font-weight: 400; color: var(--tenue); }
+.bt-nada.bt-bajo-proy { padding-left: 50px; }
+.bq-fuera { display: block; margin: 2px 12px 8px; }
+/* «No mostrar», en la fila de un proyecto: solo al pasar por ella (o con el teclado encima) */
+.bt-ocultar { flex: none; margin: -2px 0 -2px auto; padding: 1px 8px; font-size: 12px; visibility: hidden; }
+.bt-item:hover > .bt-ocultar, .bt-item.activo > .bt-ocultar, .bq-lista:focus .bt-item.cursor > .bt-ocultar { visibility: visible; }
+/* el pie del arbol: los proyectos ocultos y como volver a verlos */
+.bt-pie { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-top: 4px; padding: 7px 12px 6px;
+          border-top: 1px solid var(--borde-suave); color: var(--tenue); font-size: 12px; }
+/* Herramientas > Proyectos visibles */
+.pv-lista { display: grid; gap: 2px; max-height: 340px; overflow: auto; margin: 10px 0 6px; padding: 8px 12px;
+            border: 1px solid var(--borde); border-radius: 8px; }
 /* la lista de Buscar tarea: las tareas del proyecto en arbol; se marcan varias */
 .bq-lista { height: 330px; overflow: auto; margin: 8px 0 4px; padding: 4px 0; font-size: 13px;
             background: var(--panel); border: 1px solid var(--borde); border-radius: 8px; user-select: none; }
@@ -665,12 +683,6 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
                              box-shadow: inset 3px 0 0 var(--primario); }
 .bq-lista .bt-item.marcada .bt-nombre { color: inherit; }
 .bq-lista:focus .bt-item.cursor { outline: 1px dotted var(--tenue); outline-offset: -2px; }
-/* "Crear la tarea «...»": al final de la lista, separada */
-.bt-crear { border-top: 1px solid var(--borde-suave); margin-top: 4px; padding-top: 7px; padding-bottom: 7px; align-items: center; }
-.bt-crear .bt-nombre b { font-weight: 600; }
-.bt-mas { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
-          background: var(--primario); color: #fff; font-size: 15px; font-weight: 700; line-height: 1; }
-:root[data-tema="oscuro"] .bt-mas, :root:not([data-tema="claro"]).sistema-oscuro .bt-mas { color: #10151b; }
 /* comentarios usados con la tarea (campo Comentario): una linea cada uno */
 .lista-comentarios .bt-item { display: block; padding: 6px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ed-fila.quitada .ed-tarea { text-decoration: line-through; color: var(--tenue); }
