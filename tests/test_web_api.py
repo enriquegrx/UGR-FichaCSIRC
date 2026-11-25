@@ -862,6 +862,22 @@ class TestDialogos(Base):
             self.assertEqual(self.api.proyectos_ocultos_guardar([]), [])
             self.assertEqual(self.api.proyectos_ocultos_guardar("no es una lista"), [])
 
+    def test_proyectos_desplegados(self):
+        # los que se dejaron desplegados en el arbol: se leen limpios y solo se
+        # escribe si cambian (desplegar y recoger lo mismo no toca config.json)
+        with mock.patch.object(core, "config_valor", return_value=[3, "7", 3, "x"]) as m_leer:
+            self.assertEqual(self.api.proyectos_desplegados(), [3, 7])
+        m_leer.assert_called_once_with("proyectos_desplegados")
+        with mock.patch.object(core, "config_valor", return_value=[3, 7]), \
+             mock.patch.object(core, "guardar_config_valores") as m_guardar:
+            self.assertEqual(self.api.proyectos_desplegados_guardar([3, "7"]), [3, 7])
+            m_guardar.assert_not_called()
+            self.assertEqual(self.api.proyectos_desplegados_guardar([7]), [7])
+            m_guardar.assert_called_once_with({"proyectos_desplegados": [7]})
+            self.assertEqual(self.api.proyectos_desplegados_guardar("no es una lista"), [])
+        import copias
+        self.assertIn("proyectos_desplegados", copias.VOLATILES)      # no merece una copia de seguridad
+
     def test_quien_no_puede_crear_quiza_pueda_modificar(self):
         sin_enlace = [{"id": 43, "name": "Sistemas", "_links": {"self": {"href": "/api/v3/projects/43"}}}]
         caps = [{"_links": {"context": {"href": "/api/v3/projects/43", "title": "Sistemas"}}},

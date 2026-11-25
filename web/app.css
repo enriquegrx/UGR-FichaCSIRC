@@ -642,10 +642,17 @@ textarea.diagnostico { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-mo
                    box-shadow: 0 10px 30px rgba(16, 24, 40, .18); font-size: 13px; }
 .bt-grupo { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--tenue);
             padding: 7px 12px 2px; }
+/* «Tus proyectos» lleva «Actualizar» a la derecha */
+.bt-grupo.bt-grupo-accion { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.bt-grupo .bt-actualizar, .bt-grupo .bt-actualizando { font-size: 12px; text-transform: none; letter-spacing: 0; padding: 0; }
 .bt-item { display: flex; gap: 8px; align-items: flex-start; padding: 5px 10px 5px 6px; cursor: pointer; }
 .bt-item:hover, .bt-item.activo { background: var(--seleccion); }
 .bt-fav { border: 0; background: none; padding: 0 3px; font-size: 16px; line-height: 1.15; color: var(--tenue); }
 .bt-fav.si, .bt-fav:hover { color: var(--aviso); }
+/* en el arbol la estrella va al final de la fila: la llena, siempre; la vacia, al pasar por ella */
+.bt-fav.bt-fav-fin { flex: none; margin: -1px 0 -1px auto; visibility: hidden; cursor: pointer; }
+.bt-fav.bt-fav-fin.si, .bt-item:hover > .bt-fav-fin, .bt-item.activo > .bt-fav-fin,
+.bq-lista:focus .bt-item.cursor > .bt-fav-fin { visibility: visible; }
 .bt-texto { min-width: 0; }
 .bt-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bt-id { color: var(--tenue); font-variant-numeric: tabular-nums; }

@@ -111,6 +111,7 @@
     aul(15011, "Proyectores de la Facultad de Ciencias", 15010, "[AUL] Renovación de proyectores")];
   let ultimoCrear = null, sigTarea = 14100;
   let ocultosDemo = [];
+  let desplegadosDemo = [];
   // Plantillas de tarea (ninguna con ?sinplantillas).
   let plantillasDemo = /[?&]sinplantillas\b/.test(location.search) ? [] : [{
     nombre: "Incidencia de Iris", titulo: "Incidencia de Iris con ticket: *", proyecto: 3, tipo: 1,
@@ -474,6 +475,8 @@
     asociar: (wp, act) => { asoc[act] = Number(wp); return espera({ ...asoc }); },
     desasociar: (act) => { delete asoc[act]; return espera({ ...asoc }); },
     // los que el usuario no quiere ver al buscar tareas (Herramientas > Proyectos visibles)
+    proyectos_desplegados: () => espera([...desplegadosDemo]),
+    proyectos_desplegados_guardar: (ids) => { desplegadosDemo = ids.map(Number); return espera([...desplegadosDemo]); },
     proyectos_ocultos: () => espera([...ocultosDemo]),
     proyectos_ocultos_guardar: (ids) => { ocultosDemo = ids.map(Number); return espera([...ocultosDemo]); },
     proyectos: () => espera([{ id: 1, nombre: "Sistemas de Gestión" }, { id: 2, nombre: "ATE" },

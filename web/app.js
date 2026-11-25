@@ -1975,6 +1975,7 @@ document.addEventListener("keydown", (e) => {
   if (!$("menu").hidden && e.key === "Escape") { cerrarMenu(); return; }
   if (typeof pila !== "undefined" && pila.length) {
     if (e.key === "Escape") { e.preventDefault(); pila[pila.length - 1].cerrar(); }
+    if (e.key === "F5") e.preventDefault();   // que no recargue la pagina con un dialogo a medias
     return;                                   // con un dialogo abierto, nada mas
   }
   if (e.key === "F5") { e.preventDefault(); cargarSemana(); return; }

@@ -1739,6 +1739,17 @@ class Api:
         core.guardar_config_valores({"proyectos_ocultos": limpios})
         return limpios
 
+    def proyectos_desplegados(self):
+        """Los proyectos que el usuario dejo desplegados en el arbol de tareas
+        (Buscar tarea y el campo Tarea): la proxima vez se abren asi."""
+        return self._ids_proyectos(core.config_valor("proyectos_desplegados"))
+
+    def proyectos_desplegados_guardar(self, ids):
+        limpios = self._ids_proyectos(ids)
+        if limpios != self.proyectos_desplegados():      # desplegar y recoger lo mismo: nada que escribir
+            core.guardar_config_valores({"proyectos_desplegados": limpios})
+        return limpios
+
     def tareas_de_proyecto(self, pid):
         try:
             return {"tareas": core.tareas_proyecto(int(pid))}

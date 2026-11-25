@@ -45,7 +45,7 @@ VOLATILES = {
     "ultima_version_abierta", "vista_inicio", "zoom", "paneles", "tema",
     "pin_sugerencia_hasta", "aviso_aplicaciones", "ultima_actividad",
     "permisos_anio_revisado", "recordatorio_ejecutable", "aviso_mes_visto",
-    "nueva_tarea_proyecto",
+    "nueva_tarea_proyecto", "proyectos_desplegados",
 }
 # Credenciales y PIN: ni se exportan ni vuelven al restaurar.
 SECRETOS = ("api_key", "inari_token")

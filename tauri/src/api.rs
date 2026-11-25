@@ -560,6 +560,20 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             config::guardar_valores(m)?;
             Ok(json!(ids))
         }
+        // Los proyectos que el usuario dejo desplegados en el arbol de tareas (Buscar
+        // tarea y el campo Tarea): la proxima vez se abren asi.
+        "proyectos_desplegados" => Ok(json!(ids_proyectos(&cfg.lista("proyectos_desplegados")))),
+        "proyectos_desplegados_guardar" => {
+            e.exigir_desbloqueo(&cfg)?;
+            let ids = ids_proyectos(&arg_lista(&args, 0));
+            // desplegar y recoger lo mismo: nada que escribir
+            if ids != ids_proyectos(&cfg.lista("proyectos_desplegados")) {
+                let mut m = Map::new();
+                m.insert("proyectos_desplegados".into(), json!(ids));
+                config::guardar_valores(m)?;
+            }
+            Ok(json!(ids))
+        }
         "tareas_de_proyecto" => {
             e.exigir_desbloqueo(&cfg)?;
             let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;

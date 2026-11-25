@@ -54,6 +54,12 @@
     ok(!pila.length, "queda un diálogo que no se deja cerrar");
   };
   const teclado = (key, extra = {}) => document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, ...extra }));
+  // los proyectos del arbol, recogidos: como quien lo abre por primera vez
+  const recoger = async () => {
+    clearTimeout(desplegados.espera);
+    desplegados.ids.clear();
+    await api().proyectos_desplegados_guardar([]);
+  };
 
   async function escenarioPin() {
     await prueba("pantalla del PIN tapa la app", async () => {
@@ -153,6 +159,7 @@
       }
     });
     await prueba("buscar tarea: todos mis proyectos en árbol, se despliegan y se busca en todos", async () => {
+      await recoger();
       const antes = $("tarea").value;
       dlgBuscar();
       const filas = () => [...(dlg()?.querySelectorAll(".bq-lista .bt-item") || [])];
@@ -210,6 +217,7 @@
       await elegirTarea();
     });
     await prueba("proyectos visibles: se ocultan desde el árbol, se deshace y se eligen en Herramientas", async () => {
+      await recoger();
       ok(MENUS.herramientas().some((x) => x.texto === "Proyectos visibles…"), "Herramientas no ofrece «Proyectos visibles…»");
       dlgBuscar();
       const filas = () => [...(dlg()?.querySelectorAll(".bq-lista .bt-item") || [])];
@@ -334,6 +342,7 @@
       inp.dispatchEvent(new Event("blur"));
     });
     await prueba("formulario: con la tarea puesta salen las de siempre y tus proyectos, que se despliegan", async () => {
+      await recoger();
       const inp = $("tarea"), antes = inp.value;
       ok(/^\d+ - /.test(antes), `sin tarea en el formulario: ${antes}`);
       await espera(200);                    // el blur de la prueba anterior cierra la lista un poco despues
@@ -365,6 +374,108 @@
       inp.dispatchEvent(new Event("blur"));
       inp.value = antes;
       await elegirTarea();
+    });
+    await prueba("árbol de tareas: recuerda los proyectos desplegados, lleva estrella y se actualiza", async () => {
+      await recoger();
+      const inp = $("tarea"), antes = inp.value;
+      const caja = () => [...document.querySelectorAll(".buscador-tareas")].find((c) => !c.hidden);
+      const proyecto = (n) => [...(caja()?.querySelectorAll(".bt-proy") || [])].find((x) => x.textContent.includes(n));
+      const fila = (n) => [...(caja()?.querySelectorAll(".bt-item.bt-desp") || [])].find((x) => x.dataset.id === String(n));
+      const pulsar = (x) => x.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      const original = api().tareas_de_proyecto;
+      try {
+        await espera(200);
+        inp.dispatchEvent(new Event("focus"));
+        ok(await hasta(() => proyecto("Aulas")), "no salen los proyectos");
+        ok(!fila(15004), "sale desplegado sin que nadie lo haya pedido");
+        pulsar(proyecto("Aulas"));
+        ok(await hasta(() => fila(15004)), "no se despliega");
+        // queda apuntado en la configuracion (con un respiro)
+        await espera(800);
+        ok(JSON.stringify(await api().proyectos_desplegados()) === "[3]", `no lo guarda: ${JSON.stringify(await api().proyectos_desplegados())}`);
+        inp.dispatchEvent(new Event("blur"));
+        await espera(200);
+        // como al volver a abrir la app: lo leido de la configuracion manda
+        desplegados.ids.clear(); desplegados.leyendo = null; desplegados.tocados = false;
+        olvidarMisProyectos();
+        inp.dispatchEvent(new Event("focus"));
+        ok(await hasta(() => fila(15004)), "al volver no recuerda el proyecto desplegado");
+        ok(proyecto("Aulas").getAttribute("aria-expanded") === "true" && proyecto("ATE").getAttribute("aria-expanded") === "false",
+           "despliega los que no tocaban");
+
+        // la estrella de una tarea del arbol: la hace favorita sin elegirla, y la lista sigue abierta
+        pulsar(proyecto("Sistemas de Gestión"));
+        ok(await hasta(() => fila(14000)), "no despliega el segundo");
+        ok(!st.favoritas.has(14000) && fila(14000).querySelector(".bt-fav-fin")?.textContent === "☆", "la del árbol no lleva estrella");
+        const valor = inp.value;
+        pulsar(fila(14000).querySelector(".bt-fav"));
+        ok(inp.value === valor && caja(), "pulsar la estrella elige la tarea");
+        fila(14000).querySelector(".bt-fav").click();
+        ok(await hasta(() => st.favoritas.has(14000)), "la estrella del árbol no la hace favorita");
+        ok(await hasta(() => fila(14000)?.querySelector(".bt-fav.si")?.textContent === "★"), "no se ve que ya es favorita");
+        ok(caja().textContent.includes("Favoritas y buscadas"), "no pasa a las favoritas del campo");
+        // y la de las filas de arriba (habituales, favoritas): tampoco elige la tarea
+        const arriba = [...caja().querySelectorAll(".bt-item:not(.bt-desp)")].find((x) => x.querySelector(".bt-id")?.textContent === "14000");
+        ok(arriba, "la favorita nueva no sale arriba");
+        pulsar(arriba.querySelector(".bt-fav"));
+        ok(inp.value === valor, "la estrella de las de arriba elige la tarea");
+        arriba.querySelector(".bt-fav").click();
+        ok(await hasta(() => !st.favoritas.has(14000)), "no deja de ser favorita");
+
+        // «Actualizar»: lo creado en ProyectosTIC sale sin esperar a que caduque lo guardado
+        api().tareas_de_proyecto = (pid) => original(pid).then((r) => (pid === "3"
+          ? { tareas: [...r.tareas, { id: 15099, nombre: "[AUL] Recién creada" }] } : r));
+        pulsar(proyecto("Aulas")); pulsar(proyecto("Aulas"));        // recoger y desplegar no la trae
+        await espera(300);
+        ok(fila(15004) && !fila(15099), "desplegar otra vez vuelve a pedir las tareas");
+        const boton = caja().querySelector(".bt-grupo .bt-actualizar");
+        ok(boton, "«Tus proyectos» no lleva «Actualizar»");
+        pulsar(boton);
+        ok(caja(), "pulsar «Actualizar» cierra la lista");
+        boton.click();
+        ok(caja().querySelector(".bt-actualizando"), "no dice que está actualizando");
+        ok(await hasta(() => fila(15099)), "«Actualizar» no trae la tarea nueva");
+        ok(proyecto("Aulas").getAttribute("aria-expanded") === "true" && caja().querySelector(".bt-actualizar"), "tras actualizar no queda como estaba");
+        inp.dispatchEvent(new Event("blur"));
+        await espera(200);
+
+        // Buscar tarea se abre con los mismos desplegados (y no con el de la tarea del formulario)
+        dlgBuscar();
+        const filas = () => [...(dlg()?.querySelectorAll(".bq-lista .bt-item") || [])];
+        const proyD = (n) => filas().find((x) => x.classList.contains("bt-proy") && x.textContent.includes(n));
+        const tarea = (n) => filas().find((x) => x.querySelector(".bt-id")?.textContent === String(n));
+        const clic = (x) => x.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        ok(await hasta(() => tarea(15099) && tarea(14000)), "Buscar tarea no se abre con los desplegados");
+        ok(proyD("ATE").getAttribute("aria-expanded") === "false", "Buscar tarea despliega de más");
+        // su estrella: favorita sin marcar la fila
+        clic(tarea(15004).querySelector(".bt-fav"));
+        ok(await hasta(() => st.favoritas.has(15004)), "la estrella de Buscar tarea no la hace favorita");
+        ok(await hasta(() => tarea(15004).querySelector(".bt-fav.si")) && !tarea(15004).classList.contains("marcada"), "la estrella marca la fila");
+        clic(tarea(15004).querySelector(".bt-fav"));
+        ok(await hasta(() => !st.favoritas.has(15004)), "la estrella no la quita de favoritas");
+        // recoger aqui tambien se recuerda
+        clic(proyD("Sistemas de Gestión"));
+        ok(!tarea(14000), "no se recoge");
+        await espera(800);
+        ok(JSON.stringify(await api().proyectos_desplegados()) === "[3]", `no recuerda lo recogido: ${JSON.stringify(await api().proyectos_desplegados())}`);
+        // «Actualizar» (boton y F5): tareas nuevas sin cerrar, con lo desplegado como estaba
+        api().tareas_de_proyecto = (pid) => original(pid).then((r) => (pid === "3"
+          ? { tareas: [...r.tareas, { id: 15098, nombre: "[AUL] Otra recién creada" }] } : r));
+        botonDlg("⟳ Actualizar");
+        ok(await hasta(() => tarea(15098) && !tarea(15099)), "el botón «Actualizar» no trae lo nuevo");
+        api().tareas_de_proyecto = original;
+        dlg().querySelector(".bq-lista").dispatchEvent(new KeyboardEvent("keydown", { key: "F5", bubbles: true, cancelable: true }));
+        ok(await hasta(() => tarea(15004) && !tarea(15098)), "F5 no actualiza");
+        ok(proyD("Aulas").getAttribute("aria-expanded") === "true" && !/null|undefined/.test(dlg().textContent), "tras actualizar no queda como estaba");
+      } finally {
+        api().tareas_de_proyecto = original;
+        cerrarTodo();
+        olvidarMisProyectos();
+        await recoger();
+        inp.dispatchEvent(new Event("blur"));
+        inp.value = antes;
+        await elegirTarea();
+      }
     });
     await prueba("deshacer en varios niveles", async () => {
       const antes = cifra(2);

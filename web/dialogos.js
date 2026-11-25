@@ -1517,32 +1517,87 @@ function tareasEnArbol(tareas, encaja = null) {
 // Los proyectos del usuario y las tareas de los que despliega, para el
 // buscador del campo Tarea. Se guardan unos minutos (desplegar otra vez el
 // mismo no vuelve a pedirlo); crear, cambiar o duplicar una tarea los olvida.
-const mios = { proyectos: null, pidiendo: null, tareas: new Map(), caduca: 0, ocultos: new Set() };
+const mios = { proyectos: null, pidiendo: null, tareas: new Map(), caduca: 0, ocultos: new Set(),
+               tanda: 0, actualizando: false };
+const MIOS_DURAN = 3 * 60 * 1000;
 function olvidarMisProyectos() {
   mios.proyectos = null; mios.pidiendo = null; mios.caduca = 0;
   mios.tareas.clear();
+  mios.tanda++;                       // lo que estuviera en camino ya no vale
 }
 // Pide los proyectos si no estan o han caducado; alLlegar(), si hay algo nuevo que pintar.
 function pedirMisProyectos(alLlegar) {
-  if (Date.now() > mios.caduca) { olvidarMisProyectos(); mios.caduca = Date.now() + 3 * 60 * 1000; }
+  if (Date.now() > mios.caduca) { olvidarMisProyectos(); mios.caduca = Date.now() + MIOS_DURAN; }
   if (mios.proyectos) return;
-  mios.pidiendo ??= Promise.resolve().then(() => Promise.all([api().proyectos(), api().proyectos_ocultos()]))
+  const tanda = mios.tanda;
+  mios.pidiendo ??= Promise.resolve()
+    .then(() => Promise.all([api().proyectos(), api().proyectos_ocultos(), leerDesplegados()]))
     .then(([ps, ocultos]) => {
+      if (tanda !== mios.tanda) return;
       mios.proyectos = Array.isArray(ps) ? ps : [];
       if (Array.isArray(ocultos)) mios.ocultos = new Set(ocultos.map(String));
-    }, () => { mios.proyectos = null; })
-    .finally(() => { mios.pidiendo = null; });
+    }, () => { if (tanda === mios.tanda) mios.proyectos = null; })
+    .finally(() => { if (tanda === mios.tanda) mios.pidiendo = null; });
   mios.pidiendo.then(alLlegar);
+}
+// «Actualizar»: los proyectos y sus tareas, otra vez de ProyectosTIC, sin esperar
+// a que caduquen (alguien acaba de crear una tarea alli). Mientras llegan se
+// sigue viendo lo que habia; si falla, se queda como estaba.
+function actualizarMisProyectos(alLlegar) {
+  if (mios.actualizando) return;
+  mios.actualizando = true;
+  alLlegar();
+  Promise.resolve().then(() => Promise.all([api().proyectos(), api().proyectos_ocultos()]))
+    .then(([ps, ocultos]) => {
+      if (!Array.isArray(ps)) throw new Error("sin proyectos");
+      olvidarMisProyectos();
+      mios.proyectos = ps;
+      mios.caduca = Date.now() + MIOS_DURAN;
+      if (Array.isArray(ocultos)) mios.ocultos = new Set(ocultos.map(String));
+      estado("Proyectos y tareas, al día.");
+    })
+    .catch(() => estado("No se pudieron actualizar los proyectos (¿sin conexión?)."))
+    .finally(() => { mios.actualizando = false; alLlegar(); });
+}
+
+// Los proyectos que el usuario dejo desplegados en el arbol (el de Buscar tarea
+// y el del campo Tarea son el mismo): se guardan en la configuracion y la
+// proxima vez se abren asi. Se leen una vez; despues manda lo que hay aqui.
+const desplegados = { ids: new Set(), leyendo: null, tocados: false, espera: null };
+function leerDesplegados() {
+  desplegados.leyendo ??= Promise.resolve().then(() => api().proyectos_desplegados())
+    .then((ids) => {
+      // si ya ha desplegado o recogido alguno mientras llegaba, manda lo que ha hecho
+      if (!desplegados.tocados && Array.isArray(ids)) for (const id of ids) desplegados.ids.add(String(id));
+    })
+    .catch(() => { desplegados.leyendo = null; });      // no se pudo leer: otra vez sera
+  return desplegados.leyendo;
+}
+// Despliega o recoge un proyecto y lo apunta (con un respiro: varios seguidos, una escritura).
+function desplegar(pid, si) {
+  if (si) desplegados.ids.add(String(pid)); else desplegados.ids.delete(String(pid));
+  desplegados.tocados = true;
+  clearTimeout(desplegados.espera);
+  desplegados.espera = setTimeout(() => {
+    Promise.resolve().then(() => api().proyectos_desplegados_guardar([...desplegados.ids].map(Number))).catch(() => {});
+  }, 500);
+}
+// La estrella de una tarea: llena si es favorita. En las filas del arbol va al final.
+function estrellaDe(t, alFinal = false) {
+  const fav = st.favoritas?.has(Number(t.id));
+  return el("button", { class: `bt-fav${alFinal ? " bt-fav-fin" : ""}${fav ? " si" : ""}`, type: "button", tabindex: "-1",
+    title: fav ? "Quitar de favoritas" : "Añadir a favoritas", text: fav ? "★" : "☆" });
 }
 // mios.tareas: proyecto -> null (en camino), { tareas } o { error }
 function pedirTareasDeMiProyecto(pid, alLlegar) {
   const k = String(pid), hay = mios.tareas.get(k);
   if (hay === null || hay?.tareas) return;
   mios.tareas.set(k, null);
+  const tanda = mios.tanda;
   Promise.resolve().then(() => api().tareas_de_proyecto(k))
     .then((r) => (Array.isArray(r?.tareas) ? { tareas: r.tareas } : { error: r?.error || "No se pudieron leer sus tareas." }),
           () => ({ error: "No se pudieron leer sus tareas (¿sin conexión?)." }))
-    .then((r) => { mios.tareas.set(k, r); alLlegar(); });
+    .then((r) => { if (tanda === mios.tanda) { mios.tareas.set(k, r); alLlegar(); } });
 }
 
 // Proyectos que no se quieren ver al buscar una tarea para fichar (en Buscar
@@ -1630,7 +1685,6 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
   let items = [], activo = -1, seq = 0, espera = null, remoto = { q: "", tareas: null, error: "" };
   let sobran = 0;                     // tareas de la fuente que no caben en la lista
   let alEntrar = "";                  // lo que habia en el campo al entrar (la tarea ya elegida)
-  const abiertos = new Set();         // los proyectos desplegados en «Tus proyectos»
   let reciente = null;                // el proyecto que se acaba de ocultar aqui (para deshacerlo)
   const MAX_FUENTE = 300;
   const normal = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -1642,7 +1696,7 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
 
   // «Tus proyectos»: cada uno, y debajo, si esta desplegado, sus tareas en arbol
   const filasProyectos = () => (mios.proyectos || []).filter(proyectoVisible).flatMap((p) => {
-    const k = String(p.id), abierto = abiertos.has(k), r = mios.tareas.get(k);
+    const k = String(p.id), abierto = desplegados.ids.has(k), r = mios.tareas.get(k);
     const cab = { esProyecto: true, pid: k, nombre: p.nombre, abierto };
     if (!abierto) return [cab];
     if (r === undefined) pedirTareasDeMiProyecto(k, repintar);      // caducaron: otra vez
@@ -1653,7 +1707,7 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
   });
   async function ocultarProyecto(t) {
     reciente = { id: t.pid, nombre: t.nombre };
-    abiertos.delete(t.pid);
+    desplegar(t.pid, false);
     activo = -1;
     try { await guardarProyectosOcultos([...mios.ocultos, t.pid]); } catch (_e) { return; }
     repintar();
@@ -1661,15 +1715,25 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
   // el proyecto desplegado, arriba del todo: debajo se ven sus tareas
   const subir = (pid) => {
     const fila = [...caja.querySelectorAll(".bt-proy")].find((x) => x.dataset.pid === pid);
-    if (fila && abiertos.has(pid) && !caja.hidden) caja.scrollTop = fila.offsetTop - 4;
+    if (fila && desplegados.ids.has(pid) && !caja.hidden) caja.scrollTop = fila.offsetTop - 4;
   };
   function alternarProyecto(pid) {
-    if (!abiertos.delete(pid)) {
-      abiertos.add(pid);
-      pedirTareasDeMiProyecto(pid, () => { repintar(); subir(pid); });
-    }
+    const abrir = !desplegados.ids.has(pid);
+    desplegar(pid, abrir);              // y asi se queda para la proxima vez
+    if (abrir) pedirTareasDeMiProyecto(pid, () => { repintar(); subir(pid); });
     pintar();
     subir(pid);
+  }
+  // El titulo de un grupo; el de «Tus proyectos» lleva «Actualizar».
+  function cabecera(titulo) {
+    if (titulo !== "Tus proyectos") return el("div", { class: "bt-grupo", text: titulo });
+    const accion = mios.actualizando ? el("span", { class: "bt-actualizando", text: "Actualizando…" })
+      : el("button", { type: "button", class: "enlace bt-actualizar", tabindex: "-1", text: "⟳ Actualizar",
+                       title: "Volver a pedir tus proyectos y sus tareas a ProyectosTIC" });
+    if (!mios.actualizando) accion.addEventListener("click", (e) => { e.stopPropagation(); actualizarMisProyectos(repintar); });
+    const fila = el("div", { class: "bt-grupo bt-grupo-accion" }, el("span", { text: titulo }), accion);
+    fila.addEventListener("mousedown", (e) => e.preventDefault());       // sin quitarle el foco al campo
+    return fila;
   }
 
   function grupos(q) {
@@ -1744,10 +1808,10 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
           nodos.push(el("div", { class: "bt-grupo", text: titulo }),
                      el("div", { class: "bt-nada", text: remoto.error || "Nada más con eso." }));
         }
-        if (pie) nodos.push(el("div", { class: "bt-grupo", text: titulo }), pie);      // todos ocultos
+        if (pie) nodos.push(cabecera(titulo), pie);      // todos ocultos
         continue;
       }
-      nodos.push(el("div", { class: "bt-grupo", text: titulo }));
+      nodos.push(cabecera(titulo));
       for (const t of lista) {
         if (t.aviso) {                      // "Cargando tareas…", bajo su proyecto
           nodos.push(el("div", { class: "bt-nada bt-bajo-proy", text: t.aviso }));
@@ -1769,27 +1833,34 @@ function buscadorTarea(input, { alElegir, fuente = null }) {
           continue;
         }
         const fav = st.favoritas?.has(Number(t.id));
-        const estrella = fuente || t.deProyecto ? null : el("button", { class: `bt-fav${fav ? " si" : ""}`, type: "button", tabindex: "-1",
-          title: fav ? "Quitar de favoritas" : "Añadir a favoritas", text: fav ? "★" : "☆" });
-        estrella?.addEventListener("mousedown", (e) => e.preventDefault());
+        // tambien las del arbol de un proyecto: ahi la estrella va al final de la fila
+        const estrella = fuente ? null : estrellaDe(t, !!t.deProyecto);
+        // sin quitarle el foco al campo, y sin que la fila se de por elegida (el
+        // mousedown subia hasta ella: la estrella elegia la tarea y no la marcaba)
+        estrella?.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
         estrella?.addEventListener("click", async (e) => {
           e.stopPropagation();
+          const arriba = t.deProyecto ? e.currentTarget.closest(".bt-item").getBoundingClientRect().top : null;
           const r = await llamar("favorita", t.id, t.nombre, !fav);
           ponerTareas(r.tareas);
           estado(fav ? `«${t.nombre}» ya no es favorita.` : `«${t.nombre}» añadida a favoritas.`);
           pintar();
+          // arriba cambia «Favoritas y buscadas»: que la fila del arbol no se mueva bajo el raton
+          const ahora = arriba === null ? null : [...caja.querySelectorAll(".bt-item.bt-desp")].find((x) => x.dataset.id === String(t.id));
+          if (ahora) caja.scrollTop += ahora.getBoundingClientRect().top - arriba;
         });
         // en arbol la de arriba ya dice de cual cuelga; solo se escribe si no esta en la lista
         const enArbol = t.nivel !== undefined;
         const ruta = (enArbol ? [t.suelta ? `Cuelga de ${t.padre}` : ""] : fuente ? [t.padre] : [t.proyecto, t.padre])
           .filter(Boolean).join(" › ");
         const fila = el("div", { class: `bt-item${fuente ? " sin-fav" : ""}${enArbol ? " bt-rama" : ""}${t.deProyecto ? " bt-desp" : ""}`
-            + `${t.contexto ? " bt-contexto" : ""}${i === activo ? " activo" : ""}`, role: "option" },
-          estrella,
+            + `${t.contexto ? " bt-contexto" : ""}${i === activo ? " activo" : ""}`, role: "option", "data-id": String(t.id) },
+          t.deProyecto ? null : estrella,
           enArbol && t.nivel ? el("span", { class: "bt-codo", "aria-hidden": "true", text: "└" }) : null,
           el("div", { class: "bt-texto" },
             el("div", { class: "bt-nombre" }, el("span", { class: "bt-id", text: String(t.id) }), ` ${t.nombre}`),
-            ruta ? el("div", { class: "bt-ruta", text: ruta }) : null));
+            ruta ? el("div", { class: "bt-ruta", text: ruta }) : null),
+          t.deProyecto ? estrella : null);
         if (enArbol) {
           fila.style.setProperty("--nivel", String(Math.min(t.nivel, 8)));
           fila.setAttribute("aria-level", String(t.nivel + 1));
@@ -1903,7 +1974,9 @@ function dlgBuscar({ alElegir = null } = {}) {
   let todos = [], proyectos = [], filas = [], seq = 0;      // todos los del usuario, y los que se ven
   let reciente = null;                 // el proyecto que se acaba de ocultar aqui (para deshacerlo)
   const cargadas = new Map();          // proyecto -> { tareas } o { error }; null mientras llegan
-  const abiertos = new Set();          // los proyectos desplegados
+  let auto = "";                       // el proyecto que se abre solo (el de la tarea del formulario): no se recuerda
+  // desplegado: porque el usuario lo dejo asi (se recuerda) o porque se ha abierto solo
+  const abiertoP = (k) => desplegados.ids.has(k) || auto === k;
   const plegadas = new Set();          // las tareas con las de debajo recogidas
   let sueltas = null;                  // lo encontrado fuera del arbol (cerradas incluidas): lista plana
   let cursor = -1, ancla = -1;         // la fila del teclado y desde donde marca Mayus
@@ -1916,9 +1989,11 @@ function dlgBuscar({ alElegir = null } = {}) {
   const info = nota("Cargando proyectos…");
   const fav = el("input", { type: "checkbox" });
   const d = dialogo({ titulo: "Buscar tarea", ancho: 640, botones: [
-    { texto: "＋ Nueva tarea…", izquierda: true, id: "nueva", accion: nueva }, cancelarBoton,
+    { texto: "＋ Nueva tarea…", izquierda: true, id: "nueva", accion: nueva },
+    { texto: "⟳ Actualizar", izquierda: true, id: "actualizar", accion: actualizar }, cancelarBoton,
     { texto: "Elegir", clase: "primario", accion: elegir }] });
   d.botones.nueva.title = "Si no existe, créala en ProyectosTIC";
+  d.botones.actualizar.title = "Volver a pedir tus proyectos y sus tareas a ProyectosTIC (F5)";
   d.botones.nueva.hidden = !puedeCrearTareas();
   // en el proyecto que se esta mirando, con lo escrito en el filtro de titulo
   function nueva() {
@@ -1962,7 +2037,7 @@ function dlgBuscar({ alElegir = null } = {}) {
       const k = String(p.id), solo = !!proy.value;
       if (solo && proy.value !== k) continue;
       const c = cargadas.get(k);
-      const abierto = solo || !!encaja || abiertos.has(k);
+      const abierto = solo || !!encaja || abiertoP(k);
       const ramas = c?.tareas ? ramasDe(c.tareas, encaja) : [];
       if (!solo) {
         if (encaja && c && !ramas.length) continue;        // nada suyo con eso
@@ -2002,7 +2077,8 @@ function dlgBuscar({ alElegir = null } = {}) {
             : t.nivel ? el("span", { class: "bt-codo", "aria-hidden": "true", text: "└" }) : null,
           el("div", { class: "bt-texto" },
             el("div", { class: "bt-nombre" }, el("span", { class: "bt-id", text: String(t.id) }), ` ${t.nombre}`),
-            t.ruta ? el("div", { class: "bt-ruta", text: t.ruta }) : null));
+            t.ruta ? el("div", { class: "bt-ruta", text: t.ruta }) : null),
+          estrellaDe(t, true));
         if (t.conHijas) fila.setAttribute("aria-expanded", String(!t.plegada));
       }
       fila.style.setProperty("--nivel", String(Math.min(t.nivel, 8)));
@@ -2052,12 +2128,50 @@ function dlgBuscar({ alElegir = null } = {}) {
   // el proyecto desplegado, arriba del todo: debajo se ven sus tareas
   const subir = (k) => {
     const i = filas.findIndex((t) => t.esProyecto && t.pid === k);
-    if (i >= 0 && abiertos.has(k) && abierta()) lista.scrollTop = lista.children[i].offsetTop - lista.offsetTop - 4;
+    if (i >= 0 && abiertoP(k) && abierta()) lista.scrollTop = lista.children[i].offsetTop - lista.offsetTop - 4;
   };
   function alternarProyecto(k) {
-    if (!abiertos.delete(k)) { abiertos.add(k); pedir(k).then(() => subir(k)); }
+    const abrir = !abiertoP(k);
+    if (auto === k) auto = "";
+    desplegar(k, abrir);                // y asi se queda para la proxima vez
+    if (abrir) pedir(k).then(() => subir(k));
     pintar();
     subir(k);
+  }
+  // Lo que hace falta tener para pintar lo que se ve: las tareas del proyecto
+  // elegido, las de todos si se esta filtrando, o las de los desplegados.
+  function pedirLoQueSeVe() {
+    for (const p of proyectos) {
+      const k = String(p.id);
+      if (proy.value ? proy.value === k : filtro.value.trim() || abiertoP(k)) pedir(k);
+    }
+  }
+  // La estrella de una fila: la hace favorita o deja de serlo, sin marcarla.
+  async function alternarFavorita(t) {
+    const era = st.favoritas?.has(Number(t.id));
+    const r = await llamar("favorita", t.id, t.nombre, !era);
+    ponerTareas(r.tareas);
+    if (abierta()) pintar();
+  }
+  // «Actualizar» (F5): proyectos y tareas, otra vez de ProyectosTIC. Lo
+  // desplegado, lo marcado y el filtro se quedan como estaban.
+  async function actualizar() {
+    info.textContent = "Actualizando…";
+    try {
+      const [ps, ocultos] = await Promise.all([llamar("proyectos"), llamar("proyectos_ocultos")]);
+      if (!abierta()) return;
+      todos = ps;
+      if (Array.isArray(ocultos)) mios.ocultos = new Set(ocultos.map(String));
+      olvidarMisProyectos();            // el campo Tarea, tambien al dia
+      cargadas.clear();
+      ponerProyectos();
+      if (sueltas) { await buscarFuera(); return; }
+      pedirLoQueSeVe();
+      pintar();
+    } catch (e) {
+      if (abierta()) { pintar(); if (sueltas) info.textContent = "No se pudo actualizar."; }
+      throw e;
+    }
   }
   function alternarTarea(id) {
     if (!plegadas.delete(Number(id))) plegadas.add(Number(id));
@@ -2075,12 +2189,13 @@ function dlgBuscar({ alElegir = null } = {}) {
   function alCambiarVisibles() {
     if (!abierta()) return;
     ponerProyectos();
-    if (filtro.value.trim() && !proy.value) for (const p of proyectos) pedir(String(p.id));
+    pedirLoQueSeVe();
     pintar();
   }
   async function ocultarProyecto(t) {
     reciente = { id: t.pid, nombre: t.nombre };
-    abiertos.delete(t.pid);
+    if (auto === t.pid) auto = "";
+    desplegar(t.pid, false);
     cursor = -1;
     await guardarProyectosOcultos([...mios.ocultos, t.pid]);
     alCambiarVisibles();
@@ -2112,12 +2227,13 @@ function dlgBuscar({ alElegir = null } = {}) {
     const i = filaDe(e);
     if (i < 0) return;
     if (e.target.closest(".bt-ocultar")) { ocultarProyecto(filas[i]).catch(() => {}); return; }
+    if (e.target.closest(".bt-fav")) { cursor = i; alternarFavorita(filas[i]).catch(() => {}); return; }
     if (filas[i].esProyecto) { cursor = i; alternarProyecto(filas[i].pid); return; }
     if (e.target.closest(".bt-giro")) { cursor = i; alternarTarea(filas[i].id); return; }
     marcar(i, e);
   });
   lista.addEventListener("dblclick", (e) => {
-    if (esTarea(filas[filaDe(e)]) && !e.target.closest(".bt-giro")) elegir(d);
+    if (esTarea(filas[filaDe(e)]) && !e.target.closest(".bt-giro, .bt-fav")) elegir(d);
   });
   // la fila a la que va el teclado: se salta los avisos ("Cargando…")
   const hasta = (i, dir) => {
@@ -2157,20 +2273,26 @@ function dlgBuscar({ alElegir = null } = {}) {
     marcadas.clear(); cursor = -1; ancla = -1;
     lista.scrollTop = 0;
   };
-  Promise.all([llamar("proyectos"), llamar("proyectos_ocultos")]).then(async ([ps, ocultos]) => {
+  Promise.all([llamar("proyectos"), llamar("proyectos_ocultos"), leerDesplegados()]).then(async ([ps, ocultos]) => {
     todos = ps;
     if (Array.isArray(ocultos)) mios.ocultos = new Set(ocultos.map(String));
     ponerProyectos();
-    if (proyectos.length === 1) { abiertos.add(String(proyectos[0].id)); pedir(String(proyectos[0].id)); }
+    if (proyectos.length === 1) auto = String(proyectos[0].id);
+    pedirLoQueSeVe();                   // los que se quedaron desplegados la ultima vez
     pintar();
-    // se abre con el proyecto de la tarea que hay en el formulario ya desplegado
+    // sin ninguno desplegado, se abre con el proyecto de la tarea que hay en el formulario
     const mio = String(await proyectoDeTarea(tareaDelFormulario()?.id) ?? "");
-    if (abierta() && mio && !abiertos.size && !proy.value && !filtro.value.trim() && proyectos.some((p) => String(p.id) === mio)) {
-      abiertos.add(mio);
+    const alguno = () => proyectos.some((p) => abiertoP(String(p.id)));
+    if (abierta() && mio && !alguno() && !proy.value && !filtro.value.trim() && proyectos.some((p) => String(p.id) === mio)) {
+      auto = mio;
       pedir(mio);
       pintar();
     }
   }).catch(() => d.cerrar());
+  // F5: actualizar (con el boton, que se apaga mientras tanto)
+  d.cuerpo.parentElement.addEventListener("keydown", (e) => {
+    if (e.key === "F5") { e.preventDefault(); d.botones.actualizar.click(); }
+  });
   proy.onchange = () => {
     otraVista();
     if (proy.value) pedir(proy.value);

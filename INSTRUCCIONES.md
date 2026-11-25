@@ -159,6 +159,12 @@ Abre **FichaCSIRC**:
   flecha. El filtro busca en todos a la vez y, si no encuentra nada, ofrece
   mirar también entre las **cerradas**. Con Ctrl o Mayús marcas varias.
 
+El árbol **se queda como lo dejas**: los proyectos que despliegues salen
+desplegados la próxima vez, también al volver a abrir la app. Cada tarea lleva
+una **☆** al final de su fila para hacerla favorita (★) sin elegirla. Y si
+alguien acaba de crear una tarea en ProyectosTIC y aún no la ves, pulsa
+**⟳ Actualizar** (o F5 dentro de *Buscar tarea*).
+
 ¿Te salen proyectos en los que nunca fichas? Pasa el ratón por el proyecto y
 pulsa **No mostrar**, o ve a **Herramientas → Proyectos visibles…** y desmarca
 los que sobren. Ahí mismo los vuelves a marcar. Solo dejan de salir al buscar
