@@ -563,7 +563,10 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
             e.exigir_desbloqueo(&cfg)?;
             let cli = Cliente::desde(&cfg).map_err(|err| err.to_string())?;
             let ps = cli.proyectos_crear().await.map_err(|err| err.to_string())?;
-            Ok(json!({"proyectos": ps, "ultimo": cfg.get("nueva_tarea_proyecto").and_then(id_entero),
+            // quien no puede crear quiza si pueda modificar: solo entonces se pregunta
+            // (si no contesta, como si no pudiera: Modificar no se ofrece)
+            let ms = if ps.is_empty() { cli.proyectos_modificar().await.unwrap_or_default() } else { vec![] };
+            Ok(json!({"proyectos": ps, "modificar": ms, "ultimo": cfg.get("nueva_tarea_proyecto").and_then(id_entero),
                       "plantillas": tarea::plantillas(&cfg)}))
         }
         "nueva_tarea_opciones" => {

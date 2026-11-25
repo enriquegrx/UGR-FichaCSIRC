@@ -102,6 +102,8 @@ instalada aparece en el pie de la ventana.
 - En la cabecera, en broma: **Nivel dios** si puedes crear tareas y **Nivel
   loser** si no. Al pasar el ratón explica cada nivel y dice en qué proyectos
   puedes crearlas.
+- Si ProyectosTIC te deja modificar tareas pero no crearlas, *Archivo →
+  Modificar una tarea* aparece igualmente; crear y duplicar, no.
 - «Nueva tarea» se abre en el último proyecto en el que creaste una; la primera
   vez, en el de la tarea que tengas puesta en *Añadir apunte*.
 

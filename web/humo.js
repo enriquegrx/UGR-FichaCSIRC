@@ -813,6 +813,26 @@
       const donde = [...modo.querySelectorAll(".modo-nivel.mio .modo-proyectos li")].map((x) => x.textContent).join(" | ");
       ok(donde === "Sistemas de Gestión | Aulas y Teledocencia", `la galleta no dice en qué proyectos: ${donde}`);
       ok(modo.querySelectorAll(".modo-proyectos").length === 1, "la lista de proyectos sale también en el otro nivel");
+      // quien no puede crear pero si modificar: nivel loser, sin «＋ Nueva», y Modificar en Archivo
+      const suyo = st.crear;
+      try {
+        st.crear = { proyectos: [], modificar: [{ id: 3, nombre: "Aulas y Teledocencia" }], plantillas: [] };
+        pintarPermisoCrear();
+        ok($("b-nueva").hidden && $("b-nueva-mas").hidden, "ofrece «＋ Nueva» a quien solo puede modificar");
+        ok(!modo.classList.contains("dios") && /Nivel loser/.test(modo.textContent), "da el nivel dios a quien solo puede modificar");
+        const loser = modo.querySelector(".modo-nivel.mio");
+        ok(/puedes modificar tareas.*en 1 proyecto/.test(loser.textContent) && loser.querySelector(".modo-proyectos li").textContent === "Aulas y Teledocencia",
+           `la galleta no dice dónde puede modificar: ${loser.textContent}`);
+        const archivo = MENUS.archivo().filter(Boolean).map((x) => x.texto || "").join("|");
+        ok(archivo.includes("Modificar una tarea") && !archivo.includes("Duplicar una tarea"), `Archivo: ${archivo}`);
+        st.crear = { proyectos: [], modificar: [], plantillas: [] };
+        pintarPermisoCrear();
+        ok(!modo.querySelector(".modo-proyectos") && !MENUS.archivo().filter(Boolean).some((x) => (x.texto || "").includes("Modificar una tarea")),
+           "ofrece Modificar a quien no puede nada");
+      } finally {
+        st.crear = suyo;
+        pintarPermisoCrear();
+      }
       // la primera vez, el dialogo se abre en el proyecto de la tarea del formulario
       const antes = $("tarea").value, deAulas = "15004 - Revisión de megafonía del Aulario";
       st.tareas.set(deAulas, 15004);

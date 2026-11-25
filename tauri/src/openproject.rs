@@ -265,6 +265,15 @@ impl Cliente {
         Ok(self.get_todos("/api/v3/projects", vec![]).await?.iter().filter_map(proyecto_crear).collect())
     }
 
+    /// Los proyectos en los que este usuario puede MODIFICAR tareas (permiso
+    /// "editar paquetes de trabajo"). Los proyectos no lo dicen con un enlace,
+    /// como el de crear: se pregunta a /api/v3/capabilities.
+    pub async fn proyectos_modificar(&self) -> Result<Vec<Value>, ErrorOp> {
+        let Some(uid) = self.yo().await?["id"].as_i64() else { return Ok(vec![]) };
+        Ok(self.get_todos("/api/v3/capabilities", vec![("filters", filtro_capacidad(uid, "work_packages/update"))]).await?
+            .iter().filter_map(proyecto_de_capacidad).collect())
+    }
+
     /// Peticion que crea, valida o cambia una tarea: lo que diga ProyectosTIC,
     /// con su motivo en claro ('motivo') si no la acepta (422, 403, 404, 409).
     async fn enviar_tarea(&self, metodo: reqwest::Method, ruta: &str, cuerpo: &Value, oks: &[u16],
@@ -367,6 +376,21 @@ pub fn proyecto_crear(p: &Value) -> Option<Value> {
         return None;
     }
     Some(json!({"id": p["id"].as_i64()?, "nombre": p["name"].as_str().unwrap_or("?")}))
+}
+
+/// El filtro "lo que este usuario puede hacer de esta clase" de /capabilities.
+pub fn filtro_capacidad(uid: i64, accion: &str) -> String {
+    json!([{"principal": {"operator": "=", "values": [uid.to_string()]}},
+           {"action": {"operator": "=", "values": [accion]}}]).to_string()
+}
+
+/// El proyecto de un permiso de /capabilities (None si no va por proyecto).
+pub fn proyecto_de_capacidad(c: &Value) -> Option<Value> {
+    let ctx = &c["_links"]["context"];
+    if !ctx["href"].as_str()?.contains("/projects/") {
+        return None;
+    }
+    Some(json!({"id": id_de_href(&ctx["href"])?, "nombre": ctx["title"].as_str().unwrap_or("?")}))
 }
 
 /// ".../api/v3/types/7" -> 7
@@ -724,6 +748,19 @@ mod tests {
         let raiz = json!({"id": 5, "subject": "Madre", "_links": {"parent": {"href": null}}});
         assert_eq!(wp_en_arbol(&raiz).unwrap()["padre_id"], Value::Null);
         assert_eq!(wp_en_arbol(&json!({"id": 6, "subject": "Sin enlaces"})).unwrap()["padre_id"], Value::Null);
+    }
+
+    #[test]
+    fn donde_se_puede_modificar_lo_dicen_los_permisos() {
+        let f: Value = serde_json::from_str(&filtro_capacidad(567, "work_packages/update")).unwrap();
+        assert_eq!(f, json!([{"principal": {"operator": "=", "values": ["567"]}},
+                             {"action": {"operator": "=", "values": ["work_packages/update"]}}]));
+        let de_proyecto = json!({"_links": {"action": {"href": "/api/v3/actions/work_packages/update"},
+                                            "context": {"href": "/api/v3/projects/123", "title": "ATE"}}});
+        let global = json!({"_links": {"context": {"href": "/api/v3/capabilities/context/global", "title": "Global"}}});
+        assert_eq!(proyecto_de_capacidad(&de_proyecto), Some(json!({"id": 123, "nombre": "ATE"})));
+        assert_eq!(proyecto_de_capacidad(&global), None);
+        assert_eq!(proyecto_de_capacidad(&json!({})), None);
     }
 
     #[test]

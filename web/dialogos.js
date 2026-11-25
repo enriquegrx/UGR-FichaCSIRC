@@ -1869,6 +1869,8 @@ function dlgBuscar({ alElegir = null } = {}) {
 // ================================================================ nueva tarea
 
 const puedeCrearTareas = () => !!st.crear?.proyectos?.length;
+// Modificar va con otro permiso: hay quien puede cambiar tareas y no crearlas.
+const puedeModificarTareas = () => puedeCrearTareas() || !!st.crear?.modificar?.length;
 
 // "1", "1,5" -> horas; lo que no sea un numero de horas, null.
 function horasDeTexto(texto) {

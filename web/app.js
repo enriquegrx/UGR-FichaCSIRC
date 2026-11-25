@@ -288,18 +288,23 @@ function pintarPermisoCrear() {
     el("span", { class: "ico", "aria-hidden": "true", text: icono }),
     el("div", {}, el("b", { text: nombre }), mio ? el("i", { text: "tu nivel" }) : null, el("p", { text: texto }), extra));
   // de donde viene el nivel: los proyectos en los que deja (los primeros, si son muchos)
-  const ps = st.crear?.proyectos || [];
-  const donde = no ? null : el("ul", { class: "modo-proyectos" },
+  const lista = (ps) => el("ul", { class: "modo-proyectos" },
     ...ps.slice(0, MAX_PROYECTOS_NIVEL).map((p) => el("li", { text: p.nombre })),
-    n > MAX_PROYECTOS_NIVEL ? el("li", { class: "mas", text: `y ${n - MAX_PROYECTOS_NIVEL} más` }) : null);
+    ps.length > MAX_PROYECTOS_NIVEL ? el("li", { class: "mas", text: `y ${ps.length - MAX_PROYECTOS_NIVEL} más` }) : null);
+  const donde = no ? null : lista(st.crear.proyectos);
+  // sin poder crear, quiza si se puedan modificar (es otro permiso)
+  const ms = (no && st.crear?.modificar) || [];
+  const cuantos = (k) => (k === 1 ? "1 proyecto" : `${k} proyectos`);
   m.replaceChildren(el("span", { class: "ico", "aria-hidden": "true", text: no ? "🎮" : "⚔️" }), no ? "Nivel loser" : "Nivel dios",
     el("div", { class: "modo-galleta", role: "tooltip" },
       nivel("⚔️", "Nivel dios", no ? "ProyectosTIC te deja crear tareas en algún proyecto: puedes crearlas, modificarlas, "
         + "duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el menú Archivo."
         : "Puedes crear tareas, modificarlas, duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el "
-        + `menú Archivo. ProyectosTIC te deja crearlas en ${n === 1 ? "1 proyecto" : `${n} proyectos`}:`, !no, donde),
+        + `menú Archivo. ProyectosTIC te deja crearlas en ${cuantos(n)}:`, !no, donde),
       nivel("🎮", "Nivel loser", "A fichar en las tareas que ya existen. Para subir de nivel, quien administra un proyecto "
-        + "tiene que darte permiso para crear tareas en él.", no)));
+        + "tiene que darte permiso para crear tareas en él."
+        + (ms.length ? ` Eso sí: puedes modificar tareas (Archivo → Modificar una tarea) en ${cuantos(ms.length)}:` : ""),
+        no, ms.length ? lista(ms) : null)));
 }
 // Lo que se hace con las tareas de ProyectosTIC ademas de crearlas. Modificar
 // y duplicar parten de la tarea que haya puesta en el formulario.
@@ -340,8 +345,8 @@ function menuBajo(boton, items) {
 const MENUS = {
   archivo: () => [
     { texto: "Nueva tarea en ProyectosTIC…\tCtrl+N", accion: () => dlgNuevaTarea() },
-    // solo a quien ProyectosTIC deja crear tareas en algun proyecto
-    st.crear?.proyectos?.length ? { texto: "Modificar una tarea de ProyectosTIC…", accion: () => dlgModificarTarea({ tarea: tareaDelFormulario() }) } : null,
+    // solo a quien ProyectosTIC deja: modificar (crear o editar en algun proyecto) y duplicar (crear)
+    puedeModificarTareas() ? { texto: "Modificar una tarea de ProyectosTIC…", accion: () => dlgModificarTarea({ tarea: tareaDelFormulario() }) } : null,
     st.crear?.proyectos?.length ? { texto: "Duplicar una tarea con las que cuelgan de ella…", accion: () => dlgDuplicarTarea({ tarea: tareaDelFormulario() }) } : null,
     "-",
     { texto: "Exportar a CSV…", accion: dlgExportar },

@@ -4,6 +4,7 @@
 pasa al pulsar. Sin pywebview ni red: el motor va mockeado."""
 
 import datetime as dt
+import json
 import os
 import re
 import sys
@@ -845,7 +846,31 @@ class TestDialogos(Base):
         with mock.patch.object(core, "_get_todos", return_value=ps), \
              mock.patch.object(core, "config_valor", return_value=42):
             r = self.api.nueva_tarea_proyectos()
-        self.assertEqual(r, {"proyectos": [{"id": 42, "nombre": "ATE"}], "ultimo": 42, "plantillas": []})
+        self.assertEqual(r, {"proyectos": [{"id": 42, "nombre": "ATE"}], "modificar": [], "ultimo": 42, "plantillas": []})
+
+    def test_quien_no_puede_crear_quiza_pueda_modificar(self):
+        sin_enlace = [{"id": 43, "name": "Sistemas", "_links": {"self": {"href": "/api/v3/projects/43"}}}]
+        caps = [{"_links": {"context": {"href": "/api/v3/projects/43", "title": "Sistemas"}}},
+                {"_links": {"context": {"href": "/api/v3/capabilities/context/global", "title": "Global"}}}]
+        pedidos = []
+
+        def get_todos(ruta, params=None):
+            pedidos.append((ruta, params))
+            return caps if ruta == "/api/v3/capabilities" else sin_enlace
+        with mock.patch.object(core, "_get_todos", side_effect=get_todos), \
+             mock.patch.object(core, "_user_id", return_value="567"), \
+             mock.patch.object(core, "config_valor", return_value=None):
+            r = self.api.nueva_tarea_proyectos()
+        self.assertEqual(r["proyectos"], [])
+        self.assertEqual(r["modificar"], [{"id": 43, "nombre": "Sistemas"}])
+        filtros = json.loads(pedidos[-1][1]["filters"])
+        self.assertEqual(filtros, [{"principal": {"operator": "=", "values": ["567"]}},
+                                   {"action": {"operator": "=", "values": ["work_packages/update"]}}])
+        # si ProyectosTIC no contesta a eso, como si no pudiera: no rompe nada
+        with mock.patch.object(core, "proyectos_crear", return_value=[]), \
+             mock.patch.object(core, "proyectos_modificar", side_effect=RuntimeError("404")), \
+             mock.patch.object(core, "config_valor", return_value=None):
+            self.assertEqual(self.api.nueva_tarea_proyectos()["modificar"], [])
 
     def test_nueva_tarea_opciones_salen_del_formulario(self):
         form = {"_embedded": {

@@ -715,6 +715,28 @@ def proyectos_crear():
     return out
 
 
+def proyecto_de_capacidad(c):
+    """El proyecto de un permiso de /capabilities (None si no va por proyecto)."""
+    ctx = (c.get("_links") or {}).get("context") or {}
+    if "/projects/" not in str(ctx.get("href") or ""):
+        return None
+    pid = _id_de_href(ctx["href"])
+    return {"id": pid, "nombre": ctx.get("title") or "?"} if pid else None
+
+
+def proyectos_modificar():
+    """Los proyectos en los que este usuario puede MODIFICAR tareas (permiso
+    "editar paquetes de trabajo"). Los proyectos no lo dicen con un enlace,
+    como el de crear: se pregunta a /api/v3/capabilities."""
+    uid = _user_id()
+    if not uid:
+        return []
+    filtros = json.dumps([{"principal": {"operator": "=", "values": [uid]}},
+                          {"action": {"operator": "=", "values": ["work_packages/update"]}}])
+    caps = _get_todos("/api/v3/capabilities", {"filters": filtros})
+    return [p for p in map(proyecto_de_capacidad, caps) if p]
+
+
 def _id_de_href(href):
     try:
         return int(str(href).rstrip("/").rsplit("/", 1)[-1])

@@ -479,6 +479,9 @@
       : { tareas: [...tareas, { id: 14000, nombre: "[ASG] Migración de correo" }] }),
     // ---- crear tareas ----
     nueva_tarea_proyectos: () => espera({ proyectos: proyectosCrear.map((p) => ({ ...p })), ultimo: ultimoCrear,
+                                          // con ?sincrear&modifica: no crea, pero puede modificar en Aulas
+                                          modificar: !proyectosCrear.length && /[?&]modifica\b/.test(location.search)
+                                            ? [{ id: 3, nombre: "Aulas y Teledocencia" }] : [],
                                           plantillas: plantillasDemo.map((p) => ({ ...p })) }),
     nueva_tarea_opciones: (pid, tipo) => {
       const ts = tiposDemo[Number(pid)];

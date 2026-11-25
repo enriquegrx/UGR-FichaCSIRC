@@ -1790,7 +1790,16 @@ class Api:
         """Los proyectos en los que se puede crear, el ultimo que se uso y las
         plantillas de tarea."""
         self._exigir_desbloqueo()
-        return {"proyectos": core.proyectos_crear(),
+        proyectos = core.proyectos_crear()
+        # quien no puede crear quiza si pueda modificar: solo entonces se pregunta
+        # (si no contesta, como si no pudiera: Modificar no se ofrece)
+        modificar = []
+        if not proyectos:
+            try:
+                modificar = core.proyectos_modificar()
+            except Exception as e:
+                core.LOG.warning("No se pudo preguntar donde se pueden modificar tareas: %s", str(e)[:200])
+        return {"proyectos": proyectos, "modificar": modificar,
                 "ultimo": self._id(core.config_valor("nueva_tarea_proyecto")),
                 "plantillas": self._plantillas_tarea()}
 
