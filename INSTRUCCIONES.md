@@ -294,14 +294,18 @@ La app recuerda la vista que dejaste.
 ### 🛠️ Crear, modificar y duplicar tareas (solo con permiso)
 
 Si en ProyectosTIC tienes permiso para **crear tareas** en algún proyecto, la
-cabecera dice **Nivel dios** y junto a *Buscar…* aparece el botón **＋ Nueva**.
+cabecera dice **Nivel dios** y en la barra de arriba, junto a *Por completar*,
+aparece el botón **🗂️ Tareas**.
 Si no lo tienes, dice **Nivel loser** y no verás nada de este apartado: el
 permiso lo da quien administra cada proyecto. Al pasar el ratón por el nivel
 verás en qué proyectos puedes crear tareas: basta con uno. Modificar es un
-permiso aparte: si puedes cambiar tareas pero no crearlas, tendrás *Archivo →
-Modificar una tarea* aunque el nivel sea loser.
+permiso aparte: si puedes cambiar tareas pero no crearlas, tendrás el botón
+**Tareas** solo con *Modificar una tarea*, aunque el nivel sea loser.
 
-- ➕ **Crear una tarea**: **＋ Nueva** (o Ctrl+N). Escribe el título, elige el
+Una **tarea** es lo que existe en ProyectosTIC; un **apunte**, las horas que
+fichas en ella un día. Por eso este botón va aparte del panel *Añadir apunte*.
+
+- ➕ **Crear una tarea**: **Tareas → Nueva tarea…** (o Ctrl+N). Escribe el título, elige el
   proyecto y el tipo y, si quieres, la tarea de la que cuelga, el tiempo
   estimado y la descripción. Abajo ves cómo va a quedar. Al crearla, queda en
   el formulario para fichar en ella.
@@ -314,11 +318,12 @@ Modificar una tarea* aunque el nivel sea loser.
   asterisco en el título donde vaya lo que cambia cada vez (el número de
   ticket, por ejemplo): al elegir la plantilla queda marcado para escribir
   encima.
-- ✏️ **Modificar una tarea**: la flecha **▾** de «＋ Nueva» → *Modificar una
-  tarea…*. Cambia el título, de cuál cuelga, el tiempo estimado o la
+- ✏️ **Modificar una tarea**: **Tareas → Modificar una tarea…**. Parte de la
+  tarea que tengas puesta en *Añadir apunte*, o eliges otra arriba. Cambia el
+  título, de cuál cuelga, el tiempo estimado o la
   descripción. Abajo sale lo que va a cambiar antes de guardar.
-- 📑 **Duplicar una tarea con las que cuelgan de ella**: la flecha **▾** →
-  *Duplicar una tarea…*. Elige el proyecto de destino, el nombre de la copia
+- 📑 **Duplicar una tarea con las que cuelgan de ella**: **Tareas → Duplicar
+  una tarea…**. Elige el proyecto de destino, el nombre de la copia
   y, si quieres, un texto que cambiar en todos los títulos (2026 por 2027).
   Se copian el título, el tipo, la descripción, la prioridad y el tiempo
   estimado; **no** las horas, a quién está asignada, las fechas, los adjuntos

@@ -228,7 +228,8 @@ input:focus, select:focus, button:focus-visible { outline: 2px solid var(--prima
 @media (max-width: 940px) {
   .barra-semana { flex-wrap: wrap; row-gap: 6px; }
   .titulo-semana { order: 9; flex-basis: 100%; }
-  #b-pend { margin-left: auto; }
+  /* el primero de los de la derecha se lleva el hueco: «Tareas» si se ve */
+  #b-tareas:not([hidden]), #b-tareas[hidden] + #b-pend { margin-left: auto; }
 }
 .total { color: var(--tenue); font-variant-numeric: tabular-nums; }
 
@@ -1002,11 +1003,8 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
 
 /* ---------- nueva tarea (se crea en ProyectosTIC) ---------- */
 .campo-tarea button { flex: none; white-space: nowrap; }
-.b-nueva span { color: var(--primario); font-weight: 700; }
-/* la flecha pegada a «＋ Nueva»: modificar o duplicar una tarea */
-.campo-tarea .b-nueva { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.campo-tarea .b-nueva-mas { margin-left: -9px; padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0;
-                            color: var(--tenue); font-size: 11px; }
+/* el boton «Tareas» de la barra: abre un menu */
+#b-tareas .flecha { color: var(--tenue); font-size: 11px; }
 .nt { display: flex; flex-direction: column; gap: 14px; padding: 2px 0 6px; }
 .nt-intro { margin: 0; color: var(--tenue); font-size: 13px; }
 .nt-cargando { margin: 18px 0; }

@@ -802,7 +802,20 @@
       cerrarTodo();
     });
     await prueba("nueva tarea: se crea en ProyectosTIC y queda en el formulario", async () => {
-      ok(await hasta(() => !$("b-nueva").hidden), "no ofrece «＋ Nueva» a quien puede crear");
+      ok(await hasta(() => !$("b-tareas").hidden), "no ofrece el botón «Tareas» a quien puede crear");
+      ok(!$("form").querySelector("#b-tareas") && $("b-buscar").textContent === "Buscar tarea…" && /^Añadir apunte/.test($("b-anadir").textContent),
+         "Añadir apunte mezcla tareas y apuntes");
+      // el menu del boton: crear, modificar y duplicar
+      const delMenu = () => [...document.querySelectorAll("#menu button")].map((b) => b.textContent.split("\t")[0]).join("|");
+      const abrirNueva = async () => {
+        $("b-tareas").click();
+        const op = [...document.querySelectorAll("#menu button")].find((b) => b.textContent.startsWith("Nueva tarea"));
+        ok(op, `el menú de «Tareas» no ofrece crear: ${delMenu()}`);
+        op.click();
+      };
+      $("b-tareas").click();
+      ok(delMenu() === "Nueva tarea…|Modificar una tarea…|Duplicar una tarea con las que cuelgan de ella…", `menú de «Tareas»: ${delMenu()}`);
+      cerrarMenu();
       // la insignia de la cabecera y su galleta: los dos niveles, con el tuyo marcado
       const modo = $("modo");
       ok(!modo.hidden && modo.classList.contains("dios") && modo.firstChild.nextSibling.textContent === "Nivel dios",
@@ -818,7 +831,10 @@
       try {
         st.crear = { proyectos: [], modificar: [{ id: 3, nombre: "Aulas y Teledocencia" }], plantillas: [] };
         pintarPermisoCrear();
-        ok($("b-nueva").hidden && $("b-nueva-mas").hidden, "ofrece «＋ Nueva» a quien solo puede modificar");
+        ok(!$("b-tareas").hidden, "no ofrece el botón «Tareas» a quien solo puede modificar");
+        $("b-tareas").click();
+        ok(delMenu() === "Modificar una tarea…", `a quien solo puede modificar, el menú de «Tareas» le ofrece: ${delMenu()}`);
+        cerrarMenu();
         ok(!modo.classList.contains("dios") && /Nivel loser/.test(modo.textContent), "da el nivel dios a quien solo puede modificar");
         const loser = modo.querySelector(".modo-nivel.mio");
         ok(/puedes modificar tareas.*en 1 proyecto/.test(loser.textContent) && loser.querySelector(".modo-proyectos li").textContent === "Aulas y Teledocencia",
@@ -827,6 +843,7 @@
         ok(archivo.includes("Modificar una tarea") && !archivo.includes("Duplicar una tarea"), `Archivo: ${archivo}`);
         st.crear = { proyectos: [], modificar: [], plantillas: [] };
         pintarPermisoCrear();
+        ok($("b-tareas").hidden, "ofrece el botón «Tareas» a quien no puede nada");
         ok(!modo.querySelector(".modo-proyectos") && !MENUS.archivo().filter(Boolean).some((x) => (x.texto || "").includes("Modificar una tarea")),
            "ofrece Modificar a quien no puede nada");
       } finally {
@@ -837,7 +854,7 @@
       const antes = $("tarea").value, deAulas = "15004 - Revisión de megafonía del Aulario";
       st.tareas.set(deAulas, 15004);
       $("tarea").value = deAulas;
-      $("b-nueva").click();
+      await abrirNueva();
       ok(await hasta(() => document.querySelector(".nt-tipo")), "no pinta los tipos del proyecto");
       ok(document.querySelector(".nt-dos select").value === "3",
          `no se abre en el proyecto de la tarea del formulario: ${document.querySelector(".nt-dos select").value}`);
@@ -846,7 +863,7 @@
       $("tarea").value = antes;
       ok(getComputedStyle(modo.querySelector(".modo-galleta")).display === "none", "la galleta sale sin pasar el ratón");
       ok(!/null|undefined/.test(modo.textContent), "la insignia escribe null/undefined");
-      $("b-nueva").click();
+      await abrirNueva();
       ok(await hasta(() => document.querySelector(".nt-tipo")), "no pinta los tipos del proyecto");
       ok(!/\bnull\b|undefined/.test(dlg().textContent), "escribe null/undefined");
       const crear = () => document.querySelector(".dlg-pie button.primario");
@@ -976,11 +993,11 @@
       ocultarAviso();
     });
     await prueba("modificar tarea: solo lo que cambia, y lo que no deja ProyectosTIC", async () => {
-      // desde la flecha de «＋ Nueva», con la tarea que hay en el formulario
-      ok(!$("b-nueva-mas").hidden, "no ofrece modificar ni duplicar a quien puede crear");
-      $("b-nueva-mas").click();
+      // desde el boton «Tareas», con la tarea que hay en el formulario
+      ok(!$("b-tareas").hidden, "no ofrece modificar ni duplicar a quien puede crear");
+      $("b-tareas").click();
       const opcion = [...document.querySelectorAll("#menu button")].find((b) => b.textContent.startsWith("Modificar"));
-      ok(opcion, "el menú de «＋ Nueva» no ofrece modificar");
+      ok(opcion, "el menú de «Tareas» no ofrece modificar");
       opcion.click();
       ok(await hasta(() => document.querySelector(".mt-ficha")?.textContent.includes(`#${tareaDelFormulario().id}`)), "no abre con la tarea del formulario");
       cerrarTodo();

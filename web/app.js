@@ -267,7 +267,7 @@ function avisoTarea(texto, id) {
   avisoT = setTimeout(ocultarAviso, 12000);
 }
 // ¿Deja ProyectosTIC crear tareas en algun proyecto? Solo entonces se ofrece
-// («＋ Nueva» y «Crear la tarea…» en el buscador). En segundo plano: si no hay
+// (el boton «Tareas» de la barra y «Crear la tarea…» en el buscador). En segundo plano: si no hay
 // red, no molesta; Archivo > Nueva tarea lo vuelve a mirar.
 async function cargarPermisoCrear() {
   try { st.crear = await api().nueva_tarea_proyectos(); }
@@ -277,8 +277,7 @@ async function cargarPermisoCrear() {
 const MAX_PROYECTOS_NIVEL = 6;
 function pintarPermisoCrear() {
   const n = st.crear?.proyectos?.length || 0, no = !n;
-  $("b-nueva").hidden = no;
-  $("b-nueva-mas").hidden = no;
+  $("b-tareas").hidden = !puedeModificarTareas();
   // la insignia de la cabecera (una broma): solo cuando ProyectosTIC ha contestado
   const m = $("modo");
   m.hidden = !st.crear;
@@ -298,21 +297,22 @@ function pintarPermisoCrear() {
   m.replaceChildren(el("span", { class: "ico", "aria-hidden": "true", text: no ? "🎮" : "⚔️" }), no ? "Nivel loser" : "Nivel dios",
     el("div", { class: "modo-galleta", role: "tooltip" },
       nivel("⚔️", "Nivel dios", no ? "ProyectosTIC te deja crear tareas en algún proyecto: puedes crearlas, modificarlas, "
-        + "duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el menú Archivo."
-        : "Puedes crear tareas, modificarlas, duplicarlas con todo su árbol y guardar plantillas, desde «＋ Nueva» y el "
-        + `menú Archivo. ProyectosTIC te deja crearlas en ${cuantos(n)}:`, !no, donde),
+        + "duplicarlas con todo su árbol y guardar plantillas, desde el botón «Tareas» y el menú Archivo."
+        : "Puedes crear tareas, modificarlas, duplicarlas con todo su árbol y guardar plantillas, desde el botón "
+        + `«Tareas» y el menú Archivo. ProyectosTIC te deja crearlas en ${cuantos(n)}:`, !no, donde),
       nivel("🎮", "Nivel loser", "A fichar en las tareas que ya existen. Para subir de nivel, quien administra un proyecto "
         + "tiene que darte permiso para crear tareas en él."
-        + (ms.length ? ` Eso sí: puedes modificar tareas (Archivo → Modificar una tarea) en ${cuantos(ms.length)}:` : ""),
+        + (ms.length ? ` Eso sí: puedes modificar tareas (botón «Tareas») en ${cuantos(ms.length)}:` : ""),
         no, ms.length ? lista(ms) : null)));
 }
-// Lo que se hace con las tareas de ProyectosTIC ademas de crearlas. Modificar
-// y duplicar parten de la tarea que haya puesta en el formulario.
+// Lo que se hace con las tareas de ProyectosTIC (el boton «Tareas» de la
+// barra): crear y duplicar piden el permiso de crear; modificar, el de crear o
+// el de editar. Modificar y duplicar parten de la tarea puesta en el formulario.
 const menuTareas = () => [
-  { texto: "Nueva tarea…\tCtrl+N", accion: () => dlgNuevaTarea() },
+  puedeCrearTareas() ? { texto: "Nueva tarea…\tCtrl+N", accion: () => dlgNuevaTarea() } : null,
   { texto: "Modificar una tarea…", accion: () => dlgModificarTarea({ tarea: tareaDelFormulario() }) },
-  { texto: "Duplicar una tarea con las que cuelgan de ella…", accion: () => dlgDuplicarTarea({ tarea: tareaDelFormulario() }) },
-];
+  puedeCrearTareas() ? { texto: "Duplicar una tarea con las que cuelgan de ella…", accion: () => dlgDuplicarTarea({ tarea: tareaDelFormulario() }) } : null,
+].filter(Boolean);
 
 // ---------------------------------------------------------------- menus
 
@@ -1525,11 +1525,11 @@ function pintarApuntes() {
 function pintarBotonAnadir() {
   const marcados = diasMarcados();
   const b = $("b-anadir");
-  if (!marcados.length) b.textContent = "Añadir (marca un día)";
+  if (!marcados.length) b.textContent = "Añadir apunte (marca un día)";
   else if (marcados.length === 1) {
     const d = marcados[0];
-    b.textContent = `Añadir a ${d.nombre.slice(0, 3).toLowerCase()} ${d.fecha}`;
-  } else b.textContent = `Añadir a ${marcados.length} días`;
+    b.textContent = `Añadir apunte a ${d.nombre.slice(0, 3).toLowerCase()} ${d.fecha}`;
+  } else b.textContent = `Añadir apunte a ${marcados.length} días`;
 }
 
 function actualizarTotales() {
@@ -1773,7 +1773,7 @@ async function anadir(e) {
   const wp = resolverTarea();
   if (wp == null) {
     await avisar("Falta tarea", "Elige una tarea de tus favoritas (puedes escribir para "
-                 + "filtrar) o búscala con «Buscar…».");
+                 + "filtrar) o búscala con «Buscar tarea…».");
     return;
   }
   const horas = $("horas").value.trim();
@@ -1926,8 +1926,7 @@ for (const [quien, ev] of [[window, "focus"], [document, "visibilitychange"]]) {
   quien.addEventListener(ev, () => { if (st.ini && !document.hidden && Date.now() - campanaT > 20000) pintarCampana(); });
 }
 $("b-buscar").onclick = () => dlgBuscar();
-$("b-nueva").onclick = () => dlgNuevaTarea();
-$("b-nueva-mas").onclick = (e) => { e.stopPropagation(); menuBajo($("b-nueva-mas"), menuTareas()); };
+$("b-tareas").onclick = (e) => { e.stopPropagation(); menuBajo($("b-tareas"), menuTareas()); };
 $("b-copiar").onclick = (e) => menuBajo(e.currentTarget, [
   { texto: "Copiar día anterior a los días marcados", accion: dlgCopiarDia },
   { texto: "Copiar semana anterior completa", accion: dlgCopiarSemana },

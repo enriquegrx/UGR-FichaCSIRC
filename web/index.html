@@ -56,6 +56,9 @@
     </div>
     <!-- a la derecha, con lo de consultar (a la izquierda, moverse por los dias) -->
     <!-- icono + rotulo: con la ventana estrecha se queda el icono (app.css) -->
+    <!-- crear, modificar y duplicar tareas de ProyectosTIC: solo a quien ProyectosTIC
+         deja. Aqui arriba y no en Añadir apunte: una tarea no es un apunte. -->
+    <button id="b-tareas" hidden aria-haspopup="menu" title="Crear, modificar o duplicar tareas de ProyectosTIC"><span class="ico" aria-hidden="true">🗂️</span> <span class="rot">Tareas</span> <span class="flecha" aria-hidden="true">▾</span></button>
     <button id="b-pend" aria-pressed="false" title="Días del año sin completar: márcalos y rellénalos de una vez"><span class="ico" aria-hidden="true">🧩</span> <span class="rot">Por completar</span> <span class="n-pend"></span></button>
     <button id="b-estad" aria-pressed="false" title="Tareas más realizadas, jornada cumplida y el año mes a mes"><span class="ico" aria-hidden="true">📊</span> <span class="rot">Estadísticas</span></button>
     <!-- la campana del aviso diario: si esta puesto y a que hora; un clic para
@@ -114,10 +117,7 @@
           <div class="campo-tarea">
             <input id="tarea" list="lista-tareas" placeholder="Busca por nombre o por número de tarea">
             <datalist id="lista-tareas"></datalist>
-            <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar…</button>
-            <!-- solo si ProyectosTIC te deja crear tareas en algun proyecto -->
-            <button type="button" id="b-nueva" class="b-nueva" hidden title="Crear una tarea nueva en ProyectosTIC (Ctrl+N)"><span aria-hidden="true">＋</span> Nueva</button>
-            <button type="button" id="b-nueva-mas" class="b-nueva-mas" hidden title="Modificar o duplicar una tarea de ProyectosTIC" aria-label="Más con las tareas de ProyectosTIC" aria-haspopup="menu">▾</button>
+            <button type="button" id="b-buscar" title="Busca tareas por proyecto o en todos tus proyectos">Buscar tarea…</button>
           </div>
           <label for="horas">Horas</label>
           <div class="fila">

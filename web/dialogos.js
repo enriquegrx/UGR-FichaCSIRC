@@ -2293,7 +2293,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
       el("b", { text: "ProyectosTIC no te deja crear tareas" }),
       el("p", { class: "tenue", text: "Ninguno de tus proyectos te da ese permiso. Lo concede quien administra "
         + "cada proyecto, con un rol que incluya «Añadir paquetes de trabajo»." }),
-      el("p", { class: "tenue", text: "Mientras tanto puedes fichar en las tareas que ya existen: «Buscar…»." })));
+      el("p", { class: "tenue", text: "Mientras tanto puedes fichar en las tareas que ya existen: «Buscar tarea…»." })));
   }
 
   (async () => {
@@ -3541,7 +3541,7 @@ function dlgAtajos() {
   const filas = [["Enter", "Añadir el apunte (desde Horas o Comentario)"],
     ["Supr", "Eliminar los apuntes seleccionados"], ["Ctrl+Z", "Deshacer lo último (borrar, editar, añadir…); otra vez, lo anterior (hasta 20)"],
     ["Ctrl+F", "Buscar en tus apuntes del año (comentario, tarea, actividad o fecha)"],
-    ["Ctrl+N", "Crear una tarea nueva en ProyectosTIC (si tienes permiso en algún proyecto); con la flecha de «＋ Nueva», modificar o duplicar una"],
+    ["Ctrl+N", "Crear una tarea nueva en ProyectosTIC (si tienes permiso en algún proyecto); modificar o duplicar una, en el botón «Tareas» de la barra"],
     ["Ctrl+C / Ctrl+V", "Copiar un día y pegarlo en los marcados"],
     ["+", "Sobre un día: añadirle una de tus tareas habituales"],
     ["Doble clic en las horas", "En la ficha: cambiarlas ahí mismo"],

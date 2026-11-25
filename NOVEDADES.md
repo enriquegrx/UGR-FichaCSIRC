@@ -36,6 +36,8 @@ instalada aparece en el pie de la ventana.
   sin tener que cambiar el PIN.
 - **Comentario**: al entrar en el campo salen los últimos que usaste con esa
   tarea, para elegirlos sin volver a escribirlos.
+- En *Añadir apunte*, cada botón dice de qué habla: **«Buscar tarea…»** y
+  **«Añadir apunte a…»** el día marcado.
 - **Buscar tarea** enseña las tareas del proyecto en árbol, cada una debajo de
   la que cuelga. Al filtrar quedan las que encajan y las que tienen encima, y
   ya no hace falta escribir las tildes.
@@ -78,10 +80,14 @@ instalada aparece en el pie de la ventana.
 **Crear, modificar y duplicar tareas de ProyectosTIC**
 - Solo si ProyectosTIC te da permiso para crear tareas en algún proyecto. Si
   no lo tienes, no aparece nada de esto y la ventana sigue como siempre.
-- **«＋ Nueva»**, junto a *Buscar…* (también Ctrl+N y *Archivo*): crea una
-  tarea sin salir de FichaCSIRC, con su título, proyecto, tipo, descripción y
-  tiempo estimado. Antes de crearla ves cómo va a quedar y, al crearla, queda
-  en el formulario lista para fichar.
+- Botón **«Tareas»**, en la barra de arriba junto a *Por completar*: desde
+  ahí se crean, se modifican y se duplican. Va aparte de *Añadir apunte*
+  porque una tarea no es un apunte: la tarea es lo que hay en ProyectosTIC y
+  el apunte, las horas que fichas en ella.
+- **Nueva tarea** (también Ctrl+N y *Archivo*): crea una tarea sin salir de
+  FichaCSIRC, con su título, proyecto, tipo, descripción y tiempo estimado.
+  Antes de crearla ves cómo va a quedar y, al crearla, queda en el formulario
+  lista para fichar.
 - **De cuál cuelga**: eliges la tarea madre en el árbol de tareas abiertas del
   proyecto. Si no eliges ninguna, cuelga directamente del proyecto.
 - Desde el **buscador de tareas**: si lo que escribes no existe, la última
@@ -90,7 +96,7 @@ instalada aparece en el pie de la ventana.
   cuelga, tiempo estimado, descripción) y rellena la tarea con un clic. Un
   asterisco en el título marca lo que cambia cada vez, como el número de
   ticket: queda seleccionado para escribir encima.
-- **Modificar una tarea** (la flecha de «＋ Nueva», o *Archivo*): título, de
+- **Modificar una tarea** (botón «Tareas», o *Archivo*): título, de
   cuál cuelga, tiempo estimado y descripción. Sirve para ponerle la tarea madre
   que se te olvidó. Solo se cambia lo que tocas y lo ves antes de guardar.
 - **Duplicar una tarea con todas las que cuelgan de ella**, en el mismo
@@ -102,8 +108,8 @@ instalada aparece en el pie de la ventana.
 - En la cabecera, en broma: **Nivel dios** si puedes crear tareas y **Nivel
   loser** si no. Al pasar el ratón explica cada nivel y dice en qué proyectos
   puedes crearlas.
-- Si ProyectosTIC te deja modificar tareas pero no crearlas, *Archivo →
-  Modificar una tarea* aparece igualmente; crear y duplicar, no.
+- Si ProyectosTIC te deja modificar tareas pero no crearlas, el botón
+  «Tareas» aparece igualmente, solo con *Modificar una tarea*.
 - «Nueva tarea» se abre en el último proyecto en el que creaste una; la primera
   vez, en el de la tarea que tengas puesta en *Añadir apunte*.
 
