@@ -613,6 +613,10 @@ pub async fn api(metodo: String, args: Vec<Value>, estado: tauri::State<'_, Esta
                 Err(err) => Err(err.to_string()),
             }
         }
+        "tarea_asignables" => {
+            e.exigir_desbloqueo(&cfg)?;
+            tarea::asignables(e, &cfg, args.first().unwrap_or(&Value::Null)).await
+        }
         "nueva_tarea_crear" => {
             e.exigir_desbloqueo(&cfg)?;
             tarea::crear(e, &cfg, args.first().unwrap_or(&Value::Null)).await

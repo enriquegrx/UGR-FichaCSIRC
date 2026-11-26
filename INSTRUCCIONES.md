@@ -368,6 +368,11 @@ fichas en ella un día. Por eso este botón va aparte del panel *Añadir apunte*
   proyecto y el tipo y, si quieres, la tarea de la que cuelga, el tiempo
   estimado y la descripción. Abajo ves cómo va a quedar. Al crearla, queda en
   el formulario para fichar en ella.
+- 👤 **Asignada a**: de entrada, a ti. Puedes dejarla sin asignar («Nadie») o
+  dársela a otra persona del proyecto: salen los miembros de ese proyecto a
+  los que ProyectosTIC deja asignar tareas (personas, no grupos). Al cambiar
+  de proyecto cambia la lista. ProyectosTIC avisa a esa persona como si la
+  hubieras creado en la web.
 - 🌳 **De cuál cuelga**: al pulsar en ese campo sale el árbol de tareas
   abiertas del proyecto. Si lo dejas vacío, la tarea cuelga del proyecto.
 - 🔎 **Desde Buscar tarea**: si la que buscas no existe, **＋ Nueva tarea…**
@@ -376,10 +381,11 @@ fichas en ella un día. Por eso este botón va aparte del panel *Añadir apunte*
   plantilla…**. La próxima vez, un clic en su nombre lo rellena todo. Pon un
   asterisco en el título donde vaya lo que cambia cada vez (el número de
   ticket, por ejemplo): al elegir la plantilla queda marcado para escribir
-  encima.
+  encima. La plantilla guarda si la tarea es para ti, no para qué otra
+  persona: eso se elige cada vez.
 - ✏️ **Modificar una tarea**: **Tareas → Modificar una tarea…**. Parte de la
   tarea que tengas puesta en *Añadir apunte*, o eliges otra arriba. Cambia el
-  título, de cuál cuelga, el tiempo estimado o la
+  título, de cuál cuelga, el tiempo estimado, a quién está asignada o la
   descripción. Abajo sale lo que va a cambiar antes de guardar.
 - 📑 **Duplicar una tarea con las que cuelgan de ella**: **Tareas → Duplicar
   una tarea…**. Elige el proyecto de destino, el nombre de la copia

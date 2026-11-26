@@ -158,9 +158,13 @@ instalada aparece en el pie de la ventana.
   cuelga, tiempo estimado, descripción) y rellena la tarea con un clic. Un
   asterisco en el título marca lo que cambia cada vez, como el número de
   ticket: queda seleccionado para escribir encima.
+- **Asignada a**: al crear una tarea eliges si es para ti, para nadie o para
+  otra persona del proyecto. La lista es la de ProyectosTIC: los miembros de
+  ese proyecto a los que se les pueden asignar tareas.
 - **Modificar una tarea** (botón «Tareas», o *Archivo*): título, de
-  cuál cuelga, tiempo estimado y descripción. Sirve para ponerle la tarea madre
-  que se te olvidó. Solo se cambia lo que tocas y lo ves antes de guardar.
+  cuál cuelga, tiempo estimado, a quién está asignada y descripción. Sirve
+  para ponerle la tarea madre que se te olvidó o para pasársela a un
+  compañero. Solo se cambia lo que tocas y lo ves antes de guardar.
 - **Duplicar una tarea con todas las que cuelgan de ella**, en el mismo
   proyecto o en otro: con otro nombre, cambiando un texto en todos los títulos
   (2026 por 2027) y sin horas imputadas. Ves el árbol antes de crear nada; si

@@ -64,7 +64,9 @@ fn rechazo(err: ErrorOp, sin_respuesta: &str) -> Result<Value, String> {
 // ---------------------------------------------------------------- crear
 
 /// Crea una tarea en ProyectosTIC y la deja en el desplegable (o en favoritas).
-/// d: {proyecto, titulo, tipo, padre, descripcion, estimado, asignar, favorita}
+/// d: {proyecto, titulo, tipo, padre, descripcion, estimado, asignar, asignado, favorita}
+/// asignado: el numero de la persona a la que se asigna; sin el, asignar
+/// (true) se la asigna al usuario.
 pub async fn crear(e: &Estado, cfg: &Cfg, d: &Value) -> Result<Value, String> {
     let Some(pid) = id_entero(&d["proyecto"]) else { return error("Elige el proyecto de la tarea.") };
     let titulo = match titulo_valido(&d["titulo"]) {
@@ -76,7 +78,9 @@ pub async fn crear(e: &Estado, cfg: &Cfg, d: &Value) -> Result<Value, String> {
         Err(m) => return error(m),
     };
     let cli = Cliente::desde(cfg).map_err(|err| err.to_string())?;
-    let asignado = if d["asignar"].as_bool().unwrap_or(false) {
+    let asignado = if let Some(otro) = id_entero(&d["asignado"]).filter(|n| *n > 0) {
+        Some(otro.to_string())
+    } else if d["asignar"].as_bool().unwrap_or(false) {
         Some(e.uid(&cli).await.map_err(|err| err.to_string())?)
     } else {
         None
@@ -106,6 +110,21 @@ pub async fn crear(e: &Estado, cfg: &Cfg, d: &Value) -> Result<Value, String> {
     m.insert("nueva_tarea_proyecto".into(), json!(pid));
     let _ = config::guardar_valores(m);
     Ok(json!({"ok": true, "tarea": t, "tareas": tareas(e, &config::leer()?)}))
+}
+
+/// A quien se le puede asignar una tarea del proyecto: sus miembros con un rol
+/// asignable (solo personas) y cual de ellos es el usuario. Si ProyectosTIC no
+/// deja ver la lista, va vacia y se dice.
+pub async fn asignables(e: &Estado, cfg: &Cfg, pid: &Value) -> Result<Value, String> {
+    let pid = id_entero(pid).ok_or("Proyecto no válido.")?;
+    let cli = Cliente::desde(cfg).map_err(|err| err.to_string())?;
+    let yo = e.uid(&cli).await.map_err(|err| err.to_string())?.parse::<i64>().ok();
+    match cli.asignables(pid).await {
+        Ok(ps) => Ok(json!({"yo": yo, "personas": ps})),
+        Err(ErrorOp::Http(403 | 404)) => Ok(json!({"yo": yo, "personas": [],
+            "error": "ProyectosTIC no te deja ver a quién se puede asignar en este proyecto."})),
+        Err(err) => Err(err.to_string()),
+    }
 }
 
 // ---------------------------------------------------------------- plantillas de tarea
@@ -204,12 +223,12 @@ pub async fn datos(cfg: &Cfg, id: &Value) -> Result<Value, String> {
     }
 }
 
-/// (titulo, descripcion, estimado, padre): None = no se toca; Some(None) = se quita.
-type Cambios = (Option<String>, Option<String>, Option<Option<f64>>, Option<Option<i64>>);
+/// (titulo, descripcion, estimado, padre, asignado): None = no se toca; Some(None) = se quita.
+type Cambios = (Option<String>, Option<String>, Option<Option<f64>>, Option<Option<i64>>, Option<Option<i64>>);
 
 /// Lo que cambia de una tarea. d: {id, version} y SOLO lo que cambia: titulo,
 /// descripcion, estimado ("" o null lo quita), padre (null: que no cuelgue de
-/// ninguna). O por que no vale.
+/// ninguna), asignado (null: sin asignar). O por que no vale.
 pub fn cambios_de(id: i64, d: &Value) -> Result<Cambios, String> {
     let tiene = |k: &str| d.get(k).is_some();
     let titulo = if tiene("titulo") { Some(titulo_valido(&d["titulo"])?) } else { None };
@@ -219,10 +238,11 @@ pub fn cambios_de(id: i64, d: &Value) -> Result<Cambios, String> {
     if padre == Some(Some(id)) {
         return Err("Una tarea no puede colgar de sí misma.".into());
     }
-    if titulo.is_none() && descripcion.is_none() && estimado.is_none() && padre.is_none() {
+    let asignado = tiene("asignado").then(|| id_entero(&d["asignado"]).filter(|n| *n > 0));
+    if titulo.is_none() && descripcion.is_none() && estimado.is_none() && padre.is_none() && asignado.is_none() {
         return Err("No has cambiado nada.".into());
     }
-    Ok((titulo, descripcion, estimado, padre))
+    Ok((titulo, descripcion, estimado, padre, asignado))
 }
 
 /// El nombre nuevo de una tarea, tambien donde la app lo tiene guardado.
@@ -253,12 +273,12 @@ pub async fn modificar(e: &Estado, cfg: &Cfg, d: &Value) -> Result<Value, String
     let Some(version) = d["version"].as_i64() else {
         return error("Vuelve a abrir la tarea antes de modificarla.");
     };
-    let (titulo, descripcion, estimado, padre) = match cambios_de(id, d) {
+    let (titulo, descripcion, estimado, padre, asignado) = match cambios_de(id, d) {
         Ok(c) => c,
         Err(m) => return error(m),
     };
     let cli = Cliente::desde(cfg).map_err(|err| err.to_string())?;
-    let cuerpo = openproject::cuerpo_cambio(version, titulo.as_deref(), descripcion.as_deref(), estimado, padre);
+    let cuerpo = openproject::cuerpo_cambio(version, titulo.as_deref(), descripcion.as_deref(), estimado, padre, asignado);
     let w = match cli.modificar_tarea(id, &cuerpo).await {
         Ok(w) => w,
         Err(err) => return rechazo(err, "Antes de repetirlo, mira en ProyectosTIC si el cambio llegó a guardarse."),
@@ -371,10 +391,14 @@ mod tests {
     #[test]
     fn lo_que_cambia_de_una_tarea() {
         // solo lo que viene: el padre a null es "que no cuelgue de ninguna"
-        let (t, d, e, p) = cambios_de(7, &json!({"id": 7, "version": 3, "padre": null})).unwrap();
-        assert_eq!((t, d, e, p), (None, None, None, Some(None)));
-        let (t, d, e, p) = cambios_de(7, &json!({"titulo": "  Otro   nombre ", "descripcion": " x ", "estimado": "", "padre": "12"})).unwrap();
-        assert_eq!((t.as_deref(), d.as_deref(), e, p), (Some("Otro nombre"), Some("x"), Some(None), Some(Some(12))));
+        let (t, d, e, p, a) = cambios_de(7, &json!({"id": 7, "version": 3, "padre": null})).unwrap();
+        assert_eq!((t, d, e, p, a), (None, None, None, Some(None), None));
+        let (t, d, e, p, a) = cambios_de(7, &json!({"titulo": "  Otro   nombre ", "descripcion": " x ", "estimado": "", "padre": "12"})).unwrap();
+        assert_eq!((t.as_deref(), d.as_deref(), e, p, a), (Some("Otro nombre"), Some("x"), Some(None), Some(Some(12)), None));
+        // a quien se asigna: su numero, o null (o algo que no es un numero) para dejarla sin asignar
+        assert_eq!(cambios_de(7, &json!({"asignado": 9})).unwrap().4, Some(Some(9)));
+        assert_eq!(cambios_de(7, &json!({"asignado": null})).unwrap().4, Some(None));
+        assert_eq!(cambios_de(7, &json!({"asignado": "nadie"})).unwrap().4, Some(None));
         assert!(cambios_de(7, &json!({"id": 7, "version": 3})).unwrap_err().contains("nada"));
         assert!(cambios_de(7, &json!({"padre": 7})).unwrap_err().contains("sí misma"));
         assert!(cambios_de(7, &json!({"titulo": " "})).unwrap_err().contains("título"));

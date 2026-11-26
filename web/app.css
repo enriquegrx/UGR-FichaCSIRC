@@ -1085,6 +1085,10 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
            border: 1px solid var(--borde); border-radius: 6px; padding: 7px 9px; background: var(--panel); }
 .nt-desc:focus { outline: 2px solid var(--primario); outline-offset: 1px; }
 .nt-opciones { display: flex; flex-wrap: wrap; gap: 6px 24px; }
+/* a quien se asigna y, al lado, la casilla de favoritas */
+.nt-asignar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+.nt-asignar .check { padding-bottom: 7px; }
+.nt-asig { width: 100%; }
 /* de cual cuelga y, al lado, el tiempo estimado */
 .nt-cuelga { display: grid; grid-template-columns: minmax(0, 1fr) 124px; gap: 14px; align-items: start; }
 .nt-est-caja { display: flex; align-items: center; gap: 6px; }
@@ -1159,4 +1163,4 @@ button.pend-ficha:hover { border-color: var(--hover-borde); }
 .nt-sin-ico { font-size: 34px; line-height: 1; margin-bottom: 4px; }
 .nt-sin b { font-size: 15px; }
 .nt-sin p { margin: 0; max-width: 46ch; font-size: 13px; }
-@media (max-width: 560px) { .nt-dos, .nt-cuelga { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .nt-dos, .nt-cuelga, .nt-asignar { grid-template-columns: minmax(0, 1fr); } }

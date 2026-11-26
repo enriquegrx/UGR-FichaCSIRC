@@ -737,6 +737,21 @@ def proyectos_modificar():
     return [p for p in map(proyecto_de_capacidad, caps) if p]
 
 
+def asignable_de(x):
+    """Una persona a la que se le puede asignar una tarea (None si es un grupo
+    u otra cosa: de momento solo se asigna a personas)."""
+    if not isinstance(x, dict) or x.get("_type") != "User" or x.get("id") is None:
+        return None
+    return {"id": int(x["id"]), "nombre": x.get("name") or "?"}
+
+
+def asignables(pid):
+    """Las personas a las que ProyectosTIC deja asignar tareas en el proyecto
+    (sus miembros con un rol asignable), por nombre."""
+    out = [p for p in map(asignable_de, _get_todos(f"/api/v3/projects/{int(pid)}/available_assignees")) if p]
+    return sorted(out, key=lambda p: (p["nombre"].lower(), p["id"]))
+
+
 def _id_de_href(href):
     try:
         return int(str(href).rstrip("/").rsplit("/", 1)[-1])
@@ -837,6 +852,7 @@ def datos_tarea(w, form=None):
         return links.get(k) or {}
 
     padre = _id_de_href(enlace("parent").get("href")) if enlace("parent").get("href") else None
+    asignado = _id_de_href(enlace("assignee").get("href")) if enlace("assignee").get("href") else None
     proyecto = _id_de_href(enlace("project").get("href")) if enlace("project").get("href") else None
     return {
         "id": int(w["id"]),
@@ -848,9 +864,12 @@ def datos_tarea(w, form=None):
         "tipo": enlace("type").get("title") or "",
         "estado": enlace("status").get("title") or "",
         "padre": {"id": padre, "nombre": enlace("parent").get("title") or "?"} if padre is not None else None,
+        "asignado": ({"id": asignado, "nombre": enlace("assignee").get("title") or "?"}
+                     if asignado is not None else None),
         "editable": es_editable(w),
         "puede": {"titulo": deja("subject"), "descripcion": deja("description"),
-                  "estimado": deja("estimatedTime"), "padre": deja("parent")},
+                  "estimado": deja("estimatedTime"), "padre": deja("parent"),
+                  "asignado": deja("assignee")},
     }
 
 
@@ -858,7 +877,8 @@ def cuerpo_cambio(version, cambios):
     """Lo que se manda para modificar una tarea: la version que se leyo (si
     alguien la cambio despues, ProyectosTIC lo rechaza) y SOLO lo que cambia.
     cambios: las claves que cambian de titulo, descripcion, estimado (None lo
-    quita) y padre (None: que no cuelgue de ninguna)."""
+    quita), padre (None: que no cuelgue de ninguna) y asignado (el numero de
+    la persona; None: sin asignar)."""
     cuerpo = {"lockVersion": version}
     if "titulo" in cambios:
         cuerpo["subject"] = cambios["titulo"]
@@ -869,6 +889,9 @@ def cuerpo_cambio(version, cambios):
     if "padre" in cambios:
         p = cambios["padre"]
         cuerpo["_links"] = {"parent": {"href": f"/api/v3/work_packages/{int(p)}" if p else None}}
+    if "asignado" in cambios:
+        a = cambios["asignado"]
+        cuerpo.setdefault("_links", {})["assignee"] = {"href": f"/api/v3/users/{int(a)}" if a else None}
     return cuerpo
 
 

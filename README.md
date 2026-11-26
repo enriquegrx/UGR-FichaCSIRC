@@ -48,10 +48,13 @@ de la 3 (de la 3.1.4 a la 3.2.2).
 - 🛠️ **Crear, modificar y duplicar tareas** de ProyectosTIC, solo en los
   proyectos donde el usuario tiene el permiso (los que traen el enlace
   `createWorkPackage`; se mira al arrancar, `Api.nueva_tarea_proyectos`):
-  crear con tipo, tarea madre (árbol de abiertas del proyecto), descripción y
-  tiempo estimado (`Api.nueva_tarea_crear`; los tipos y lo que falta los da el
+  crear con tipo, tarea madre (árbol de abiertas del proyecto), descripción,
+  tiempo estimado y a quién se asigna (a uno mismo, a nadie o a otra persona
+  del proyecto: `Api.tarea_asignables`, que lee
+  `/api/v3/projects/{id}/available_assignees` y se queda con las personas)
+  (`Api.nueva_tarea_crear`; los tipos y lo que falta los da el
   formulario de OpenProject, que no crea nada); **plantillas de tarea**
-  (`plantillas_tarea`); modificar título, madre, estimado y descripción
+  (`plantillas_tarea`); modificar título, madre, estimado, asignación y descripción
   mandando solo lo que cambia (`Api.tarea_modificar`, con `lockVersion`); y
   duplicar una tarea con todas las que cuelgan de ella, en otro proyecto si se
   quiere (`Api.duplicar_plan` lee el árbol y `Api.duplicar_una` crea cada

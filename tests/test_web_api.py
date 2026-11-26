@@ -1099,6 +1099,17 @@ class TestDialogos(Base):
             self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra"})
         self.assertEqual(m_crear.call_args.args[0],
                          {"subject": "Otra", "_links": {"project": {"href": "/api/v3/projects/42"}}})
+        # asignada a otra persona: su numero manda sobre "asignar" y no hace falta saber quien es uno
+        with mock.patch.object(core, "_user_id", side_effect=AssertionError("no hace falta")), \
+             mock.patch.object(core, "crear_tarea", return_value=creada) as m_crear, \
+             mock.patch.object(core, "guardar_config_valores"):
+            self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra", "asignar": True, "asignado": "9"})
+        self.assertEqual(m_crear.call_args.args[0]["_links"]["assignee"], {"href": "/api/v3/users/9"})
+        # un "asignado" que no es un numero no cuenta: como si no viniera
+        with mock.patch.object(core, "crear_tarea", return_value=creada) as m_crear, \
+             mock.patch.object(core, "guardar_config_valores"):
+            self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra", "asignado": "nadie"})
+        self.assertNotIn("assignee", m_crear.call_args.args[0]["_links"])
         # ProyectosTIC la rechaza: su motivo, no una excepcion
         with mock.patch.object(core, "crear_tarea", side_effect=core.TareaRechazada("Tipo no es válido.")):
             self.assertEqual(self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra"}),
@@ -1106,6 +1117,32 @@ class TestDialogos(Base):
         # sin respuesta: que no la repita a ciegas
         with mock.patch.object(core, "crear_tarea", side_effect=core.requests.Timeout()):
             self.assertIn("llegó a crearse", self.api.nueva_tarea_crear({"proyecto": 42, "titulo": "Otra"})["error"])
+
+    def test_a_quien_se_puede_asignar(self):
+        lista = [{"_type": "User", "id": 9, "name": "zoe Ruiz"}, {"_type": "Group", "id": 30, "name": "Area de Sistemas"},
+                 {"_type": "User", "id": 5, "name": "Ana Lopez"}, {"_type": "User", "name": "Sin numero"},
+                 {"_type": "User", "id": 7}]
+        with mock.patch.object(core, "_user_id", return_value="5"), \
+             mock.patch.object(core, "_get_todos", return_value=lista) as m_get:
+            r = self.api.tarea_asignables("42")
+        m_get.assert_called_once_with("/api/v3/projects/42/available_assignees")
+        # solo personas (los grupos, fuera), por nombre sin distinguir mayusculas; y quien es uno
+        self.assertEqual(r, {"yo": 5, "personas": [{"id": 7, "nombre": "?"}, {"id": 5, "nombre": "Ana Lopez"},
+                                                   {"id": 9, "nombre": "zoe Ruiz"}]})
+        # si ProyectosTIC no deja ver la lista: vacia, y se dice
+        for codigo in (403, 404):
+            resp = mock.Mock(status_code=codigo)
+            with mock.patch.object(core, "_user_id", return_value="5"), \
+                 mock.patch.object(core, "_get_todos", side_effect=core.requests.HTTPError(response=resp)):
+                r = self.api.tarea_asignables(42)
+            self.assertEqual((r["yo"], r["personas"]), (5, []))
+            self.assertIn("no te deja ver", r["error"])
+        with mock.patch.object(core, "_user_id", return_value="5"), \
+             mock.patch.object(core, "_get_todos", side_effect=core.requests.HTTPError(response=mock.Mock(status_code=500))):
+            with self.assertRaises(core.requests.HTTPError):
+                self.api.tarea_asignables(42)
+        with self.assertRaises(ValueError):
+            self.api.tarea_asignables("x")
 
     def test_nueva_tarea_a_favoritas(self):
         creada = {"id": 14012, "nombre": "Renovar certificado", "proyecto": "ATE", "padre": ""}
@@ -1210,8 +1247,8 @@ class TestDialogos(Base):
         self.assertEqual(r, {
             "id": 7, "titulo": "Hija", "descripcion": "Lo que hay que hacer.", "estimado": 1.5, "version": 4,
             "proyecto": {"id": 42, "nombre": "ATE"}, "tipo": "Fase", "estado": "Cerrada",
-            "padre": {"id": 5, "nombre": "Madre"}, "editable": True,
-            "puede": {"titulo": True, "descripcion": True, "estimado": True, "padre": False}})
+            "padre": {"id": 5, "nombre": "Madre"}, "asignado": {"id": 5, "nombre": "Otra persona"}, "editable": True,
+            "puede": {"titulo": True, "descripcion": True, "estimado": True, "padre": False, "asignado": True}})
         # sin permiso para modificarla no se pide el formulario; sin padre ni tiempo
         suelta = {"id": 9, "subject": "Suelta", "lockVersion": 0, "estimatedTime": None, "_links": {"parent": {"href": None}}}
         with mock.patch.object(core, "tarea", return_value=suelta), \
@@ -1219,6 +1256,10 @@ class TestDialogos(Base):
             r = self.api.tarea_datos(9)
         m_form.assert_not_called()
         self.assertEqual((r["editable"], r["padre"], r["estimado"], r["puede"]["padre"]), (False, None, None, True))
+        self.assertIsNone(r["asignado"])
+        # el formulario dice si deja cambiar a quien esta asignada
+        form = {"_embedded": {"schema": {"assignee": {"writable": False}}}}
+        self.assertFalse(core.datos_tarea(self.TAREA_OP, form)["puede"]["asignado"])
         # si el formulario no responde, se da por bueno
         with mock.patch.object(core, "tarea", return_value=self.TAREA_OP), \
              mock.patch.object(core, "formulario_cambio", side_effect=RuntimeError("500")):
@@ -1239,6 +1280,18 @@ class TestDialogos(Base):
                          {"lockVersion": 4, "subject": "Otro", "description": {"format": "markdown", "raw": ""},
                           "estimatedTime": None, "_links": {"parent": {"href": None}}})
         self.assertEqual(core.cuerpo_cambio(4, {"estimado": 0.5}), {"lockVersion": 4, "estimatedTime": "PT30M"})
+        # a quien se asigna: sola, con el padre, y a None para dejarla sin asignar
+        self.assertEqual(core.cuerpo_cambio(4, {"asignado": 9}),
+                         {"lockVersion": 4, "_links": {"assignee": {"href": "/api/v3/users/9"}}})
+        self.assertEqual(core.cuerpo_cambio(4, {"padre": 12, "asignado": None}),
+                         {"lockVersion": 4, "_links": {"parent": {"href": "/api/v3/work_packages/12"},
+                                                       "assignee": {"href": None}}})
+        with mock.patch.object(core, "modificar_tarea", return_value={"id": 7, "nombre": "Hija"}) as m_mod:
+            self.api.tarea_modificar({"id": 7, "version": 4, "asignado": "9"})
+            self.api.tarea_modificar({"id": 7, "version": 4, "asignado": None})
+        self.assertEqual([c.args[1] for c in m_mod.call_args_list],
+                         [{"lockVersion": 4, "_links": {"assignee": {"href": "/api/v3/users/9"}}},
+                          {"lockVersion": 4, "_links": {"assignee": {"href": None}}}])
         hecha = {"id": 7, "nombre": "Otro nombre", "proyecto": "ATE", "padre": "Nueva madre"}
         self.api._extras = [{"id": 7, "nombre": "Hija"}]
         with mock.patch.object(core, "modificar_tarea", return_value=hecha) as m_mod, \

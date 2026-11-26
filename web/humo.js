@@ -1311,11 +1311,25 @@
       tit.value = "Tarea de humo"; tit.dispatchEvent(new Event("input"));
       ok(document.querySelector(".nt-error").hidden, "el aviso del título no se quita al escribirlo");
       ok(document.querySelector(".nt-vista").textContent.includes("Tarea de humo"), "la vista previa no sigue al título");
-      // otro proyecto: ahi no deja asignarse, y el tipo Incidencia pide un campo que la app no rellena
+      // a quien se asigna: a uno mismo de entrada; debajo, la gente del proyecto (sin repetirle a el)
       const proy = document.querySelector(".nt-dos select");
+      const asig = () => document.querySelector(".nt-asig");
+      const opciones = () => [...asig().options].map((o) => o.textContent).join("|");
+      const vistaPrevia = () => document.querySelector(".nt-vista").textContent;
+      if (proy.value !== "1") { proy.value = "1"; proy.dispatchEvent(new Event("change")); }
+      ok(await hasta(() => opciones() === "A mí|Nadie|Ana López|Luis Martín"), `asignada a: ${opciones()}`);
+      ok(asig().value === "yo" && !asig().options[0].disabled && vistaPrevia().includes("Asignada a ti"), "no la propone asignada a uno mismo");
+      asig().value = "21"; asig().dispatchEvent(new Event("change"));
+      ok(vistaPrevia().includes("Asignada a Ana López"), `la vista previa no dice a quién se asigna: ${vistaPrevia()}`);
+      // otro proyecto: la persona elegida era del anterior, ahi no deja asignarse a uno mismo,
+      // y el tipo Incidencia pide un campo que la app no rellena
       proy.value = "3"; proy.dispatchEvent(new Event("change"));
-      ok(await hasta(() => document.querySelector(".nt-opciones input").disabled), "deja asignarse donde no se puede");
-      ok(document.querySelector(".nt-vista").textContent.includes("Sin asignar"), "la vista previa la da por asignada");
+      ok(await hasta(() => asig().options[0].disabled && asig().value === ""), "deja asignarse donde no se puede");
+      ok(vistaPrevia().includes("Sin asignar"), "la vista previa la da por asignada");
+      ok(await hasta(() => opciones() === "A mí|Nadie|Carmen Ruiz|Luis Martín"), `asignada a, en el otro proyecto: ${opciones()}`);
+      ok(asig().value === "" && vistaPrevia().includes("Sin asignar"), "arrastra a la persona del otro proyecto");
+      asig().value = "31"; asig().dispatchEvent(new Event("change"));
+      ok(vistaPrevia().includes("Asignada a Carmen Ruiz"), "no deja asignarla a otra persona del proyecto");
       const tipo = (n) => [...document.querySelectorAll(".nt-tipo")].find((b) => b.textContent.includes(n));
       tipo("Incidencia").click();
       ok(await hasta(() => !document.querySelector(".nt-aviso").hidden && crear().disabled), "no avisa de lo que pide ProyectosTIC");
@@ -1345,9 +1359,16 @@
       fila("15004").dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
       ok(document.querySelector(".nt-ruta").textContent.includes("› [2026_AUL] Servicio › [2026_AUL] Mantenimientos › Revisión de megafonía"),
          `la vista previa no dice de cuál cuelga: ${document.querySelector(".nt-ruta").textContent}`);
-      crear().click();
-      ok(await hasta(() => !dlg()), "no se cierra al crear");
+      const crearApi = api().nueva_tarea_crear;
+      let mandado = null;
+      api().nueva_tarea_crear = (n) => { mandado = n; return crearApi(n); };
+      try {
+        crear().click();
+        ok(await hasta(() => !dlg()), "no se cierra al crear");
+      } finally { api().nueva_tarea_crear = crearApi; }
+      ok(mandado.asignado === 31 && mandado.asignar === false, `no manda a quién se asigna: ${JSON.stringify(mandado)}`);
       ok(await hasta(() => $("tarea").value.endsWith("- Tarea de humo")), `formulario: ${$("tarea").value}`);
+      ok((await api().tarea_datos(parseInt($("tarea").value, 10))).asignado?.id === 31, "la tarea no queda asignada a quien se eligió");
       ok(await hasta(() => !$("aviso-deshacer").hidden && /creada en ProyectosTIC/.test($("aviso-deshacer").textContent)), "no dice que se ha creado");
       ok(st.crear.ultimo === 3, "no recuerda el proyecto para la próxima");
       ocultarAviso();
@@ -1461,6 +1482,14 @@
       const est = document.querySelector(".nt-est");
       est.value = "2"; est.dispatchEvent(new Event("input"));
       ok(document.querySelectorAll(".mt-cambio").length === 3, `cambios: ${document.querySelector(".mt-cambios").textContent}`);
+      // a quien esta asignada: nadie, o la gente de su proyecto
+      const asig = () => document.querySelector(".nt-asig");
+      const opciones = () => [...asig().options].map((o) => o.textContent).join("|");
+      ok(await hasta(() => opciones() === "Nadie|Carmen Ruiz|Luis Martín"), `asignada a: ${opciones()}`);
+      ok(asig().value === "" && !asig().disabled, "no la trae sin asignar");
+      asig().value = "22"; asig().dispatchEvent(new Event("change"));
+      ok(document.querySelectorAll(".mt-cambio").length === 4 && /Asignada a\s*nadie\s*→\s*Luis Martín/.test(document.querySelector(".mt-cambios").textContent),
+         `no enseña el cambio de persona: ${document.querySelector(".mt-cambios").textContent}`);
       // cerrar con cambios pregunta antes
       teclado("Escape");
       ok(await hasta(() => !$("modal").hidden), "cierra con cambios sin preguntar");
@@ -1472,6 +1501,24 @@
       ok(await hasta(() => /15004 modificada/.test($("aviso-deshacer").textContent)), "no dice que se ha modificado");
       const ya = await api().tarea_datos(15004);
       ok(ya.titulo === "Revisión de megafonía" && ya.padre.id === 15003 && ya.estimado === 2, `quedó: ${JSON.stringify(ya)}`);
+      ok(ya.asignado?.id === 22, `no queda asignada: ${JSON.stringify(ya.asignado)}`);
+      ocultarAviso();
+      // se abre con quien la tiene; quitarsela es un cambio mas, y solo se manda ese
+      dlgModificarTarea({ tarea: { id: 15004, nombre: "Revisión de megafonía" } });
+      ok(await hasta(() => asig()?.value === "22" && asig().options.length === 3), `no trae a quién está asignada: ${asig()?.value}`);
+      ok(guardar().disabled, "deja guardar sin cambios");
+      asig().value = ""; asig().dispatchEvent(new Event("change"));
+      ok(document.querySelectorAll(".mt-cambio").length === 1 && /Luis Martín\s*→\s*nadie/.test(document.querySelector(".mt-cambios").textContent),
+         `no enseña que se queda sin asignar: ${document.querySelector(".mt-cambios").textContent}`);
+      const modificarApi = api().tarea_modificar;
+      let cambio = null;
+      api().tarea_modificar = (x) => { cambio = x; return modificarApi(x); };
+      try {
+        guardar().click();
+        ok(await hasta(() => !dlg()), "no se cierra al quitar la asignación");
+      } finally { api().tarea_modificar = modificarApi; }
+      ok(Object.keys(cambio).sort().join() === "asignado,id,version" && cambio.asignado === null, `manda de más: ${JSON.stringify(cambio)}`);
+      ok((await api().tarea_datos(15004)).asignado === null, "no se queda sin asignar");
       ocultarAviso();
       // la que ProyectosTIC no deja tocar: se dice, y no se puede guardar
       dlgModificarTarea({ tarea: { id: 15010, nombre: "[AUL] Renovación de proyectores" } });
@@ -1482,6 +1529,7 @@
       dlgModificarTarea({ tarea: { id: 15001, nombre: "[2026_AUL] Servicio" } });
       ok(await hasta(() => document.querySelector(".nt-aviso").textContent.includes("tiempo estimado")), "no dice qué campo no deja cambiar");
       ok(document.querySelector(".nt-est").disabled && !document.querySelector(".nt-titulo").disabled, "no bloquea solo ese campo");
+      ok(document.querySelector(".nt-aviso").textContent.includes("a quién está asignada") && asig().disabled, "deja reasignar donde ProyectosTIC no deja");
       cerrarTodo();
     });
     await prueba("duplicar tarea: el árbol entero, en otro proyecto y con otro nombre", async () => {

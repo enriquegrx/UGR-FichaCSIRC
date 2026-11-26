@@ -274,6 +274,13 @@ impl Cliente {
             .iter().filter_map(proyecto_de_capacidad).collect())
     }
 
+    /// Las personas a las que ProyectosTIC deja asignar tareas en el proyecto
+    /// (sus miembros con un rol asignable), por nombre.
+    pub async fn asignables(&self, pid: i64) -> Result<Vec<Value>, ErrorOp> {
+        let todos = self.get_todos(&format!("/api/v3/projects/{pid}/available_assignees"), vec![]).await?;
+        Ok(ordenar_asignables(todos.iter().filter_map(asignable_de).collect()))
+    }
+
     /// Peticion que crea, valida o cambia una tarea: lo que diga ProyectosTIC,
     /// con su motivo en claro ('motivo') si no la acepta (422, 403, 404, 409).
     async fn enviar_tarea(&self, metodo: reqwest::Method, ruta: &str, cuerpo: &Value, oks: &[u16],
@@ -440,6 +447,21 @@ pub fn mensaje_error_cambio(texto: &str, codigo: u16) -> String {
     }
 }
 
+/// Una persona a la que se le puede asignar una tarea (None si es un grupo u
+/// otra cosa: de momento solo se asigna a personas).
+pub fn asignable_de(x: &Value) -> Option<Value> {
+    if x["_type"].as_str() != Some("User") {
+        return None;
+    }
+    Some(json!({"id": x["id"].as_i64()?, "nombre": x["name"].as_str().unwrap_or("?")}))
+}
+
+/// Por nombre (sin distinguir mayusculas) y, a igualdad, por numero.
+pub fn ordenar_asignables(mut ps: Vec<Value>) -> Vec<Value> {
+    ps.sort_by_key(|p| (p["nombre"].as_str().unwrap_or("").to_lowercase(), p["id"].as_i64().unwrap_or(0)));
+    ps
+}
+
 /// Lo que se manda para crear (o validar) una tarea. Solo el titulo y el
 /// proyecto son obligatorios; lo demas toma los valores por defecto.
 pub fn cuerpo_tarea(pid: i64, titulo: &str, tipo: Option<i64>, padre: Option<i64>, descripcion: &str,
@@ -488,6 +510,8 @@ pub fn datos_tarea(w: &Value, form: Option<&Value>) -> Option<Value> {
     let deja = |campo: &str| form.is_none_or(|f| f["_embedded"]["schema"][campo]["writable"].as_bool().unwrap_or(true));
     let padre = id_de_href(&links["parent"]["href"])
         .map(|p| json!({"id": p, "nombre": links["parent"]["title"].as_str().unwrap_or("?")}));
+    let asignado = id_de_href(&links["assignee"]["href"])
+        .map(|a| json!({"id": a, "nombre": links["assignee"]["title"].as_str().unwrap_or("?")}));
     Some(json!({
         "id": id,
         "titulo": w["subject"].as_str().unwrap_or(""),
@@ -498,17 +522,19 @@ pub fn datos_tarea(w: &Value, form: Option<&Value>) -> Option<Value> {
         "tipo": links["type"]["title"].as_str().unwrap_or(""),
         "estado": links["status"]["title"].as_str().unwrap_or(""),
         "padre": padre,
+        "asignado": asignado,
         "editable": es_editable(w),
         "puede": {"titulo": deja("subject"), "descripcion": deja("description"),
-                  "estimado": deja("estimatedTime"), "padre": deja("parent")},
+                  "estimado": deja("estimatedTime"), "padre": deja("parent"),
+                  "asignado": deja("assignee")},
     }))
 }
 
 /// Lo que se manda para modificar una tarea: la version que se leyo (si
 /// alguien la cambio despues, ProyectosTIC lo rechaza) y SOLO lo que cambia.
-/// estimado / padre: Some(None) lo quita.
+/// estimado / padre / asignado: Some(None) lo quita.
 pub fn cuerpo_cambio(version: i64, titulo: Option<&str>, descripcion: Option<&str>, estimado: Option<Option<f64>>,
-                     padre: Option<Option<i64>>) -> Value {
+                     padre: Option<Option<i64>>, asignado: Option<Option<i64>>) -> Value {
     let mut cuerpo = json!({"lockVersion": version});
     if let Some(t) = titulo {
         cuerpo["subject"] = json!(t);
@@ -521,6 +547,9 @@ pub fn cuerpo_cambio(version: i64, titulo: Option<&str>, descripcion: Option<&st
     }
     if let Some(p) = padre {
         cuerpo["_links"] = json!({"parent": {"href": p.map(|n| format!("/api/v3/work_packages/{n}"))}});
+    }
+    if let Some(a) = asignado {
+        cuerpo["_links"]["assignee"] = json!({"href": a.map(|n| format!("/api/v3/users/{n}"))});
     }
     cuerpo
 }
@@ -833,25 +862,48 @@ mod tests {
         assert_eq!(datos_tarea(&w, Some(&form)).unwrap(), json!({
             "id": 7, "titulo": "Hija", "descripcion": "Lo que hay que hacer.", "estimado": 1.5, "version": 4,
             "proyecto": {"id": 42, "nombre": "ATE"}, "tipo": "Fase", "estado": "Cerrada",
-            "padre": {"id": 5, "nombre": "Madre"}, "editable": true,
-            "puede": {"titulo": true, "descripcion": true, "estimado": true, "padre": false}}));
+            "padre": {"id": 5, "nombre": "Madre"}, "asignado": {"id": 5, "nombre": "Otra persona"}, "editable": true,
+            "puede": {"titulo": true, "descripcion": true, "estimado": true, "padre": false, "asignado": true}}));
         // sin permiso para modificarla (sin enlace "update"), sin padre y sin tiempo
         let suelta = json!({"id": 9, "subject": "Suelta", "lockVersion": 0, "estimatedTime": null,
                             "_links": {"parent": {"href": null}}});
         let d = datos_tarea(&suelta, None).unwrap();
         assert_eq!((d["editable"].clone(), d["padre"].clone(), d["estimado"].clone(), d["puede"]["padre"].clone()),
                    (json!(false), Value::Null, Value::Null, json!(true)));
+        assert_eq!(d["asignado"], Value::Null);
+        // el formulario dice si deja cambiar a quien esta asignada
+        let form = json!({"_embedded": {"schema": {"assignee": {"writable": false}}}});
+        assert_eq!(datos_tarea(&w, Some(&form)).unwrap()["puede"]["asignado"], json!(false));
+    }
+
+    #[test]
+    fn a_quien_se_puede_asignar() {
+        // solo personas (los grupos, fuera), por nombre sin distinguir mayusculas
+        let lista = [json!({"_type": "User", "id": 9, "name": "zoe Ruiz"}),
+                     json!({"_type": "Group", "id": 30, "name": "Area de Sistemas"}),
+                     json!({"_type": "User", "id": 5, "name": "Ana Lopez"}),
+                     json!({"_type": "User", "name": "Sin numero"}),
+                     json!({"_type": "User", "id": 7})];
+        let ps = ordenar_asignables(lista.iter().filter_map(asignable_de).collect());
+        assert_eq!(ps, vec![json!({"id": 7, "nombre": "?"}), json!({"id": 5, "nombre": "Ana Lopez"}),
+                            json!({"id": 9, "nombre": "zoe Ruiz"})]);
     }
 
     #[test]
     fn solo_se_manda_lo_que_cambia() {
-        assert_eq!(cuerpo_cambio(4, None, None, None, Some(Some(12))),
+        assert_eq!(cuerpo_cambio(4, None, None, None, Some(Some(12)), None),
                    json!({"lockVersion": 4, "_links": {"parent": {"href": "/api/v3/work_packages/12"}}}));
         // quitarle el padre y el tiempo estimado: a null
-        assert_eq!(cuerpo_cambio(4, Some("Otro"), Some(""), Some(None), Some(None)),
+        assert_eq!(cuerpo_cambio(4, Some("Otro"), Some(""), Some(None), Some(None), None),
                    json!({"lockVersion": 4, "subject": "Otro", "description": {"format": "markdown", "raw": ""},
                           "estimatedTime": null, "_links": {"parent": {"href": null}}}));
-        assert_eq!(cuerpo_cambio(4, None, None, Some(Some(0.5)), None), json!({"lockVersion": 4, "estimatedTime": "PT30M"}));
+        assert_eq!(cuerpo_cambio(4, None, None, Some(Some(0.5)), None, None), json!({"lockVersion": 4, "estimatedTime": "PT30M"}));
+        // a quien se asigna: sola, con el padre, y a null para dejarla sin asignar
+        assert_eq!(cuerpo_cambio(4, None, None, None, None, Some(Some(9))),
+                   json!({"lockVersion": 4, "_links": {"assignee": {"href": "/api/v3/users/9"}}}));
+        assert_eq!(cuerpo_cambio(4, None, None, None, Some(Some(12)), Some(None)),
+                   json!({"lockVersion": 4, "_links": {"parent": {"href": "/api/v3/work_packages/12"},
+                                                       "assignee": {"href": null}}}));
     }
 
     #[test]

@@ -109,6 +109,14 @@
     // cuelga de una tarea que ya esta cerrada: no viene en la lista
     aul(15010, "[AUL] Renovación de proyectores", 14990, "[2026_AUL] Proyectos"),
     aul(15011, "Proyectores de la Facultad de Ciencias", 15010, "[AUL] Renovación de proyectores")];
+  // A quien se puede asignar en cada proyecto (la persona de prueba es la 7; en
+  // Aulas no es asignable). 15004 ya esta asignada a alguien de Aulas.
+  const YO_DEMO = 7;
+  const genteDemo = {
+    1: [{ id: 21, nombre: "Ana López" }, { id: 22, nombre: "Luis Martín" }, { id: YO_DEMO, nombre: "Persona de Prueba" }],
+    3: [{ id: 31, nombre: "Carmen Ruiz" }, { id: 22, nombre: "Luis Martín" }],
+  };
+  const personaDemo = (id) => Object.values(genteDemo).flat().find((p) => p.id === Number(id)) || null;
   let ultimoCrear = null, sigTarea = 14100;
   let ocultosDemo = [];
   let desplegadosDemo = [];
@@ -501,6 +509,9 @@
       return espera({ tipos: ts.map((t) => ({ ...t })), tipo: ts[0].id, asignable: Number(pid) !== 3, estimable: true,
                       faltan: Number(tipo) === 4 ? ["Servicio afectado no puede estar en blanco."] : [] });
     },
+    tarea_asignables: (pid) => espera(genteDemo[Number(pid)]
+      ? { yo: YO_DEMO, personas: genteDemo[Number(pid)].map((p) => ({ ...p })) }
+      : { yo: YO_DEMO, personas: [], error: "ProyectosTIC no te deja ver a quién se puede asignar en este proyecto." }),
     nueva_tarea_crear: (n) => {
       const titulo = String(n.titulo || "").trim().replace(/\s+/g, " ");
       const p = proyectosCrear.find((x) => String(x.id) === String(n.proyecto));
@@ -510,6 +521,8 @@
       const nueva = { id: sigTarea++, nombre: titulo };
       const horas = Number(String(n.estimado || "").replace(",", "."));
       if (horas > 0) detalleDemo.set(nueva.id, { estimado: horas });
+      const quien = personaDemo(n.asignado) || (n.asignar ? personaDemo(YO_DEMO) : null);
+      if (quien) detalleDemo.set(nueva.id, { ...detalle(nueva.id), asignado: { ...quien } });
       tareas.unshift(nueva);
       if (n.favorita) favDemo.add(nueva.id);
       ultimoCrear = p.id;
@@ -541,8 +554,9 @@
       return espera({ id: t.id, titulo: t.nombre, descripcion: x.descripcion || "", estimado: x.estimado || null,
         version: x.version || 0, proyecto: { id: t.pid, nombre: t.proyecto }, tipo: TIPOS_DEMO[x.tipo || 1],
         estado: x.cerrada ? "Cerrada" : "En curso", padre: t.padre_id ? { id: t.padre_id, nombre: t.padre } : null,
+        asignado: x.asignado ? { ...x.asignado } : null,
         editable: t.id !== 15010,
-        puede: { titulo: true, descripcion: true, estimado: t.id !== 15001, padre: true } });
+        puede: { titulo: true, descripcion: true, estimado: t.id !== 15001, padre: true, asignado: t.id !== 15001 } });
     },
     tarea_modificar: (d) => {
       const id = Number(d.id), t = tareaDemo(id);
@@ -551,6 +565,7 @@
       const x = { ...detalle(id), version: (detalle(id).version || 0) + 1 };
       if ("descripcion" in d) x.descripcion = String(d.descripcion).trim();
       if ("estimado" in d) x.estimado = Number(String(d.estimado).replace(",", ".")) || null;
+      if ("asignado" in d) x.asignado = personaDemo(d.asignado);
       detalleDemo.set(id, x);
       const nombre = "titulo" in d ? d.titulo : t.nombre;
       const madre = "padre" in d ? tareaDemo(Number(d.padre)) : null;

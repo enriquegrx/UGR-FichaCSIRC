@@ -1920,9 +1920,28 @@ class Api:
         except core.TareaRechazada as e:
             return {"error": str(e)}
 
+    def tarea_asignables(self, pid):
+        """A quien se le puede asignar una tarea del proyecto: sus miembros con
+        un rol asignable (solo personas) y cual de ellos es el usuario. Si
+        ProyectosTIC no deja ver la lista, va vacia y se dice."""
+        self._exigir_desbloqueo()
+        pid = self._id(pid)
+        if pid is None:
+            raise ValueError("Proyecto no válido.")
+        yo = self._id(core._user_id(estricto=True))
+        try:
+            return {"yo": yo, "personas": core.asignables(pid)}
+        except core.requests.HTTPError as e:
+            if getattr(e.response, "status_code", None) in (403, 404):
+                return {"yo": yo, "personas": [],
+                        "error": "ProyectosTIC no te deja ver a quién se puede asignar en este proyecto."}
+            raise
+
     def nueva_tarea_crear(self, d):
         """Crea una tarea en ProyectosTIC y la deja en el desplegable (o en favoritas).
-        d: {proyecto, titulo, tipo, padre, descripcion, estimado, asignar, favorita}"""
+        d: {proyecto, titulo, tipo, padre, descripcion, estimado, asignar, asignado, favorita}
+        asignado: el numero de la persona a la que se asigna; sin el, asignar
+        (True) se la asigna al usuario."""
         self._exigir_desbloqueo()
         d = d or {}
         pid = self._id(d.get("proyecto"))
@@ -1933,7 +1952,11 @@ class Api:
             estimado = self._estimado(d.get("estimado"))
         except self._NoVale as e:
             return {"error": str(e)}
-        asignado = core._user_id(estricto=True) if d.get("asignar") else None
+        otro = self._id(d.get("asignado"))
+        if otro is not None and otro > 0:
+            asignado = str(otro)
+        else:
+            asignado = core._user_id(estricto=True) if d.get("asignar") else None
         cuerpo = core.cuerpo_tarea(pid, titulo, self._id(d.get("tipo")), self._id(d.get("padre")),
                                    d.get("descripcion") or "", asignado, estimado=estimado)
         try:
@@ -2041,7 +2064,7 @@ class Api:
     def _cambios_de(self, n, d):
         """Lo que cambia de la tarea n. d trae SOLO lo que cambia: titulo,
         descripcion, estimado ("" o None lo quita), padre (None: que no cuelgue
-        de ninguna). Lanza _NoVale si no vale."""
+        de ninguna), asignado (None: sin asignar). Lanza _NoVale si no vale."""
         cambios = {}
         if "titulo" in d:
             cambios["titulo"] = self._titulo_valido(d["titulo"])
@@ -2054,6 +2077,9 @@ class Api:
             cambios["padre"] = p if p and p > 0 else None
             if cambios["padre"] == n:
                 raise self._NoVale("Una tarea no puede colgar de sí misma.")
+        if "asignado" in d:
+            a = self._id(d["asignado"])
+            cambios["asignado"] = a if a and a > 0 else None
         if not cambios:
             raise self._NoVale("No has cambiado nada.")
         return cambios

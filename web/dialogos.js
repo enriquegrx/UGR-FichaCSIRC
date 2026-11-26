@@ -2602,7 +2602,9 @@ async function usarTareaEnFormulario(t) {
 /* Crear una tarea en ProyectosTIC sin salir de FichaCSIRC. Solo en los
    proyectos en los que ProyectosTIC deja (el permiso va por proyecto y rol).
    Los tipos, el que viene por defecto, si se le puede asignar a uno mismo y lo
-   que falta los dice el formulario de ProyectosTIC, que no crea nada. Abajo se
+   que falta los dice el formulario de ProyectosTIC, que no crea nada. Se asigna
+   a uno mismo, a nadie o a otra persona del proyecto (la lista la da
+   ProyectosTIC: sus miembros con un rol asignable). Abajo se
    ve como va a quedar antes de crearla: no se deshace desde aqui.
    titulo / proyecto: lo que ya se sabe (lo escrito en el buscador, el proyecto
    de Buscar tarea). alCrear(tarea): quien lo abre se queda con ella; sin el,
@@ -2633,8 +2635,8 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
                             "aria-label": "Tiempo estimado, en horas" });
   const plantillas = el("div", { class: "nt-plantillas", hidden: true });
   const notaPlantilla = el("div", { class: "nt-plantilla-nota tenue", hidden: true });
-  const asignar = el("input", { type: "checkbox" });
-  const notaAsignar = el("span", { class: "tenue" });
+  const asig = el("select", { class: "nt-asig", "aria-label": "Asignada a" });
+  const notaAsignar = el("span", { class: "opc" });
   const fav = el("input", { type: "checkbox" });
   const vista = el("div", { class: "nt-vista" });
   const aviso = el("div", { class: "nt-aviso", role: "status", hidden: true });
@@ -2644,12 +2646,34 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   let tipoSel = null;        // id del tipo elegido
   let padreSel = null;       // {id, nombre} de la tarea de la que cuelga
   let tareasProy = null;     // tareas del proyecto (null: cargando)
-  let quiereAsignar = true, pendiente = false, creando = false, errorCrear = "", seq = 0;
+  let quiere = "yo";         // a quien se asigna: "yo", "" (nadie) o el numero de otra persona del proyecto
+  let gente = null;          // {yo, personas, error}: a quien se puede asignar en el proyecto (null: cargando)
+  let pidGente = null;       // de que proyecto es 'gente'
+  let pendiente = false, creando = false, errorCrear = "", seq = 0;
   let plantilla = null;      // la plantilla puesta (si queda su * en el titulo, se avisa antes de crear)
 
   const proyectoSel = () => st.crear.proyectos.find((p) => String(p.id) === proy.value);
   const tipoActual = () => ops?.tipos?.find((t) => t.id === tipoSel) || null;
   const tituloLimpio = () => tit.value.trim().replace(/\s+/g, " ");
+
+  // ---- a quien se asigna ----
+  // a uno mismo: solo si el proyecto deja (lo dice su formulario)
+  const puedoYo = () => !ops || !!ops.error || ops.asignable !== false;
+  const otros = () => (gente?.personas || []).filter((p) => p.id !== gente.yo);
+  // lo que vale ahora: "yo", "" o el numero de alguien que esta en la lista
+  const asignada = () => (quiere === "yo" ? (puedoYo() ? "yo" : "")
+    : otros().some((p) => p.id === quiere) ? quiere : "");
+  function pintarAsignar() {
+    const yo = el("option", { value: "yo", text: "A mí" });
+    yo.disabled = !puedoYo();
+    asig.replaceChildren(yo, el("option", { value: "", text: "Nadie" }),
+      ...(otros().length ? [el("optgroup", { label: "Personas del proyecto" },
+        ...otros().map((p) => el("option", { value: String(p.id), text: p.nombre })))] : []));
+    asig.value = String(asignada());
+    notaAsignar.textContent = !puedoYo() ? "en este proyecto no se te puede asignar a ti"
+      : gente === null ? "leyendo las personas del proyecto…" : gente.error ? "sin la lista de personas" : "";
+    asig.title = gente?.error || "";
+  }
 
   // ---- como va a quedar ----
   function pintarVista() {
@@ -2665,7 +2689,8 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
         padreSel ? el("span", { text: ramaDelPadre().map((n) => ` › ${n}`).join("") })
                  : el("span", { class: "tenue", text: " · directamente en el proyecto" })),
       el("div", { class: "nt-marcas" },
-        el("span", { class: "chip chip-tele", text: asignar.checked ? "👤 Asignada a ti" : "Sin asignar" }),
+        el("span", { class: "chip chip-tele", text: asignada() === "yo" ? "👤 Asignada a ti"
+          : asignada() ? `👤 Asignada a ${otros().find((x) => x.id === asignada()).nombre}` : "Sin asignar" }),
         horasDeTexto(est.value) ? el("span", { class: "chip chip-guardia", text: `⏱ ${textoEstimado(horasDeTexto(est.value))}` }) : null,
         fav.checked ? el("span", { class: "chip chip-permiso", text: "★ En tus favoritas" }) : null));
     cuenta.textContent = tit.value.length > 200 ? `${tit.value.length} / 255` : "";
@@ -2703,11 +2728,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
         el("button", { type: "button", class: "enlace", text: "abrir el alta en ProyectosTIC ↗",
                        onclick: () => llamar("abrir_alta_tarea", proy.value, tipoSel).catch(() => {}) }));
     }
-    // asignarsela: solo si el proyecto deja (lo dice su formulario)
-    const puede = !ops || !!ops.error || ops.asignable !== false;
-    asignar.disabled = !puede;
-    asignar.checked = puede && quiereAsignar;
-    notaAsignar.textContent = puede ? "" : " (en este proyecto no se te pueden asignar)";
+    pintarAsignar();
     // el tiempo estimado: salvo que el proyecto no lo deje poner
     est.disabled = !!ops && !ops.error && ops.estimable === false;
     est.title = est.disabled ? "En este proyecto no se puede poner el tiempo estimado" : "";
@@ -2733,7 +2754,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     if (p.titulo) tit.value = p.titulo;
     est.value = p.estimado ? fmtHoras(p.estimado) : "";
     desc.value = p.descripcion || "";
-    quiereAsignar = !!p.asignar;
+    quiere = p.asignar ? "yo" : "";     // la plantilla solo guarda si es para uno mismo
     fav.checked = !!p.favorita;
     pintarPlantillas();
     const suyo = p.proyecto != null && st.crear.proyectos.some((x) => x.id === p.proyecto);
@@ -2755,7 +2776,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     const propuesto = plantilla?.nombre || tituloLimpio().replace(/[\s:,(#-]*\*.*$/, "");
     const nombre = await pedirTexto({ titulo: "Guardar como plantilla", valor: propuesto,
       texto: "Guarda lo que hay ahora en el diálogo: título, proyecto, tipo, de cuál cuelga, tiempo estimado, "
-        + "descripción y las dos casillas. En el título, pon un * donde vaya lo que cambia cada vez "
+        + "descripción, si te la asignas a ti y si va a favoritas. En el título, pon un * donde vaya lo que cambia cada vez "
         + "(el número de ticket, por ejemplo)." });
     if (!nombre) return;
     const ya = (st.crear.plantillas || []).find((p) => p.nombre.toLowerCase() === nombre.toLowerCase());
@@ -2763,7 +2784,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
                                 { si: "Sustituir", no: "Cancelar" }))) return;
     const r = await llamar("plantilla_tarea_guardar", { nombre, titulo: tituloLimpio(), proyecto: Number(proy.value),
       tipo: tipoSel, padre: padreSel, estimado: est.value.trim(), descripcion: desc.value,
-      asignar: asignar.checked, favorita: fav.checked });
+      asignar: asignada() === "yo", favorita: fav.checked });
     if (r.error) { errorCrear = r.error; pintarAvisos(); return; }
     st.crear.plantillas = r.plantillas;
     plantilla = r.plantillas.find((p) => p.nombre.toLowerCase() === nombre.toLowerCase()) || null;
@@ -2795,6 +2816,18 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
   async function cargarProyecto() {
     const pid = proy.value;
     ops = null; tipoSel = null; tareasProy = null; errorCrear = ""; pendiente = false;
+    // otro proyecto, otra gente: la persona elegida era del anterior
+    if (pidGente !== pid || gente?.error) {
+      if (pidGente !== pid && typeof quiere === "number") quiere = "yo";
+      pidGente = pid; gente = null;
+      api().tarea_asignables(pid).then((r) => r, () => ({ error: "No se pudo leer a quién se puede asignar en este proyecto." }))
+        .then((r) => {
+          if (proy.value !== pid) return;
+          gente = { yo: r.yo ?? null, personas: r.personas || [], error: r.error || "" };
+          pintarAsignar();
+          pintarVista();
+        });
+    }
     ponerPadre(null);
     pintar();
     // de cual puede colgar: las tareas del proyecto (aparte: tardan mas)
@@ -2899,7 +2932,8 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     try {
       r = await llamar("nueva_tarea_crear", { proyecto: proy.value, titulo: tituloLimpio(), tipo: tipoSel,
         padre: padreSel ? padreSel.id : null, descripcion: desc.value, estimado: est.value.trim(),
-        asignar: asignar.checked, favorita: fav.checked });
+        asignar: asignada() === "yo", asignado: typeof asignada() === "number" ? asignada() : null,
+        favorita: fav.checked });
     } finally {
       creando = false;
       d.botones.crear.textContent = "Crear tarea";
@@ -2935,7 +2969,7 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); d.botones.crear.click(); }
   });
   proy.onchange = cargarProyecto;
-  asignar.onchange = () => { quiereAsignar = asignar.checked; pintarVista(); };
+  asig.onchange = () => { quiere = asig.value === "yo" ? "yo" : asig.value ? Number(asig.value) : ""; pintarVista(); };
   fav.onchange = pintarVista;
   est.addEventListener("input", () => { errorCrear = ""; pintarAvisos(); pintarVista(); });
   est.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); d.botones.crear.click(); } });
@@ -2957,8 +2991,8 @@ function dlgNuevaTarea({ titulo = "", proyecto = null, alCrear = null } = {}) {
         campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar), opcional()),
         campo("Estimado", el("div", { class: "nt-est-caja" }, est, el("span", { class: "tenue", text: "h" })), opcional())),
       campo("Descripción", desc, opcional()),
-      el("div", { class: "nt-opciones" },
-        el("label", { class: "check" }, asignar, " Asignármela", notaAsignar),
+      el("div", { class: "nt-asignar" },
+        campo("Asignada a", asig, notaAsignar),
         el("label", { class: "check" }, fav, " Guardarla en mis favoritas")),
       vista, error));
     montarListaPadre();
@@ -3021,6 +3055,7 @@ function dlgModificarTarea({ tarea = null } = {}) {
   const est = entrada("", { class: "nt-est", inputmode: "decimal", placeholder: "ej. 1,5",
                             "aria-label": "Tiempo estimado, en horas" });
   const desc = el("textarea", { class: "nt-desc", rows: "4", "aria-label": "Descripción" });
+  const asig = el("select", { class: "nt-asig", "aria-label": "Asignada a" });
   const cambios = el("div", { class: "nt-vista mt-cambios" });
   const aviso = el("div", { class: "nt-aviso", role: "status", hidden: true });
   const error = el("div", { class: "nt-error", role: "alert", hidden: true });
@@ -3029,9 +3064,22 @@ function dlgModificarTarea({ tarea = null } = {}) {
   let t0 = null;             // la tarea como esta en ProyectosTIC (null: sin elegir, o cargando)
   let padreSel = null;       // {id, nombre} de la que colgara
   let tareasProy = null;     // de cuales puede colgar (null: cargando)
+  let gente = null;          // {yo, personas}: a quien se puede asignar en su proyecto (null: cargando, o sin lista)
   let est0 = "", cargandoTarea = false, guardando = false, msg = "", seq = 0;
 
   const limpio = (s) => String(s || "").trim().replace(/\s+/g, " ");
+
+  // A quien esta asignada: nadie, o alguien del proyecto. La que tiene ahora
+  // sale siempre, aunque no este en la lista (un grupo, alguien que ya no es
+  // del proyecto, o la lista aun sin llegar).
+  const asigSel = () => (asig.value ? Number(asig.value) : null);
+  function pintarAsignar(valor) {
+    const ps = [...(gente?.personas || [])];
+    if (t0?.asignado && !ps.some((p) => p.id === t0.asignado.id)) ps.unshift(t0.asignado);
+    asig.replaceChildren(el("option", { value: "", text: "Nadie" }),
+      ...ps.map((p) => el("option", { value: String(p.id), text: p.id === gente?.yo ? `${p.nombre} (tú)` : p.nombre })));
+    asig.value = valor == null ? "" : String(valor);
+  }
 
   // Lo que cambia respecto a lo que hay en ProyectosTIC: solo eso se manda.
   function cambiosDe() {
@@ -3041,6 +3089,7 @@ function dlgModificarTarea({ tarea = null } = {}) {
     if ((padreSel ? padreSel.id : null) !== (t0.padre ? t0.padre.id : null)) c.padre = padreSel ? padreSel.id : null;
     if (est.value.trim() !== est0) c.estimado = est.value.trim();
     if (desc.value.trim() !== (t0.descripcion || "").trim()) c.descripcion = desc.value;
+    if (asigSel() !== (t0.asignado ? t0.asignado.id : null)) c.asignado = asigSel();
     return c;
   }
 
@@ -3053,13 +3102,15 @@ function dlgModificarTarea({ tarea = null } = {}) {
     quitar.disabled = padre.disabled;
     est.disabled = bloqueada || puede.estimado === false;
     desc.disabled = bloqueada || puede.descripcion === false;
+    asig.disabled = bloqueada || puede.asignado === false;
     campos.hidden = !t0;
     ficha.replaceChildren(...(cargandoTarea ? [el("span", { text: "Leyendo la tarea en ProyectosTIC…" })]
       : !t0 ? [el("span", { text: "Elige la tarea que quieres modificar." })]
       : [el("b", { text: `#${t0.id}` }), ...[t0.tipo, t0.estado, t0.proyecto?.nombre].filter(Boolean).map((x) => el("span", { text: x }))]));
     // por que no se puede (toda, o algun campo)
     const no = t0 && t0.editable ? [["titulo", "el título"], ["padre", "de cuál cuelga"], ["estimado", "el tiempo estimado"],
-                                    ["descripcion", "la descripción"]].filter(([k]) => puede[k] === false).map(([, x]) => x) : [];
+                                    ["descripcion", "la descripción"], ["asignado", "a quién está asignada"]]
+      .filter(([k]) => puede[k] === false).map(([, x]) => x) : [];
     aviso.hidden = !t0 || (t0.editable && !no.length);
     aviso.textContent = !t0 ? "" : !t0.editable
       ? `ProyectosTIC no te deja modificar esta tarea. Lo concede quien administra el proyecto${t0.proyecto?.nombre ? ` «${t0.proyecto.nombre}»` : ""}.`
@@ -3074,6 +3125,8 @@ function dlgModificarTarea({ tarea = null } = {}) {
     if ("padre" in c) lineas.push(["Cuelga de", de(t0.padre?.nombre), de(padreSel?.nombre)]);
     if ("estimado" in c) lineas.push(["Estimado", horas(est0), horas(est.value)]);
     if ("descripcion" in c) lineas.push(["Descripción", "la que tenía", desc.value.trim() ? "la que has escrito" : "sin descripción"]);
+    if ("asignado" in c) lineas.push(["Asignada a", t0.asignado?.nombre || "nadie",
+                                      c.asignado == null ? "nadie" : asig.options[asig.selectedIndex].textContent]);
     cambios.hidden = !t0 || !t0.editable;
     cambios.replaceChildren(
       el("div", { class: "nt-vista-rot", text: n ? "Lo que va a cambiar en ProyectosTIC" : "Sin cambios todavía" }),
@@ -3115,7 +3168,19 @@ function dlgModificarTarea({ tarea = null } = {}) {
     est0 = r.estimado ? fmtHoras(r.estimado) : "";
     est.value = est0;
     desc.value = r.descripcion || "";
+    gente = null;
+    pintarAsignar(r.asignado ? r.asignado.id : null);
     ponerPadre(r.padre);
+    if (r.editable && r.proyecto?.id != null && r.puede?.asignado !== false) {
+      // a quien se le puede asignar: la gente de su proyecto (si no llega, se queda con la que tiene y «Nadie»)
+      api().tarea_asignables(String(r.proyecto.id)).then((x) => x, () => null).then((x) => {
+        if (mio !== seq || !x) return;
+        const elegida = asigSel();
+        gente = { yo: x.yo ?? null, personas: x.personas || [] };
+        pintarAsignar(elegida);
+        pintar();
+      });
+    }
     if (r.editable && r.proyecto?.id != null) {
       // de cuales puede colgar: las abiertas de su proyecto, menos ella y las suyas
       api().tareas_de_proyecto(String(r.proyecto.id)).then((x) => x.tareas || [], () => []).then((ts) => {
@@ -3173,6 +3238,7 @@ function dlgModificarTarea({ tarea = null } = {}) {
 
   buscadorTarea(cual, { alElegir: (t) => cargar(t.id) });
   for (const c of [tit, est, desc]) c.addEventListener("input", () => { msg = ""; pintar(); });
+  asig.onchange = () => { msg = ""; pintar(); };
   for (const c of [tit, est]) c.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); d.botones.guardar.click(); } });
   desc.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); d.botones.guardar.click(); }
@@ -3185,10 +3251,11 @@ function dlgModificarTarea({ tarea = null } = {}) {
     el("div", { class: "nt-cuelga" },
       campo("Cuelga de", el("div", { class: "nt-padre" }, padre, quitar)),
       campo("Estimado", el("div", { class: "nt-est-caja" }, est, el("span", { class: "tenue", text: "h" })))),
+    campo("Asignada a", asig),
     campo("Descripción", desc),
     cambios);
   d.cuerpo.append(el("div", { class: "nt" },
-    el("p", { class: "nt-intro", text: "Cambia una tarea que ya existe en ProyectosTIC: su título, de cuál cuelga, el tiempo estimado o la descripción." }),
+    el("p", { class: "nt-intro", text: "Cambia una tarea que ya existe en ProyectosTIC: su título, de cuál cuelga, el tiempo estimado, a quién está asignada o la descripción." }),
     campo("Tarea", cual), ficha, aviso, campos, error));
   pintar();
   if (tarea) {
